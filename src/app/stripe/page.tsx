@@ -101,9 +101,9 @@ export default function StripePage() {
                 <p className="text-xs text-gray-400 mt-0.5">{data.volume.count} cobros</p>
               </Card>
               <Card>
-                <p className="text-xs text-gray-500 font-medium">Reembolsos</p>
-                <p className="text-xl font-bold text-gray-900 mt-1">{data.volume.refunded}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{data.volume.disputed} disputas</p>
+                <p className="text-xs text-gray-500 font-medium">Neto Estimado</p>
+                <p className="text-xl font-bold text-green-600 mt-1">{formatCurrency(data.balance.available + data.balance.pending)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">disponible + pendiente</p>
               </Card>
             </div>
 

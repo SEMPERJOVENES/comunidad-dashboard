@@ -7,7 +7,8 @@ import { formatCurrency, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
-  Grid3X3, List, BarChart3, ChevronLeft, ChevronRight, CreditCard, Landmark
+  Grid3X3, List, BarChart3, ChevronLeft, ChevronRight, CreditCard, Landmark,
+  TrendingUp, TrendingDown, Wallet, Music, AlertTriangle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 type ViewMode = 'grid' | 'list' | 'summary';
@@ -30,6 +31,15 @@ function formatMonth(key: string) {
   return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
 }
 
+const TAG_ICONS: Record<string, string> = {
+  'Música': '🎵',
+  'Misa/Tabor': '⛪',
+  'Retiros': '🏔️',
+  'Donativo': '🎁',
+  'BAC': '🏦',
+  'Diezmo (gasto)': '📤',
+};
+
 export default function DiezmosPage() {
   const ranges = getDateRanges();
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
@@ -37,6 +47,8 @@ export default function DiezmosPage() {
   const [communities, setCommunities] = useState<string[]>([]);
   const [communityStats, setCommunityStats] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [opExpenses, setOpExpenses] = useState<any>(null);
+  const [stripeDebug, setStripeDebug] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,6 +65,8 @@ export default function DiezmosPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingNickname, setEditingNickname] = useState<string | null>(null);
   const [nicknameValue, setNicknameValue] = useState('');
+  const [showStripeDebug, setShowStripeDebug] = useState(false);
+  const [showExpenseDetail, setShowExpenseDetail] = useState(false);
 
   useEffect(() => { fetchDiezmos(); }, []);
 
@@ -65,6 +79,8 @@ export default function DiezmosPage() {
       setCommunities(data.communities || []);
       setCommunityStats(data.communityStats || []);
       setSummary(data.summary || null);
+      setOpExpenses(data.operationalExpenses || null);
+      setStripeDebug(data.stripeDebug || null);
     } catch {
       setMembers([]);
     } finally {
@@ -135,7 +151,6 @@ export default function DiezmosPage() {
     });
   }, [members, filterCommunity, searchTerm]);
 
-  // Sort: payers first for current month
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => {
       const aPays = a.payments?.[currentMonth] ? 1 : 0;
@@ -171,6 +186,7 @@ export default function DiezmosPage() {
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-4">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Church size={24} className="text-violet-600" />
@@ -195,32 +211,187 @@ export default function DiezmosPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* KPIs - Ingresos vs Gastos Operativos */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <Card className="border-l-4 border-l-green-500">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingUp size={12} className="text-green-500" />
+              <p className="text-xs text-gray-500 font-medium">Ingresos Diezmo</p>
+            </div>
+            <p className="text-xl font-bold text-green-600">{formatCurrency(opExpenses?.totalIncome || 0)}</p>
+          </Card>
+          <Card className="border-l-4 border-l-red-500">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingDown size={12} className="text-red-500" />
+              <p className="text-xs text-gray-500 font-medium">Gastos Operativos</p>
+            </div>
+            <p className="text-xl font-bold text-red-600">{formatCurrency(opExpenses?.totalExpenses || 0)}</p>
+          </Card>
+          <Card className="border-l-4 border-l-violet-500">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Wallet size={12} className="text-violet-500" />
+              <p className="text-xs text-gray-500 font-medium">Balance Neto</p>
+            </div>
+            <p className={`text-xl font-bold ${(opExpenses?.net || 0) >= 0 ? 'text-violet-600' : 'text-red-600'}`}>
+              {formatCurrency(opExpenses?.net || 0)}
+            </p>
+          </Card>
           <Card>
             <p className="text-xs text-gray-500 font-medium">Este Mes</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalMensual || 0)}</p>
+            <p className="text-xl font-bold text-gray-900">{formatCurrency(summary?.totalMensual || 0)}</p>
+            <p className="text-xs text-gray-400">{summary?.totalPaying || 0} de {summary?.totalMembers || 0} dando</p>
           </Card>
           <Card>
-            <p className="text-xs text-gray-500 font-medium">Dando Diezmo</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{summary?.totalPaying || 0}</p>
-            <p className="text-xs text-gray-400">de {summary?.totalMembers || 0} miembros</p>
-          </Card>
-          <Card>
-            <div className="flex items-center gap-1.5">
-              <CreditCard size={12} className="text-blue-500" />
-              <p className="text-xs text-gray-500 font-medium">Vía Stripe</p>
+            <div className="flex items-center gap-3">
+              <div className="text-center">
+                <div className="flex items-center gap-1 justify-center">
+                  <CreditCard size={10} className="text-blue-500" />
+                  <span className="text-xs text-gray-500">Stripe</span>
+                </div>
+                <p className="text-lg font-bold text-blue-600">{summary?.fromStripe || 0}</p>
+              </div>
+              <div className="w-px h-8 bg-gray-200" />
+              <div className="text-center">
+                <div className="flex items-center gap-1 justify-center">
+                  <Landmark size={10} className="text-amber-500" />
+                  <span className="text-xs text-gray-500">Banco</span>
+                </div>
+                <p className="text-lg font-bold text-amber-600">{summary?.fromBanco || 0}</p>
+              </div>
             </div>
-            <p className="text-2xl font-bold text-blue-600 mt-1">{summary?.fromStripe || 0}</p>
-          </Card>
-          <Card>
-            <div className="flex items-center gap-1.5">
-              <Landmark size={12} className="text-amber-500" />
-              <p className="text-xs text-gray-500 font-medium">Vía Banco</p>
-            </div>
-            <p className="text-2xl font-bold text-amber-600 mt-1">{summary?.fromBanco || 0}</p>
           </Card>
         </div>
 
+        {/* Gastos Operativos Breakdown */}
+        {opExpenses && opExpenses.byTag && opExpenses.byTag.length > 0 && (
+          <Card>
+            <button onClick={() => setShowExpenseDetail(!showExpenseDetail)}
+              className="w-full flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Music size={16} className="text-red-500" />
+                <h3 className="text-sm font-semibold text-gray-900">Gastos Operativos Cubiertos por Diezmos</h3>
+              </div>
+              {showExpenseDetail ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+            </button>
+
+            {/* Tag breakdown - always visible */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
+              {opExpenses.byTag.map((t: any) => (
+                <div key={t.tag} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                  <span className="text-base">{TAG_ICONS[t.tag] || '💰'}</span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-500 truncate">{t.tag}</p>
+                    <p className="text-sm font-bold text-gray-900">{formatCurrency(t.amount)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Monthly P&L chart */}
+            {showExpenseDetail && opExpenses.monthlyChart && (
+              <div className="mt-4 space-y-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase">Evolución Mensual</h4>
+                <div className="space-y-2">
+                  {opExpenses.monthlyChart.map((m: any) => {
+                    const maxVal = Math.max(...opExpenses.monthlyChart.map((x: any) => Math.max(x.income, x.expenses)));
+                    return (
+                      <div key={m.month} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 font-medium w-16">{formatMonth(m.month)}</span>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 bg-green-400 rounded-full transition-all" style={{ width: `${maxVal > 0 ? (m.income / maxVal) * 100 : 0}%` }} />
+                            <span className="text-[10px] text-green-600 font-medium whitespace-nowrap">{formatCurrency(m.income)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 bg-red-400 rounded-full transition-all" style={{ width: `${maxVal > 0 ? (m.expenses / maxVal) * 100 : 0}%` }} />
+                            <span className="text-[10px] text-red-600 font-medium whitespace-nowrap">{formatCurrency(m.expenses)}</span>
+                          </div>
+                        </div>
+                        <span className={`text-xs font-bold w-16 text-right ${m.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {m.net >= 0 ? '+' : ''}{formatCurrency(m.net)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Recent expenses detail */}
+                {opExpenses.recentExpenses && opExpenses.recentExpenses.length > 0 && (
+                  <div className="mt-3">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Últimos Gastos</h4>
+                    <div className="overflow-x-auto -mx-4 sm:-mx-6">
+                      <table className="w-full min-w-[400px]">
+                        <thead>
+                          <tr className="border-b border-gray-100">
+                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Mes</th>
+                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Categoría</th>
+                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Concepto</th>
+                            <th className="text-right text-[10px] font-medium text-gray-500 px-4 py-2">Importe</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {opExpenses.recentExpenses.map((e: any, i: number) => (
+                            <tr key={i} className="border-b border-gray-50">
+                              <td className="px-4 py-1.5 text-xs text-gray-600">{formatMonth(e.month)}</td>
+                              <td className="px-4 py-1.5 text-xs">
+                                <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700">{TAG_ICONS[e.tag] || ''} {e.tag}</span>
+                              </td>
+                              <td className="px-4 py-1.5 text-xs text-gray-600 max-w-[200px] truncate">{e.concept}</td>
+                              <td className="px-4 py-1.5 text-xs text-right font-medium text-red-600">{formatCurrency(e.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Stripe Debug (collapsible) */}
+        {stripeDebug && (
+          <button onClick={() => setShowStripeDebug(!showStripeDebug)}
+            className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            <AlertTriangle size={12} />
+            <span>Debug Stripe: {stripeDebug.totalSubsFetched} subs encontradas, {stripeDebug.matchedToMembers} vinculadas, {stripeDebug.totalInvoicesFetched} facturas</span>
+            {showStripeDebug ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        )}
+        {showStripeDebug && stripeDebug && (
+          <Card className="bg-yellow-50 border-yellow-200">
+            <h3 className="text-sm font-bold text-yellow-800 mb-2">🔍 Debug Stripe</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <p className="font-semibold text-yellow-700 mb-1">Suscripciones NO vinculadas ({stripeDebug.unmatchedSubs?.length || 0}):</p>
+                {stripeDebug.unmatchedSubs?.length > 0 ? (
+                  <ul className="space-y-1">
+                    {stripeDebug.unmatchedSubs.map((s: any, i: number) => (
+                      <li key={i} className="p-1.5 bg-white rounded border border-yellow-200">
+                        <span className="font-medium">{s.name}</span> · {s.email} · {formatCurrency(s.amount)} · {s.product || 'Sin producto'}
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-yellow-600">Todas vinculadas ✅</p>}
+              </div>
+              <div>
+                <p className="font-semibold text-yellow-700 mb-1">Muestra de Facturas ({stripeDebug.totalInvoicesFetched}):</p>
+                {stripeDebug.invoicesSample?.length > 0 ? (
+                  <ul className="space-y-1">
+                    {stripeDebug.invoicesSample.map((i: any, idx: number) => (
+                      <li key={idx} className="p-1.5 bg-white rounded border border-yellow-200">
+                        <span className="font-medium">{i.name}</span> · {formatCurrency(i.amount)} · {i.period ? formatMonth(i.period.substring(0, 7)) : 'N/A'}
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-yellow-600">Sin facturas recientes</p>}
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Add member form */}
         {showAddForm && (
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Añadir Miembro</h3>
@@ -241,6 +412,7 @@ export default function DiezmosPage() {
           </Card>
         )}
 
+        {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -261,6 +433,7 @@ export default function DiezmosPage() {
           </div>
         </div>
 
+        {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="animate-spin text-violet-600" size={24} />
@@ -388,6 +561,7 @@ export default function DiezmosPage() {
             )}
           </Card>
         ) : (
+          /* Grid view */
           <Card>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

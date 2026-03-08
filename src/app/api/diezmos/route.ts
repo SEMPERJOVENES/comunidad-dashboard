@@ -182,7 +182,70 @@ export async function GET() {
       }
     }
 
-    // 10. Build summary
+    // 10. Get operational expenses covered by diezmos from bank
+    // Tags that represent expenses paid with diezmo money
+    const DIEZMO_EXPENSE_TAGS = ['Música', 'Misa/Tabor', 'Retiros', 'Donativo', 'BAC'];
+
+    const { data: allDiezmoBankTxs } = await supabase
+      .from('bank_transactions')
+      .select('*')
+      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo,manual_tag.in.(Música,Misa/Tabor,Retiros,Donativo,BAC),auto_tag.in.(Música,Misa/Tabor,Retiros,Donativo,BAC)');
+
+    // Separate income (diezmos received) vs expenses (operational costs)
+    const diezmoIncome: { month: string; amount: number; concept: string }[] = [];
+    const diezmoExpenses: { month: string; amount: number; concept: string; tag: string }[] = [];
+    const expensesByTag: Record<string, number> = {};
+    const expensesByMonth: Record<string, Record<string, number>> = {};
+    let totalDiezmoIncome = 0;
+    let totalDiezmoExpenses = 0;
+
+    for (const tx of (allDiezmoBankTxs || [])) {
+      const amt = parseFloat(tx.amount || '0');
+      const tag = tx.manual_tag || tx.auto_tag || '';
+      const monthKey = getMonthKey(tx.date);
+
+      if (tag === 'Diezmo' || tx.is_diezmo) {
+        if (amt > 0) {
+          diezmoIncome.push({ month: monthKey, amount: amt, concept: tx.concept || '' });
+          totalDiezmoIncome += amt;
+        } else {
+          // Negative diezmo-tagged = expense
+          diezmoExpenses.push({ month: monthKey, amount: Math.abs(amt), concept: tx.concept || '', tag: 'Diezmo (gasto)' });
+          expensesByTag['Diezmo (gasto)'] = (expensesByTag['Diezmo (gasto)'] || 0) + Math.abs(amt);
+          totalDiezmoExpenses += Math.abs(amt);
+          if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
+          expensesByMonth[monthKey]['Diezmo (gasto)'] = (expensesByMonth[monthKey]['Diezmo (gasto)'] || 0) + Math.abs(amt);
+        }
+      } else if (DIEZMO_EXPENSE_TAGS.includes(tag)) {
+        const absAmt = Math.abs(amt);
+        diezmoExpenses.push({ month: monthKey, amount: absAmt, concept: tx.concept || '', tag });
+        expensesByTag[tag] = (expensesByTag[tag] || 0) + absAmt;
+        totalDiezmoExpenses += absAmt;
+        if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
+        expensesByMonth[monthKey][tag] = (expensesByMonth[monthKey][tag] || 0) + absAmt;
+      }
+    }
+
+    // Monthly totals for chart
+    const incomeByMonth: Record<string, number> = {};
+    for (const d of diezmoIncome) {
+      incomeByMonth[d.month] = (incomeByMonth[d.month] || 0) + d.amount;
+    }
+    const expTotalByMonth: Record<string, number> = {};
+    for (const d of diezmoExpenses) {
+      expTotalByMonth[d.month] = (expTotalByMonth[d.month] || 0) + d.amount;
+    }
+
+    // Build monthly chart data
+    const allMonthKeys = new Set([...Object.keys(incomeByMonth), ...Object.keys(expTotalByMonth)]);
+    const monthlyChart = Array.from(allMonthKeys).sort().map(m => ({
+      month: m,
+      income: incomeByMonth[m] || 0,
+      expenses: expTotalByMonth[m] || 0,
+      net: (incomeByMonth[m] || 0) - (expTotalByMonth[m] || 0),
+    }));
+
+    // 11. Build summary
     const currentMonth = getMonthKey(new Date());
     const communityStats = communities.map((c: string) => {
       const cmembers = members.filter((m: any) => m.community === c);
@@ -203,6 +266,25 @@ export async function GET() {
       return p && (p.source === 'banco' || p.source === 'ambos');
     }).length;
 
+    // Stripe debug info
+    const stripeDebug = {
+      totalSubsFetched: stripeSubs.length,
+      matchedToMembers: matchedSubIds.size,
+      unmatchedSubs: stripeSubs.filter(s => !matchedSubIds.has(s.id)).map(s => ({
+        name: s.customerName,
+        email: s.customerEmail,
+        amount: s.amount,
+        product: s.productName,
+      })),
+      totalInvoicesFetched: stripeInvoices.length,
+      invoicesSample: stripeInvoices.slice(0, 5).map(i => ({
+        name: i.customerName,
+        amount: i.amount,
+        subId: i.subscriptionId,
+        period: i.periodStart,
+      })),
+    };
+
     return NextResponse.json({
       members,
       communities,
@@ -217,6 +299,17 @@ export async function GET() {
         totalStripeSubs: stripeSubs.length,
         matchedStripeSubs: matchedSubIds.size,
       },
+      // Operational expenses section
+      operationalExpenses: {
+        totalIncome: totalDiezmoIncome,
+        totalExpenses: totalDiezmoExpenses,
+        net: totalDiezmoIncome - totalDiezmoExpenses,
+        byTag: Object.entries(expensesByTag).map(([tag, amount]) => ({ tag, amount })).sort((a, b) => b.amount - a.amount),
+        byMonth: expensesByMonth,
+        monthlyChart,
+        recentExpenses: diezmoExpenses.sort((a, b) => b.month.localeCompare(a.month)).slice(0, 20),
+      },
+      stripeDebug,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
