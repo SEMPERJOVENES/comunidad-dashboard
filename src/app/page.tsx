@@ -11,7 +11,7 @@ import { DateRange, RevenueDataPoint, TopProduct, ShopifyOrder } from '@/lib/typ
 import { getDateRanges, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
-  CreditCard, Landmark, ChevronDown, ChevronRight, Package,
+  Landmark, ChevronDown, ChevronRight, Package,
   Calendar,
 } from 'lucide-react';
 
@@ -335,42 +335,6 @@ export default function DashboardPage() {
                 </button>
               )}
             </Card>
-
-            {/* === FUENTES: Stripe + Shopify === */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="!p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard size={14} className="text-indigo-500" />
-                  <p className="text-xs text-gray-500 font-medium">Stripe Cobros</p>
-                </div>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(data.stripe.volume)}</p>
-              </Card>
-              <Card className="!p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard size={14} className="text-green-500" />
-                  <p className="text-xs text-gray-500 font-medium">Stripe Disponible</p>
-                </div>
-                <p className="text-lg font-bold text-green-600">{formatCurrency(data.stripe.available)}</p>
-                {data.stripe.pending > 0 && (
-                  <p className="text-xs text-gray-400">+{formatCurrency(data.stripe.pending)} pendiente</p>
-                )}
-              </Card>
-              <Card className="!p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Store size={14} className="text-blue-500" />
-                  <p className="text-xs text-gray-500 font-medium">Shopify Ventas</p>
-                </div>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(data.shopify.revenue)}</p>
-                <p className="text-xs text-gray-400">{data.shopify.orders} órdenes</p>
-              </Card>
-              <Card className="!p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Landmark size={14} className="text-amber-500" />
-                  <p className="text-xs text-gray-500 font-medium">Saldo Banco</p>
-                </div>
-                <p className="text-lg font-bold text-blue-600">{formatCurrency(data.financials.bankBalance)}</p>
-              </Card>
-            </div>
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

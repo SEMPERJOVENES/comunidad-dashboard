@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getSubscriptions, getInvoices } from '@/lib/stripe';
+import { getSubscriptions, getInvoices, getCharges } from '@/lib/stripe';
 
 function normalize(name: string) {
   return name.toLowerCase()
@@ -142,6 +142,49 @@ export async function GET() {
       }
     }
 
+    // 7b. Also use Stripe charges to find diezmo payments (backup for invoices)
+    let stripeCharges: any[] = [];
+    let totalStripeCollected = 0;
+    try {
+      const jan2026 = new Date('2026-01-01T00:00:00Z');
+      stripeCharges = await getCharges({
+        created: { gte: Math.floor(jan2026.getTime() / 1000) },
+        limit: 100,
+      });
+    } catch (e) {
+      console.error('Error fetching Stripe charges:', e);
+    }
+
+    for (const charge of stripeCharges) {
+      if (!charge.paid || charge.refunded || charge.amount <= 0) continue;
+      totalStripeCollected += charge.amount;
+
+      const matched = members.find((m: any) => {
+        if (!charge.customerName && !charge.customerEmail) return false;
+        const chargeName = normalize(charge.customerName || '');
+        const chargeEmail = (charge.customerEmail || '').toLowerCase();
+        const mName = normalize(m.name);
+        if (m.email && m.email.toLowerCase() === chargeEmail) return true;
+        return mName === chargeName || chargeName.includes(mName) || mName.includes(chargeName);
+      });
+
+      if (matched) {
+        const monthKey = getMonthKey(charge.created);
+        const existing = matched.payments[monthKey];
+
+        if (!existing) {
+          matched.payments[monthKey] = { amount: charge.amount, source: 'stripe' };
+          await supabase.from('diezmos_payments').upsert({
+            id: `dp-charge-${matched.id}-${monthKey}`,
+            member_id: matched.id,
+            month: monthKey,
+            amount: charge.amount,
+            source: 'stripe',
+          }, { onConflict: 'member_id,month' });
+        }
+      }
+    }
+
     // 8. Get bank diezmo transactions
     const { data: bankDiezmos } = await supabase
       .from('bank_transactions')
@@ -266,6 +309,13 @@ export async function GET() {
       return p && (p.source === 'banco' || p.source === 'ambos');
     }).length;
 
+    // Calculate total Stripe diezmo revenue from members' payments
+    const totalStripeFromPayments = members.reduce((sum: number, m: any) => {
+      return sum + Object.values(m.payments as Record<string, { amount: number; source: string }>)
+        .filter(p => p.source === 'stripe' || p.source === 'ambos')
+        .reduce((s, p) => s + p.amount, 0);
+    }, 0);
+
     // Stripe debug info
     const stripeDebug = {
       totalSubsFetched: stripeSubs.length,
@@ -277,11 +327,20 @@ export async function GET() {
         product: s.productName,
       })),
       totalInvoicesFetched: stripeInvoices.length,
+      totalChargesFetched: stripeCharges.length,
+      totalStripeCollected,
+      totalStripeFromPayments,
       invoicesSample: stripeInvoices.slice(0, 5).map(i => ({
         name: i.customerName,
         amount: i.amount,
         subId: i.subscriptionId,
         period: i.periodStart,
+      })),
+      chargesSample: stripeCharges.filter(c => c.paid).slice(0, 5).map(c => ({
+        name: c.customerName,
+        email: c.customerEmail,
+        amount: c.amount,
+        date: c.created,
       })),
     };
 
@@ -298,6 +357,8 @@ export async function GET() {
         fromBanco: bancoPayingCount,
         totalStripeSubs: stripeSubs.length,
         matchedStripeSubs: matchedSubIds.size,
+        totalStripeCollected,
+        totalStripeFromPayments,
       },
       // Operational expenses section
       operationalExpenses: {

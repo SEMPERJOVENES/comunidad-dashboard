@@ -212,13 +212,21 @@ export default function DiezmosPage() {
         </div>
 
         {/* KPIs - Ingresos vs Gastos Operativos */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           <Card className="border-l-4 border-l-green-500">
             <div className="flex items-center gap-1.5 mb-1">
               <TrendingUp size={12} className="text-green-500" />
               <p className="text-xs text-gray-500 font-medium">Ingresos Diezmo</p>
             </div>
             <p className="text-xl font-bold text-green-600">{formatCurrency(opExpenses?.totalIncome || 0)}</p>
+          </Card>
+          <Card className="border-l-4 border-l-blue-500">
+            <div className="flex items-center gap-1.5 mb-1">
+              <CreditCard size={12} className="text-blue-500" />
+              <p className="text-xs text-gray-500 font-medium">Stripe Recaudado</p>
+            </div>
+            <p className="text-xl font-bold text-blue-600">{formatCurrency(summary?.totalStripeCollected || 0)}</p>
+            <p className="text-xs text-gray-400">{summary?.totalStripeSubs || 0} suscripciones</p>
           </Card>
           <Card className="border-l-4 border-l-red-500">
             <div className="flex items-center gap-1.5 mb-1">
@@ -441,32 +449,50 @@ export default function DiezmosPage() {
           </div>
         ) : view === 'summary' ? (
           <div className="space-y-4">
-            {communityStats.map((cs: any) => (
-              <Card key={cs.community}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-gray-900">{cs.community}</h3>
-                  <span className="text-xs text-gray-500">{cs.payingMembers}/{cs.totalMembers} miembros dando</span>
-                </div>
-                <div className="flex items-end gap-4">
-                  <div>
-                    <p className="text-2xl font-bold text-violet-600">{formatCurrency(cs.monthlyTotal)}</p>
-                    <p className="text-xs text-gray-400">este mes</p>
+            {communityStats.map((cs: any) => {
+              const nonPaying = members.filter(m => m.community === cs.community && !m.payments?.[currentMonth]);
+              return (
+                <Card key={cs.community}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-gray-900">{cs.community}</h3>
+                    <span className="text-xs text-gray-500">{cs.payingMembers}/{cs.totalMembers} miembros dando</span>
                   </div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-4">
-                    <div className="bg-violet-500 h-4 rounded-full transition-all"
-                      style={{ width: `${Math.max(cs.totalMembers > 0 ? (cs.payingMembers / cs.totalMembers) * 100 : 0, 8)}%` }} />
+                  <div className="flex items-end gap-4 mb-3">
+                    <div>
+                      <p className="text-2xl font-bold text-violet-600">{formatCurrency(cs.monthlyTotal)}</p>
+                      <p className="text-xs text-gray-400">este mes</p>
+                    </div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4">
+                      <div className="bg-violet-500 h-4 rounded-full transition-all"
+                        style={{ width: `${Math.max(cs.totalMembers > 0 ? (cs.payingMembers / cs.totalMembers) * 100 : 0, 8)}%` }} />
+                    </div>
+                    <span className="text-lg font-bold text-gray-700">
+                      {cs.totalMembers > 0 ? Math.round((cs.payingMembers / cs.totalMembers) * 100) : 0}%
+                    </span>
                   </div>
-                  <span className="text-lg font-bold text-gray-700">
-                    {cs.totalMembers > 0 ? Math.round((cs.payingMembers / cs.totalMembers) * 100) : 0}%
-                  </span>
-                </div>
-              </Card>
-            ))}
+                  {nonPaying.length > 0 && (
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-[10px] text-gray-400 font-medium mb-1.5">No han dado este mes:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {nonPaying.map((m: any) => (
+                          <span key={m.id} className="text-[10px] px-2 py-0.5 bg-red-50 text-red-600 rounded-full">
+                            {displayName(m)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
             <Card className="bg-violet-50 border-violet-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-violet-800">Total Comunidad</p>
                   <p className="text-3xl font-bold text-violet-700 mt-1">{formatCurrency(summary?.totalMensual || 0)}</p>
+                  {summary?.totalStripeCollected > 0 && (
+                    <p className="text-xs text-violet-500 mt-0.5">💳 Stripe: {formatCurrency(summary.totalStripeCollected)}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-violet-600 font-medium">{summary?.totalPaying || 0} de {summary?.totalMembers || 0}</p>

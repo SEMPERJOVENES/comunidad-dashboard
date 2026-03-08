@@ -241,7 +241,7 @@ export default function ExtractoPage() {
                       <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="px-4 sm:px-6 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(tx.date)}</td>
                         <td className="px-4 sm:px-6 py-3">
-                          <p className="text-sm text-gray-900">{tx.concept}</p>
+                          <p className="text-sm text-gray-900 break-words whitespace-normal">{tx.concept}</p>
                           {tx.memberName && <p className="text-xs text-gray-400">{tx.memberName}</p>}
                         </td>
                         <td className={`px-4 sm:px-6 py-3 text-right text-sm font-semibold whitespace-nowrap ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>

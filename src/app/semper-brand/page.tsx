@@ -282,8 +282,8 @@ export default function SemperBrandPage() {
           <Card><p className="text-center text-gray-400 py-12">No se pudieron cargar los datos</p></Card>
         ) : (
           <>
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* KPI Cards - P&L Formula: Income - Auto - Manual = Real Profit */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
               <Card className="!p-4 border-l-4 border-l-emerald-500">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={14} className="text-emerald-500" />
@@ -292,20 +292,26 @@ export default function SemperBrandPage() {
                 <p className="text-xl sm:text-2xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
                 <p className="text-xs text-gray-400 mt-1">{data.income.shopifyOrders + data.income.ventasCount} operaciones</p>
               </Card>
+              <Card className="!p-4 border-l-4 border-l-orange-500">
+                <div className="flex items-center gap-2 mb-1">
+                  <Landmark size={14} className="text-orange-500" />
+                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Auto</p>
+                </div>
+                <p className="text-xl sm:text-2xl font-bold text-orange-600">{formatCurrency(data.expenses.total)}</p>
+                <p className="text-xs text-gray-400 mt-1">Shopify ~36€/mes, Ionos...</p>
+              </Card>
               <Card className="!p-4 border-l-4 border-l-red-500">
                 <div className="flex items-center gap-2 mb-1">
-                  <TrendingDown size={14} className="text-red-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Total</p>
+                  <Package size={14} className="text-red-500" />
+                  <p className="text-xs font-medium text-gray-500 uppercase">Costes Manual</p>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
-                {totalManualCosts > 0 && (
-                  <p className="text-xs text-gray-400 mt-1">Inc. {formatCurrency(totalManualCosts)} costes manuales</p>
-                )}
+                <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalManualCosts)}</p>
+                <p className="text-xs text-gray-400 mt-1">Stock, envío, otros</p>
               </Card>
               <Card className={`!p-4 border-l-4 ${netProfit >= 0 ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={14} className="text-gray-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Beneficio</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Beneficio Real</p>
                 </div>
                 <p className={`text-xl sm:text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(netProfit)}
@@ -320,6 +326,17 @@ export default function SemperBrandPage() {
                   {margin.toFixed(1)}%
                 </p>
               </Card>
+            </div>
+
+            {/* P&L Formula visual */}
+            <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg py-2 px-4 overflow-x-auto">
+              <span className="text-emerald-600 font-semibold whitespace-nowrap">{formatCurrency(totalIncome)}</span>
+              <span>−</span>
+              <span className="text-orange-600 font-semibold whitespace-nowrap">{formatCurrency(data.expenses.total)}</span>
+              <span>−</span>
+              <span className="text-red-600 font-semibold whitespace-nowrap">{formatCurrency(totalManualCosts)}</span>
+              <span>=</span>
+              <span className={`font-bold whitespace-nowrap ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(netProfit)}</span>
             </div>
 
             {/* Income & Expenses Side by Side */}

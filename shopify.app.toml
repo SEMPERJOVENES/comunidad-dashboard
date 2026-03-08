@@ -1,0 +1,16 @@
+client_id = "03f7b55385ce79d9690ce1f38839201b"
+name = "Financial Dashboard"
+application_url = "https://shopify-dashboard-swart.vercel.app"
+embedded = false
+use_legacy_install_flow = true
+
+[access_scopes]
+scopes = "read_orders,read_products,read_customers,read_analytics,read_inventory,read_shopify_payments_payouts,read_shopify_payments_accounts"
+
+[auth]
+redirect_urls = [
+  "https://shopify-dashboard-swart.vercel.app/api/auth/shopify"
+]
+
+[webhooks]
+api_version = "2024-10"

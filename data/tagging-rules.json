@@ -20,6 +20,8 @@
   { "keyword": "grito del cora", "category": "Merch" },
   { "keyword": "gorra", "category": "Merch" },
   { "keyword": "elena salto", "category": "Gastos Varios" },
+  { "keyword": "carlos garcia impresion", "category": "Merch" },
+  { "keyword": "carlos garcia", "category": "Merch" },
   { "keyword": "impresion 2000", "category": "Merch" },
   { "keyword": "shopify", "category": "Merch" },
   { "keyword": "libreria cecadi", "category": "Material" },
@@ -29,6 +31,7 @@
   { "keyword": "cd semper", "category": "Semper CD" },
   { "keyword": "billetes", "category": "Viajes" },
   { "keyword": "ionos", "category": "Merch" },
+  { "keyword": "libro", "category": "Merch" },
   { "keyword": "ven y verás", "category": "Merch" },
   { "keyword": "ven y veras", "category": "Merch" },
   { "keyword": "viaje", "category": "Viajes" },
@@ -44,5 +47,7 @@
   { "keyword": "mantenimiento", "category": "Comisión bancaria" },
   { "keyword": "liquidación", "category": "Comisión bancaria" },
   { "keyword": "camiseta", "category": "Merch" },
-  { "keyword": "thomann", "category": "Merch" }
+  { "keyword": "thomann", "category": "Merch" },
+  { "keyword": "música", "category": "Música" },
+  { "keyword": "musica", "category": "Música" }
 ]
