@@ -13,6 +13,7 @@ import {
   Church,
   BarChart3,
   Tag,
+  BookOpen,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ const navSections = [
     items: [
       { href: '/categorias', label: 'Categorías', icon: Tag },
       { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
+      { href: '/reglas', label: 'Reglas Etiquetado', icon: BookOpen },
       { href: '/stripe', label: 'Stripe', icon: CreditCard },
     ],
   },
