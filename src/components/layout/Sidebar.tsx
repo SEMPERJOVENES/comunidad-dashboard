@@ -11,6 +11,7 @@ import {
   Store,
   Landmark,
   Church,
+  BarChart3,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ const navSections = [
   {
     title: 'Semper Brand',
     items: [
+      { href: '/semper-brand', label: 'Resultado (P&L)', icon: BarChart3 },
       { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
       { href: '/products', label: 'Inventario', icon: Package },
       { href: '/ventas', label: 'Ventas Presenciales', icon: Store },

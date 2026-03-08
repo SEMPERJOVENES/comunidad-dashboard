@@ -71,14 +71,17 @@ export async function getSubscriptions(params: { status?: string; limit?: number
   const subs = await stripe.subscriptions.list({
     limit: params.limit || 100,
     status: (params.status as any) || 'active',
-    expand: ['data.customer'],
+    expand: ['data.customer', 'data.items.data.price.product'],
   });
   return subs.data.map((s) => {
     const customer = s.customer as Stripe.Customer;
     const item = s.items.data[0];
     const priceAmount = item?.price?.unit_amount || 0;
     const interval = item?.price?.recurring?.interval || 'month';
-    const productName = (item?.price?.product as any)?.name || item?.price?.nickname || '';
+    const product = item?.price?.product;
+    const productName = typeof product === 'object' && product !== null
+      ? (product as any).name || ''
+      : item?.price?.nickname || '';
     return {
       id: s.id,
       status: s.status,
@@ -92,6 +95,39 @@ export async function getSubscriptions(params: { status?: string; limit?: number
       created: new Date(s.created * 1000).toISOString(),
       currentPeriodEnd: new Date((s as any).current_period_end * 1000).toISOString(),
       cancelAtPeriodEnd: (s as any).cancel_at_period_end,
+    };
+  });
+}
+
+export async function getInvoices(params: {
+  created?: { gte?: number; lte?: number };
+  status?: string;
+  limit?: number;
+  customer?: string;
+  subscription?: string;
+} = {}) {
+  const invoices = await stripe.invoices.list({
+    limit: params.limit || 100,
+    ...(params.created && { created: params.created }),
+    ...(params.status && { status: params.status as any }),
+    ...(params.customer && { customer: params.customer }),
+    ...(params.subscription && { subscription: params.subscription }),
+    expand: ['data.customer'],
+  });
+  return invoices.data.map((inv) => {
+    const customer = inv.customer as Stripe.Customer;
+    return {
+      id: inv.id,
+      status: inv.status,
+      amount: (inv.amount_paid || 0) / 100,
+      currency: inv.currency,
+      customerName: customer?.name || customer?.email || 'Anónimo',
+      customerEmail: customer?.email || null,
+      customerId: customer?.id || null,
+      subscriptionId: (inv as any).subscription ? (typeof (inv as any).subscription === 'string' ? (inv as any).subscription : (inv as any).subscription?.id || null) : null,
+      periodStart: inv.period_start ? new Date(inv.period_start * 1000).toISOString() : null,
+      periodEnd: inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null,
+      created: new Date(inv.created * 1000).toISOString(),
     };
   });
 }

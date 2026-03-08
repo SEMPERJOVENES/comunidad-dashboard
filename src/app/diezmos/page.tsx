@@ -12,14 +12,16 @@ import {
 
 type ViewMode = 'grid' | 'list' | 'summary';
 
-function getMonthRange(count: number): string[] {
+function getMonthsFrom2026(): string[] {
   const months: string[] = [];
+  const start = new Date(2026, 0, 1); // Enero 2026
   const now = new Date();
-  for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  const d = new Date(start);
+  while (d <= now) {
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() + 1);
   }
-  return months;
+  return months.length > 0 ? months : [`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`];
 }
 
 function formatMonth(key: string) {
@@ -43,7 +45,7 @@ export default function DiezmosPage() {
   const [newName, setNewName] = useState('');
   const [newCommunity, setNewCommunity] = useState('San Pablo');
   const [newEmail, setNewEmail] = useState('');
-  const [monthsToShow, setMonthsToShow] = useState(6);
+  const [monthsToShow, setMonthsToShow] = useState(12);
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingPayment, setEditingPayment] = useState<{ memberId: string; month: string } | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -107,11 +109,12 @@ export default function DiezmosPage() {
     fetchDiezmos();
   }
 
+  const allMonths = useMemo(() => getMonthsFrom2026(), []);
+
   const visibleMonths = useMemo(() => {
-    const all = getMonthRange(24);
-    const start = Math.max(0, all.length - monthsToShow - monthOffset);
-    return all.slice(start, start + monthsToShow);
-  }, [monthsToShow, monthOffset]);
+    const start = Math.max(0, allMonths.length - monthsToShow - monthOffset);
+    return allMonths.slice(start, start + monthsToShow);
+  }, [allMonths, monthsToShow, monthOffset]);
 
   const filtered = useMemo(() => {
     return members.filter(m => {
@@ -180,6 +183,9 @@ export default function DiezmosPage() {
               <p className="text-xs text-gray-500 font-medium">Vía Stripe</p>
             </div>
             <p className="text-2xl font-bold text-blue-600 mt-1">{summary?.fromStripe || 0}</p>
+            {summary?.totalStripeSubs > 0 && (
+              <p className="text-xs text-gray-400">{summary.matchedStripeSubs}/{summary.totalStripeSubs} subs conciliadas</p>
+            )}
           </Card>
           <Card>
             <div className="flex items-center gap-1.5">

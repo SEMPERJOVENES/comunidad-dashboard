@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getSubscriptions } from '@/lib/stripe';
+import { getSubscriptions, getInvoices } from '@/lib/stripe';
 
 function normalize(name: string) {
   return name.toLowerCase()
@@ -54,29 +54,25 @@ export async function GET() {
       };
     });
 
-    // 4. Get Stripe subscriptions for "Diezmo" products
+    // 4. Get ALL Stripe subscriptions (sin filtrar por nombre de producto)
     let stripeSubs: any[] = [];
     try {
       const allSubs = await getSubscriptions({ status: 'active', limit: 100 });
-      stripeSubs = allSubs.filter(s =>
-        s.productName.toLowerCase().includes('diezmo') ||
-        s.productName.toLowerCase().includes('tithe')
-      );
-    } catch {}
+      stripeSubs = allSubs;
+    } catch (e) {
+      console.error('Error fetching Stripe subscriptions:', e);
+    }
 
-    // 5. Get bank transactions tagged as diezmo
-    const { data: bankDiezmos } = await supabase
-      .from('bank_transactions')
-      .select('*')
-      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo');
+    // 5. Match Stripe subscriptions to members by name/email
+    const matchedSubIds = new Set<string>();
 
-    // 6. Match Stripe subscriptions to members
     for (const sub of stripeSubs) {
       const subName = normalize(sub.customerName || '');
       const subEmail = (sub.customerEmail || '').toLowerCase();
 
       const matched = members.find((m: any) => {
         const mName = normalize(m.name);
+        if (m.stripeSubscriptionId === sub.id) return true;
         return mName === subName ||
           subName.includes(mName) || mName.includes(subName) ||
           (m.email && m.email.toLowerCase() === subEmail);
@@ -87,6 +83,7 @@ export async function GET() {
         matched.stripeAmount = sub.amount;
         matched.stripeInterval = sub.interval;
         matched.email = sub.customerEmail || matched.email;
+        matchedSubIds.add(sub.id);
 
         // Update Stripe info in DB
         await supabase.from('diezmos_members').update({
@@ -95,26 +92,62 @@ export async function GET() {
           stripe_interval: sub.interval,
           email: sub.customerEmail || matched.email,
         }).eq('id', matched.id);
+      }
+    }
 
-        // Mark current month as paid via Stripe
-        const currentMonth = getMonthKey(new Date());
-        if (!matched.payments[currentMonth]) {
-          const monthlyAmount = sub.interval === 'year' ? sub.amount / 12 : sub.amount;
-          matched.payments[currentMonth] = { amount: monthlyAmount, source: 'stripe' };
+    // 6. Get paid Stripe invoices from Jan 2026 for payment history
+    let stripeInvoices: any[] = [];
+    try {
+      const jan2026 = new Date('2026-01-01T00:00:00Z');
+      stripeInvoices = await getInvoices({
+        created: { gte: Math.floor(jan2026.getTime() / 1000) },
+        status: 'paid',
+        limit: 100,
+      });
+    } catch (e) {
+      console.error('Error fetching Stripe invoices:', e);
+    }
 
-          // Upsert payment in DB
+    // 7. Map invoices to member payments by month
+    for (const inv of stripeInvoices) {
+      if (inv.amount <= 0) continue;
+
+      const matched = members.find((m: any) => {
+        if (m.stripeSubscriptionId && inv.subscriptionId === m.stripeSubscriptionId) return true;
+        const invName = normalize(inv.customerName || '');
+        const invEmail = (inv.customerEmail || '').toLowerCase();
+        const mName = normalize(m.name);
+        return mName === invName || invName.includes(mName) || mName.includes(invName) ||
+          (m.email && m.email.toLowerCase() === invEmail);
+      });
+
+      if (matched) {
+        const monthKey = getMonthKey(inv.periodStart || inv.created);
+        const existing = matched.payments[monthKey];
+
+        if (!existing || existing.source !== 'stripe') {
+          const newSource = existing ? (existing.source === 'banco' ? 'ambos' : 'stripe') : 'stripe';
+          const newAmount = existing ? existing.amount + inv.amount : inv.amount;
+          matched.payments[monthKey] = { amount: newAmount, source: newSource };
+
           await supabase.from('diezmos_payments').upsert({
-            id: `dp-stripe-${matched.id}-${currentMonth}`,
+            id: `dp-stripe-${matched.id}-${monthKey}`,
             member_id: matched.id,
-            month: currentMonth,
-            amount: monthlyAmount,
-            source: 'stripe',
+            month: monthKey,
+            amount: newAmount,
+            source: newSource,
           }, { onConflict: 'member_id,month' });
         }
       }
     }
 
-    // 7. Match bank diezmo transactions to members
+    // 8. Get bank diezmo transactions
+    const { data: bankDiezmos } = await supabase
+      .from('bank_transactions')
+      .select('*')
+      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo');
+
+    // 9. Match bank transactions to members
     for (const tx of (bankDiezmos || [])) {
       const txName = normalize(tx.member_name || tx.concept || '');
       const monthKey = getMonthKey(tx.date);
@@ -128,15 +161,16 @@ export async function GET() {
         const existing = matched.payments[monthKey];
         const amt = Math.abs(parseFloat(tx.amount));
         if (existing) {
-          matched.payments[monthKey] = {
-            amount: existing.amount + amt,
-            source: existing.source === 'stripe' ? 'ambos' : 'banco',
-          };
+          if (existing.source !== 'banco') {
+            matched.payments[monthKey] = {
+              amount: existing.amount + amt,
+              source: existing.source === 'stripe' ? 'ambos' : existing.source,
+            };
+          }
         } else {
           matched.payments[monthKey] = { amount: amt, source: 'banco' };
         }
 
-        // Upsert payment in DB
         await supabase.from('diezmos_payments').upsert({
           id: `dp-banco-${matched.id}-${monthKey}`,
           member_id: matched.id,
@@ -147,7 +181,7 @@ export async function GET() {
       }
     }
 
-    // 8. Build summary
+    // 10. Build summary
     const currentMonth = getMonthKey(new Date());
     const communityStats = communities.map((c: string) => {
       const cmembers = members.filter((m: any) => m.community === c);
@@ -159,6 +193,14 @@ export async function GET() {
     const totalMensual = members.reduce((s: number, m: any) => s + (m.payments?.[currentMonth]?.amount || 0), 0);
     const totalActive = members.filter((m: any) => m.isActive).length;
     const totalPaying = members.filter((m: any) => m.payments?.[currentMonth]).length;
+    const stripePayingCount = members.filter((m: any) => {
+      const p = m.payments?.[currentMonth];
+      return p && (p.source === 'stripe' || p.source === 'ambos');
+    }).length;
+    const bancoPayingCount = members.filter((m: any) => {
+      const p = m.payments?.[currentMonth];
+      return p && (p.source === 'banco' || p.source === 'ambos');
+    }).length;
 
     return NextResponse.json({
       members,
@@ -169,8 +211,10 @@ export async function GET() {
         totalMembers: members.length,
         totalActive,
         totalPaying,
-        fromStripe: stripeSubs.length,
-        fromBanco: (bankDiezmos || []).length,
+        fromStripe: stripePayingCount,
+        fromBanco: bancoPayingCount,
+        totalStripeSubs: stripeSubs.length,
+        matchedStripeSubs: matchedSubIds.size,
       },
     });
   } catch (error: unknown) {
@@ -198,7 +242,6 @@ export async function POST(request: import('next/server').NextRequest) {
     }
 
     if (body.action === 'delete_member') {
-      // Payments are cascaded automatically via FK
       const { error } = await supabase
         .from('diezmos_members')
         .delete()
