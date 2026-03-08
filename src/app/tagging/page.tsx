@@ -110,9 +110,9 @@ export default function TaggingPage() {
                       <td className="px-4 sm:px-6 py-3">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: project?.color || '#gray' }} />
-                          <select className="text-sm bg-transparent border-none focus:ring-0 cursor-pointer text-gray-700 pr-6">
+                          <select defaultValue={tx.projectTag} className="text-sm bg-transparent border-none focus:ring-0 cursor-pointer text-gray-700 pr-6">
                             {demoProjects.map((p) => (
-                              <option key={p.projectName} selected={p.projectName === tx.projectTag}>
+                              <option key={p.projectName} value={p.projectName}>
                                 {p.projectName}
                               </option>
                             ))}

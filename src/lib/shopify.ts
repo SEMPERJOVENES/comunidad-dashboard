@@ -121,6 +121,44 @@ export async function getShopInfo() {
   return data.shop;
 }
 
+// Inventory levels
+export async function getInventoryLevels(inventoryItemIds: number[]) {
+  const ids = inventoryItemIds.join(',');
+  const data = await shopifyFetch<{ inventory_levels: any[] }>({
+    endpoint: 'inventory_levels',
+    params: { inventory_item_ids: ids, limit: '250' },
+  });
+  return data.inventory_levels;
+}
+
+// Adjust inventory
+export async function adjustInventory(inventoryItemId: number, locationId: number, adjustment: number) {
+  const data = await shopifyFetch<{ inventory_level: any }>({
+    endpoint: 'inventory_levels/adjust',
+    method: 'POST',
+    body: {
+      inventory_item_id: inventoryItemId,
+      location_id: locationId,
+      available_adjustment: adjustment,
+    },
+  });
+  return data.inventory_level;
+}
+
+// Get locations
+export async function getLocations() {
+  const data = await shopifyFetch<{ locations: any[] }>({ endpoint: 'locations' });
+  return data.locations;
+}
+
+// Get product variants for inventory
+export async function getProductVariants(productId: number) {
+  const data = await shopifyFetch<{ variants: any[] }>({
+    endpoint: `products/${productId}/variants`,
+  });
+  return data.variants;
+}
+
 // GraphQL for analytics
 export async function shopifyGraphQL(query: string, variables?: Record<string, unknown>) {
   const response = await fetch(`https://${SHOPIFY_STORE}/admin/api/${API_VERSION}/graphql.json`, {

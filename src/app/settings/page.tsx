@@ -1,19 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
-import { Settings, ShoppingBag, CreditCard, Link2, CheckCircle2, XCircle } from 'lucide-react';
+import { Settings, ShoppingBag, CreditCard, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const ranges = getDateRanges();
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [shopifyOk, setShopifyOk] = useState<boolean | null>(null);
+  const [stripeOk, setStripeOk] = useState<boolean | null>(null);
 
-  const shopifyConnected = !!process.env.NEXT_PUBLIC_SHOPIFY_CONNECTED;
-  const stripeConnected = !!process.env.NEXT_PUBLIC_STRIPE_CONNECTED;
+  useEffect(() => {
+    // Test Shopify connection
+    fetch('/api/shopify/products')
+      .then((r) => setShopifyOk(r.ok))
+      .catch(() => setShopifyOk(false));
+    // Test Stripe connection
+    fetch('/api/stripe?days=1')
+      .then((r) => setStripeOk(r.ok))
+      .catch(() => setStripeOk(false));
+  }, []);
 
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
@@ -26,7 +36,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Integrations */}
         <Card>
           <CardHeader>
             <CardTitle>Integraciones</CardTitle>
@@ -44,15 +53,13 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant={shopifyConnected ? 'success' : 'warning'}>
-                  {shopifyConnected ? 'Conectado' : 'Pendiente'}
-                </Badge>
-                <a
-                  href="/api/auth/shopify?shop=169523-e2.myshopify.com"
-                  className="px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
-                >
-                  {shopifyConnected ? 'Reconectar' : 'Conectar'}
-                </a>
+                {shopifyOk === null ? (
+                  <Loader2 className="animate-spin text-gray-400" size={16} />
+                ) : (
+                  <Badge variant={shopifyOk ? 'success' : 'danger'}>
+                    {shopifyOk ? 'Conectado' : 'Error'}
+                  </Badge>
+                )}
               </div>
             </div>
 
@@ -68,15 +75,18 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant={stripeConnected ? 'success' : 'warning'}>
-                  {stripeConnected ? 'Conectado' : 'Pendiente'}
-                </Badge>
+                {stripeOk === null ? (
+                  <Loader2 className="animate-spin text-gray-400" size={16} />
+                ) : (
+                  <Badge variant={stripeOk ? 'success' : 'danger'}>
+                    {stripeOk ? 'Conectado' : 'Error'}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Info */}
         <Card>
           <CardHeader>
             <CardTitle>Información de la App</CardTitle>
@@ -93,6 +103,10 @@ export default function SettingsPage() {
             <div className="flex justify-between">
               <span className="text-gray-500">Tienda</span>
               <span className="font-medium">Semper Brand</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Fuente de datos</span>
+              <span className="font-medium text-green-600">Datos reales (API en vivo)</span>
             </div>
           </div>
         </Card>

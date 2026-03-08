@@ -1,0 +1,97 @@
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2025-02-24.acacia' as any,
+});
+
+export async function getBalance() {
+  const balance = await stripe.balance.retrieve();
+  return {
+    available: balance.available.reduce((sum, b) => sum + b.amount, 0) / 100,
+    pending: balance.pending.reduce((sum, b) => sum + b.amount, 0) / 100,
+    currency: balance.available[0]?.currency || 'eur',
+  };
+}
+
+export async function getPayouts(params: { limit?: number; created?: { gte?: number; lte?: number } } = {}) {
+  const payouts = await stripe.payouts.list({
+    limit: params.limit || 25,
+    ...(params.created && { created: params.created }),
+  });
+  return payouts.data.map((p) => ({
+    id: p.id,
+    amount: p.amount / 100,
+    currency: p.currency,
+    status: p.status,
+    arrival_date: new Date(p.arrival_date * 1000).toISOString(),
+    created: new Date(p.created * 1000).toISOString(),
+    description: p.description,
+  }));
+}
+
+export async function getCharges(params: { limit?: number; created?: { gte?: number; lte?: number } } = {}) {
+  const charges = await stripe.charges.list({
+    limit: params.limit || 100,
+    ...(params.created && { created: params.created }),
+  });
+  return charges.data.map((c) => ({
+    id: c.id,
+    amount: c.amount / 100,
+    currency: c.currency,
+    status: c.status,
+    created: new Date(c.created * 1000).toISOString(),
+    description: c.description,
+    paid: c.paid,
+    refunded: c.refunded,
+    disputed: c.disputed,
+    customer: c.customer,
+  }));
+}
+
+export async function getBalanceTransactions(params: { limit?: number; created?: { gte?: number; lte?: number }; type?: string } = {}) {
+  const txs = await stripe.balanceTransactions.list({
+    limit: params.limit || 100,
+    ...(params.created && { created: params.created }),
+    ...(params.type && { type: params.type }),
+  });
+  return txs.data.map((t) => ({
+    id: t.id,
+    amount: t.amount / 100,
+    fee: t.fee / 100,
+    net: t.net / 100,
+    currency: t.currency,
+    type: t.type,
+    status: t.status,
+    created: new Date(t.created * 1000).toISOString(),
+    description: t.description,
+  }));
+}
+
+export async function getPaymentVolume(params: { created?: { gte?: number; lte?: number } } = {}) {
+  const charges = await stripe.charges.list({
+    limit: 100,
+    ...(params.created && { created: params.created }),
+  });
+
+  let volume = 0;
+  let count = 0;
+  let refunded = 0;
+  let disputed = 0;
+
+  for (const c of charges.data) {
+    if (c.paid) {
+      volume += c.amount;
+      count++;
+    }
+    if (c.refunded) refunded++;
+    if (c.disputed) disputed++;
+  }
+
+  return {
+    volume: volume / 100,
+    count,
+    refunded,
+    disputed,
+    currency: 'eur',
+  };
+}

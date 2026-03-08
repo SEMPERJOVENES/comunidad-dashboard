@@ -11,18 +11,39 @@ import {
   Tags,
   Settings,
   CreditCard,
+  Store,
+  Landmark,
+  Church,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
-  { href: '/products', label: 'Productos', icon: Package },
-  { href: '/customers', label: 'Clientes', icon: Users },
-  { href: '/projects', label: 'Proyectos', icon: FolderKanban },
-  { href: '/tagging', label: 'Etiquetado', icon: Tags },
-  { href: '/stripe', label: 'Stripe', icon: CreditCard },
+const navSections = [
+  {
+    title: 'General',
+    items: [
+      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
+      { href: '/products', label: 'Productos', icon: Package },
+      { href: '/customers', label: 'Clientes', icon: Users },
+    ],
+  },
+  {
+    title: 'Ventas & Finanzas',
+    items: [
+      { href: '/ventas', label: 'Ventas Presenciales', icon: Store },
+      { href: '/stripe', label: 'Stripe', icon: CreditCard },
+      { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
+    ],
+  },
+  {
+    title: 'Gestión',
+    items: [
+      { href: '/diezmos', label: 'Diezmos', icon: Church },
+      { href: '/projects', label: 'Proyectos', icon: FolderKanban },
+      { href: '/tagging', label: 'Etiquetado', icon: Tags },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -67,26 +88,33 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="px-3 py-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-violet-600/20 text-violet-400'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                )}
-              >
-                <item.icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="px-3 py-4 space-y-4 overflow-y-auto max-h-[calc(100vh-140px)]">
+          {navSections.map((section) => (
+            <div key={section.title}>
+              <p className="px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{section.title}</p>
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onClose}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-violet-600/20 text-violet-400'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      )}
+                    >
+                      <item.icon size={18} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}

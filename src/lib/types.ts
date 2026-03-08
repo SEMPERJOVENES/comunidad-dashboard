@@ -144,3 +144,55 @@ export type DateRange = {
   startDate: Date;
   endDate: Date;
 };
+
+// Ventas presenciales
+export interface PresentialSale {
+  id: string;
+  date: string;
+  customerName: string;
+  paymentMethod: 'bizum' | 'efectivo' | 'transferencia';
+  totalAmount: number;
+  items: PresentialSaleItem[];
+  notes?: string;
+}
+
+export interface PresentialSaleItem {
+  productId: number;
+  productTitle: string;
+  variantId?: number;
+  quantity: number;
+  unitPrice: number;
+}
+
+// Extracto bancario
+export interface BankTransaction {
+  id: string;
+  date: string;
+  valueDate: string;
+  concept: string;
+  amount: number;
+  balance: number;
+  category?: string;
+  autoTag?: string;
+  manualTag?: string;
+  isDiezmo?: boolean;
+  memberName?: string;
+}
+
+// Diezmos
+export interface TitheMember {
+  name: string;
+  email?: string;
+  source: 'stripe' | 'banco' | 'ambos';
+  totalPaid: number;
+  payments: TithePayment[];
+  lastPayment?: string;
+  isActive: boolean;
+}
+
+export interface TithePayment {
+  date: string;
+  amount: number;
+  source: 'stripe' | 'banco';
+  reference?: string;
+}
