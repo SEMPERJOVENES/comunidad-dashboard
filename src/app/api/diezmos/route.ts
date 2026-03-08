@@ -1,106 +1,139 @@
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getCharges } from '@/lib/stripe';
+import { getSubscriptions } from '@/lib/stripe';
 
-const EXTRACTO_FILE = path.join(process.cwd(), 'data', 'extracto.json');
 const MEMBERS_FILE = path.join(process.cwd(), 'data', 'diezmos-members.json');
+const EXTRACTO_FILE = path.join(process.cwd(), 'data', 'extracto.json');
 
 async function readJSON(filepath: string) {
   try {
     const data = await fs.readFile(filepath, 'utf-8');
     return JSON.parse(data);
   } catch {
-    return [];
+    return filepath.includes('diezmos-members') ? { communities: ['San Pablo', 'San Ignacio', 'P. Pio'], members: [] } : [];
   }
 }
 
-async function ensureDataDir() {
+async function writeMembers(data: any) {
   const dir = path.dirname(MEMBERS_FILE);
   try { await fs.mkdir(dir, { recursive: true }); } catch {}
+  await fs.writeFile(MEMBERS_FILE, JSON.stringify(data, null, 2));
+}
+
+function normalize(name: string) {
+  return name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z\s]/g, '').trim();
+}
+
+function getMonthKey(date: string | Date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export async function GET() {
   try {
-    // 1. Get Stripe charges (potential tithes - recurring/donations)
-    const sixMonthsAgo = Math.floor(Date.now() / 1000) - 180 * 86400;
-    const stripeCharges = await getCharges({ limit: 100, created: { gte: sixMonthsAgo } });
+    const data = await readJSON(MEMBERS_FILE);
+    const members = data.members || [];
+    const communities = data.communities || ['San Pablo', 'San Ignacio', 'P. Pio'];
 
-    // 2. Get bank statement transactions tagged as diezmo
+    // 1. Get Stripe subscriptions for "Diezmo" products
+    let stripeSubs: any[] = [];
+    try {
+      const allSubs = await getSubscriptions({ status: 'active', limit: 100 });
+      stripeSubs = allSubs.filter(s =>
+        s.productName.toLowerCase().includes('diezmo') ||
+        s.productName.toLowerCase().includes('tithe')
+      );
+    } catch {}
+
+    // 2. Get bank transactions tagged as diezmo
     const extracto = await readJSON(EXTRACTO_FILE);
-    const diezmosBanco = extracto.filter((tx: any) => tx.isDiezmo || tx.manualTag === 'Diezmo' || (tx.autoTag === 'Diezmo'));
+    const diezmosBanco = (Array.isArray(extracto) ? extracto : []).filter((tx: any) =>
+      tx.isDiezmo || tx.manualTag === 'Diezmo' || tx.autoTag === 'Diezmo'
+    );
 
-    // 3. Get saved member list
-    const savedMembers = await readJSON(MEMBERS_FILE);
+    // 3. Match Stripe subscriptions to members
+    for (const sub of stripeSubs) {
+      const subName = normalize(sub.customerName || '');
+      const subEmail = (sub.customerEmail || '').toLowerCase();
+      const monthKey = getMonthKey(sub.created);
 
-    // 4. Combine into member-based view
-    const memberMap = new Map<string, any>();
+      let matched = members.find((m: any) => {
+        const mName = normalize(m.name);
+        return mName === subName ||
+          subName.includes(mName) || mName.includes(subName) ||
+          (m.email && m.email.toLowerCase() === subEmail);
+      });
 
-    // From saved members
-    for (const m of savedMembers) {
-      memberMap.set(m.name.toLowerCase(), { ...m, payments: m.payments || [] });
-    }
-
-    // From Stripe charges (use description or customer email as identifier)
-    for (const charge of stripeCharges) {
-      const name = (charge.description || String(charge.customer || '') || 'Stripe anónimo').toLowerCase();
-      const existing = memberMap.get(name);
-      const payment = { date: charge.created, amount: charge.amount, source: 'stripe' as const, reference: charge.id };
-
-      if (existing) {
-        existing.payments.push(payment);
-        existing.totalPaid += charge.amount;
-        existing.source = existing.source === 'banco' ? 'ambos' : 'stripe';
-        if (!existing.lastPayment || charge.created > existing.lastPayment) existing.lastPayment = charge.created;
-      } else {
-        memberMap.set(name, {
-          name: charge.description || charge.customer || 'Stripe anónimo',
-          email: null,
-          source: 'stripe',
-          totalPaid: charge.amount,
-          payments: [payment],
-          lastPayment: charge.created,
-          isActive: true,
-        });
+      if (matched) {
+        matched.stripeSubscriptionId = sub.id;
+        matched.stripeAmount = sub.amount;
+        matched.stripeInterval = sub.interval;
+        matched.email = sub.customerEmail || matched.email;
+        // Mark current month as paid via Stripe
+        const now = new Date();
+        const currentMonth = getMonthKey(now);
+        if (!matched.payments) matched.payments = {};
+        if (!matched.payments[currentMonth]) {
+          const monthlyAmount = sub.interval === 'year' ? sub.amount / 12 : sub.amount;
+          matched.payments[currentMonth] = { amount: monthlyAmount, source: 'stripe' };
+        }
       }
     }
 
-    // From bank statement
+    // 4. Match bank diezmo transactions to members
     for (const tx of diezmosBanco) {
-      const name = (tx.memberName || tx.concept || `Banco-${tx.id}`).toLowerCase();
-      const existing = memberMap.get(name);
-      const payment = { date: tx.date, amount: Math.abs(tx.amount), source: 'banco' as const, reference: tx.id };
+      const txName = normalize(tx.memberName || tx.senderName || tx.concept || '');
+      const monthKey = getMonthKey(tx.date);
 
-      if (existing) {
-        existing.payments.push(payment);
-        existing.totalPaid += Math.abs(tx.amount);
-        existing.source = existing.source === 'stripe' ? 'ambos' : 'banco';
-        if (!existing.lastPayment || tx.date > existing.lastPayment) existing.lastPayment = tx.date;
-      } else {
-        memberMap.set(name, {
-          name: tx.memberName || tx.concept,
-          email: null,
-          source: 'banco',
-          totalPaid: Math.abs(tx.amount),
-          payments: [payment],
-          lastPayment: tx.date,
-          isActive: true,
-        });
+      let matched = members.find((m: any) => {
+        const mName = normalize(m.name);
+        return txName.includes(mName) || mName.includes(txName);
+      });
+
+      if (matched) {
+        if (!matched.payments) matched.payments = {};
+        const existing = matched.payments[monthKey];
+        const amt = Math.abs(tx.amount);
+        if (existing) {
+          matched.payments[monthKey] = {
+            amount: existing.amount + amt,
+            source: existing.source === 'stripe' ? 'ambos' : 'banco',
+          };
+        } else {
+          matched.payments[monthKey] = { amount: amt, source: 'banco' };
+        }
       }
     }
 
-    const members = Array.from(memberMap.values()).sort((a, b) => b.totalPaid - a.totalPaid);
-    const totalDiezmos = members.reduce((s: number, m: any) => s + m.totalPaid, 0);
-    const activeMembers = members.filter((m: any) => m.isActive).length;
+    // 5. Build summary
+    const now = new Date();
+    const currentMonth = getMonthKey(now);
+
+    const communityStats = communities.map((c: string) => {
+      const cmembers = members.filter((m: any) => m.community === c);
+      const paying = cmembers.filter((m: any) => m.payments?.[currentMonth]);
+      const total = paying.reduce((s: number, m: any) => s + (m.payments[currentMonth]?.amount || 0), 0);
+      return { community: c, totalMembers: cmembers.length, payingMembers: paying.length, monthlyTotal: total };
+    });
+
+    const totalMensual = members.reduce((s: number, m: any) => s + (m.payments?.[currentMonth]?.amount || 0), 0);
+    const totalActive = members.filter((m: any) => m.isActive).length;
+    const totalPaying = members.filter((m: any) => m.payments?.[currentMonth]).length;
 
     return NextResponse.json({
       members,
+      communities,
+      communityStats,
       summary: {
-        totalDiezmos,
+        totalMensual,
         totalMembers: members.length,
-        activeMembers,
-        fromStripe: members.filter((m: any) => m.source === 'stripe' || m.source === 'ambos').length,
-        fromBanco: members.filter((m: any) => m.source === 'banco' || m.source === 'ambos').length,
+        totalActive,
+        totalPaying,
+        fromStripe: stripeSubs.length,
+        fromBanco: diezmosBanco.length,
       },
     });
   } catch (error: unknown) {
@@ -109,35 +142,70 @@ export async function GET() {
   }
 }
 
-// Add/edit members manually
 export async function POST(request: import('next/server').NextRequest) {
   try {
-    await ensureDataDir();
     const body = await request.json();
+    const data = await readJSON(MEMBERS_FILE);
+    const members = data.members || [];
+    const communities = data.communities || ['San Pablo', 'San Ignacio', 'P. Pio'];
 
     if (body.action === 'add_member') {
-      const members = await readJSON(MEMBERS_FILE);
-      const member = {
-        name: body.name,
+      const id = `m${Date.now()}`;
+      members.push({
+        id,
+        name: body.name.trim(),
+        community: body.community || 'San Pablo',
         email: body.email || null,
-        source: 'manual' as const,
-        totalPaid: 0,
-        payments: [],
-        lastPayment: null,
         isActive: true,
-      };
-      members.push(member);
-      await fs.writeFile(MEMBERS_FILE, JSON.stringify(members, null, 2));
-      return NextResponse.json({ member });
+        payments: {},
+      });
+      await writeMembers({ communities, members });
+      return NextResponse.json({ success: true, id });
     }
 
-    if (body.action === 'toggle_active') {
-      const members = await readJSON(MEMBERS_FILE);
-      const idx = members.findIndex((m: any) => m.name.toLowerCase() === body.name.toLowerCase());
-      if (idx !== -1) {
-        members[idx].isActive = !members[idx].isActive;
-        await fs.writeFile(MEMBERS_FILE, JSON.stringify(members, null, 2));
+    if (body.action === 'delete_member') {
+      const idx = members.findIndex((m: any) => m.id === body.id);
+      if (idx !== -1) members.splice(idx, 1);
+      await writeMembers({ communities, members });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'update_member') {
+      const member = members.find((m: any) => m.id === body.id);
+      if (member) {
+        if (body.name !== undefined) member.name = body.name;
+        if (body.community !== undefined) member.community = body.community;
+        if (body.email !== undefined) member.email = body.email;
+        if (body.isActive !== undefined) member.isActive = body.isActive;
       }
+      await writeMembers({ communities, members });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'manual_payment') {
+      const member = members.find((m: any) => m.id === body.memberId);
+      if (member) {
+        if (!member.payments) member.payments = {};
+        member.payments[body.month] = { amount: body.amount, source: 'manual' };
+      }
+      await writeMembers({ communities, members });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'delete_payment') {
+      const member = members.find((m: any) => m.id === body.memberId);
+      if (member && member.payments) {
+        delete member.payments[body.month];
+      }
+      await writeMembers({ communities, members });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'add_community') {
+      if (!communities.includes(body.name)) {
+        communities.push(body.name);
+      }
+      await writeMembers({ communities, members });
       return NextResponse.json({ success: true });
     }
 

@@ -67,6 +67,35 @@ export async function getBalanceTransactions(params: { limit?: number; created?:
   }));
 }
 
+export async function getSubscriptions(params: { status?: string; limit?: number } = {}) {
+  const subs = await stripe.subscriptions.list({
+    limit: params.limit || 100,
+    status: (params.status as any) || 'active',
+    expand: ['data.customer'],
+  });
+  return subs.data.map((s) => {
+    const customer = s.customer as Stripe.Customer;
+    const item = s.items.data[0];
+    const priceAmount = item?.price?.unit_amount || 0;
+    const interval = item?.price?.recurring?.interval || 'month';
+    const productName = (item?.price?.product as any)?.name || item?.price?.nickname || '';
+    return {
+      id: s.id,
+      status: s.status,
+      customerName: customer.name || customer.email || 'Anónimo',
+      customerEmail: customer.email || null,
+      customerId: customer.id,
+      amount: priceAmount / 100,
+      currency: item?.price?.currency || 'eur',
+      interval,
+      productName,
+      created: new Date(s.created * 1000).toISOString(),
+      currentPeriodEnd: new Date((s as any).current_period_end * 1000).toISOString(),
+      cancelAtPeriodEnd: (s as any).cancel_at_period_end,
+    };
+  });
+}
+
 export async function getPaymentVolume(params: { created?: { gte?: number; lte?: number } } = {}) {
   const charges = await stripe.charges.list({
     limit: 100,

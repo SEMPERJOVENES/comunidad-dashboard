@@ -3,15 +3,16 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 const DATA_FILE = path.join(process.cwd(), 'data', 'extracto.json');
+const RULES_FILE = path.join(process.cwd(), 'data', 'tagging-rules.json');
 
 async function ensureDataDir() {
   const dir = path.dirname(DATA_FILE);
   try { await fs.mkdir(dir, { recursive: true }); } catch {}
 }
 
-async function readTransactions() {
+async function readJSON(filepath: string) {
   try {
-    const data = await fs.readFile(DATA_FILE, 'utf-8');
+    const data = await fs.readFile(filepath, 'utf-8');
     return JSON.parse(data);
   } catch {
     return [];
@@ -23,54 +24,54 @@ async function writeTransactions(txs: any[]) {
   await fs.writeFile(DATA_FILE, JSON.stringify(txs, null, 2));
 }
 
-// Auto-tagging rules
-function autoTagTransaction(tx: any) {
+async function getTaggingRules() {
+  return await readJSON(RULES_FILE);
+}
+
+function autoTagTransaction(tx: any, rules: any[]) {
   const concept = (tx.concept || '').toLowerCase();
 
-  // Stripe transfers
-  if (concept.includes('stripe') || concept.includes('sp ')) {
-    tx.autoTag = 'Stripe';
-    tx.category = 'stripe';
-    return tx;
-  }
+  // Check configurable rules (longer keywords first for specificity)
+  const sorted = [...rules].sort((a, b) => b.keyword.length - a.keyword.length);
+  for (const rule of sorted) {
+    if (concept.includes(rule.keyword.toLowerCase())) {
+      tx.autoTag = rule.category;
+      tx.category = rule.category;
+      if (rule.category === 'Diezmo') tx.isDiezmo = true;
 
-  // Shopify
-  if (concept.includes('shopify')) {
-    tx.autoTag = 'Shopify';
-    tx.category = 'ecommerce';
-    return tx;
-  }
+      // Extract name from concept for diezmo transactions
+      if (rule.category === 'Diezmo') {
+        const namePatterns = [
+          /diezmo\s+(.+?)(?:\.|$)/i,
+          /concepto\s+diezmo\s+(.+?)(?:\.|$)/i,
+        ];
+        for (const pattern of namePatterns) {
+          const match = concept.match(pattern);
+          if (match) {
+            tx.memberName = match[1].trim().replace(/\.$/, '');
+            break;
+          }
+        }
+      }
 
-  // Bizum - likely presential sales or diezmos
-  if (concept.includes('bizum')) {
-    tx.autoTag = 'Bizum';
-    tx.category = 'bizum';
-    // Extract name from concept
-    const nameMatch = concept.match(/bizum\s+(?:de\s+)?(.+)/i);
-    if (nameMatch) tx.memberName = nameMatch[1].trim();
-    return tx;
-  }
+      // Extract name from Bizum
+      if (concept.includes('bizum de ')) {
+        const match = concept.match(/bizum de (.+?) concepto/i);
+        if (match) tx.senderName = match[1].trim();
+      }
 
-  // Transferencia
-  if (concept.includes('transferencia') || concept.includes('transf')) {
-    tx.autoTag = 'Transferencia';
-    tx.category = 'transferencia';
-    return tx;
-  }
+      // Extract name from Transferencia
+      if (concept.includes('transferencia de ')) {
+        const match = concept.match(/transferencia de (.+?),?\s*concepto/i);
+        if (match) tx.senderName = match[1].trim();
+      }
+      if (concept.includes('transferencia a favor de ')) {
+        const match = concept.match(/transferencia a favor de (.+?) concepto/i);
+        if (match) tx.recipientName = match[1].trim();
+      }
 
-  // Diezmo keywords
-  if (concept.includes('diezmo') || concept.includes('ofrenda') || concept.includes('donación') || concept.includes('donacion')) {
-    tx.autoTag = 'Diezmo';
-    tx.category = 'diezmo';
-    tx.isDiezmo = true;
-    return tx;
-  }
-
-  // Comisiones bancarias
-  if (concept.includes('comisión') || concept.includes('comision') || concept.includes('mantenimiento') || concept.includes('liquidación')) {
-    tx.autoTag = 'Comisión bancaria';
-    tx.category = 'comision';
-    return tx;
+      return tx;
+    }
   }
 
   tx.autoTag = null;
@@ -80,7 +81,7 @@ function autoTagTransaction(tx: any) {
 
 export async function GET() {
   try {
-    const transactions = await readTransactions();
+    const transactions = await readJSON(DATA_FILE);
     return NextResponse.json({ transactions });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -88,41 +89,44 @@ export async function GET() {
   }
 }
 
-// Import bank statement data
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const rules = await getTaggingRules();
 
     if (body.action === 'import') {
-      // Import new transactions from parsed Excel data
       const newTxs = (body.transactions || []).map((tx: any, i: number) => {
-        const tagged = autoTagTransaction({
+        return autoTagTransaction({
           id: `ext-${Date.now()}-${i}`,
           ...tx,
-        });
-        return tagged;
+        }, rules);
       });
-
-      const existing = await readTransactions();
+      const existing = await readJSON(DATA_FILE);
       const all = [...newTxs, ...existing];
       await writeTransactions(all);
-
       return NextResponse.json({ imported: newTxs.length, total: all.length });
     }
 
     if (body.action === 'tag') {
-      // Manual tag a transaction
       const { id, manualTag, isDiezmo, memberName } = body;
-      const txs = await readTransactions();
+      const txs = await readJSON(DATA_FILE);
       const idx = txs.findIndex((t: any) => t.id === id);
       if (idx === -1) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
-
       txs[idx].manualTag = manualTag;
       if (isDiezmo !== undefined) txs[idx].isDiezmo = isDiezmo;
       if (memberName) txs[idx].memberName = memberName;
       await writeTransactions(txs);
-
       return NextResponse.json({ transaction: txs[idx] });
+    }
+
+    if (body.action === 'retag_all') {
+      const txs = await readJSON(DATA_FILE);
+      const retagged = txs.map((tx: any) => {
+        if (!tx.manualTag) return autoTagTransaction(tx, rules);
+        return tx;
+      });
+      await writeTransactions(retagged);
+      return NextResponse.json({ total: retagged.length });
     }
 
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });

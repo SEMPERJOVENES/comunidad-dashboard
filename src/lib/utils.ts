@@ -50,6 +50,16 @@ export function getDateRanges(): DateRange[] {
       endDate: endOfDay(now),
     },
     {
+      label: 'Últimos 60 días',
+      startDate: startOfDay(subDays(now, 60)),
+      endDate: endOfDay(now),
+    },
+    {
+      label: 'Últimos 90 días',
+      startDate: startOfDay(subDays(now, 90)),
+      endDate: endOfDay(now),
+    },
+    {
       label: 'Este mes',
       startDate: startOfMonth(now),
       endDate: endOfDay(now),
@@ -58,6 +68,11 @@ export function getDateRanges(): DateRange[] {
       label: 'Mes anterior',
       startDate: startOfMonth(subMonths(now, 1)),
       endDate: endOfMonth(subMonths(now, 1)),
+    },
+    {
+      label: 'Desde siempre',
+      startDate: new Date(2020, 0, 1),
+      endDate: endOfDay(now),
     },
   ];
 }

@@ -9,7 +9,9 @@ import { DateRange, BankTransaction } from '@/lib/types';
 import { Landmark, Upload, Tag, Search, Loader2, Check, Filter } from 'lucide-react';
 
 const TAG_OPTIONS = [
-  'Stripe', 'Shopify', 'Bizum', 'Transferencia', 'Diezmo',
+  'Diezmo', 'Merch', 'Donativo', 'Misa/Tabor', 'Retiros',
+  'Viajes', 'Material', 'Música', 'Semper CD', 'BAC',
+  'Gastos Varios', 'Stripe', 'Shopify', 'Bizum', 'Transferencia',
   'Comisión bancaria', 'Venta presencial', 'Gasto operativo',
   'Nómina', 'Alquiler', 'Proveedor', 'Otro',
 ];
@@ -153,11 +155,9 @@ export default function ExtractoPage() {
           >
             <option value="all">Todas las categorías</option>
             <option value="sin_clasificar">Sin clasificar</option>
-            <option value="Stripe">Stripe</option>
-            <option value="Bizum">Bizum</option>
-            <option value="Diezmo">Diezmo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Comisión">Comisión</option>
+            {TAG_OPTIONS.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
           </select>
         </div>
 

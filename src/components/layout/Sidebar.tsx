@@ -75,11 +75,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center text-sm font-bold">
-              SB
+              AM
             </div>
             <div>
-              <h1 className="text-sm font-semibold">Semper Brand</h1>
-              <p className="text-xs text-gray-400">Financial Dashboard</p>
+              <h1 className="text-sm font-semibold">Ad Maximam</h1>
+              <p className="text-xs text-gray-400">Caja de Sastre</p>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden text-gray-400 hover:text-white">

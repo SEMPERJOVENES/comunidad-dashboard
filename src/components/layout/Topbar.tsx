@@ -27,7 +27,7 @@ export default function Topbar({ onMenuClick, selectedRange, onRangeChange }: To
             <Menu size={20} />
           </button>
           <h2 className="text-lg font-semibold text-gray-900 hidden sm:block">
-            Dashboard Financiero
+            Ad Maximam
           </h2>
         </div>
 
