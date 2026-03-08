@@ -10,7 +10,7 @@ import { Search, Filter, Download, Loader2 } from 'lucide-react';
 
 export default function OrdersPage() {
   const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[8]);
   const [searchTerm, setSearchTerm] = useState('');
   const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);

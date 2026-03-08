@@ -7,9 +7,10 @@ interface ShopifyFetchOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   params?: Record<string, string>;
+  noCache?: boolean;
 }
 
-async function shopifyFetch<T>({ endpoint, method = 'GET', body, params }: ShopifyFetchOptions): Promise<T> {
+async function shopifyFetch<T>({ endpoint, method = 'GET', body, params, noCache }: ShopifyFetchOptions): Promise<T> {
   const url = new URL(`https://${SHOPIFY_STORE}/admin/api/${API_VERSION}/${endpoint}.json`);
 
   if (params) {
@@ -23,11 +24,17 @@ async function shopifyFetch<T>({ endpoint, method = 'GET', body, params }: Shopi
     'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
   };
 
-  const options: RequestInit = {
+  const options: RequestInit & { next?: { revalidate: number } } = {
     method,
     headers,
-    next: { revalidate: 300 }, // Cache 5 min
   };
+
+  // Solo cachear GET requests, nunca POST/PUT/DELETE
+  if (method === 'GET' && !noCache) {
+    options.next = { revalidate: 300 }; // Cache 5 min
+  } else {
+    options.cache = 'no-store';
+  }
 
   if (body) {
     options.body = JSON.stringify(body);
@@ -69,10 +76,11 @@ export async function getOrders(params: {
 }
 
 // Products
-export async function getProducts(params: { limit?: number } = {}) {
+export async function getProducts(params: { limit?: number; noCache?: boolean } = {}) {
   const data = await shopifyFetch<{ products: any[] }>({
     endpoint: 'products',
     params: { limit: String(params.limit || 250) },
+    noCache: params.noCache,
   });
   return data.products;
 }

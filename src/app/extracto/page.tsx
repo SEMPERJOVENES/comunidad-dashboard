@@ -66,54 +66,118 @@ export default function ExtractoPage() {
       const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-      if (rawData.length === 0) {
-        alert('El archivo no contiene datos');
-        setImporting(false);
+      // Leer como array de arrays para detectar la fila de cabeceras
+      const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      // Buscar la fila que contiene las cabeceras reales (Fecha, Concepto, Importe...)
+      let headerRowIndex = -1;
+      for (let i = 0; i < Math.min(20, allRows.length); i++) {
+        const row = allRows[i].map((c: any) => String(c).toLowerCase());
+        const hasDate = row.some((c: string) => /fecha/.test(c));
+        const hasConcept = row.some((c: string) => /concepto/.test(c));
+        const hasAmount = row.some((c: string) => /importe/.test(c));
+        if (hasDate && hasConcept && hasAmount) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        // Fallback: usar sheet_to_json normal si no encontramos cabeceras bancarias
+        const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        if (rawData.length === 0) {
+          alert('El archivo no contiene datos reconocibles');
+          setImporting(false);
+          return;
+        }
+        // Intentar mapeo genérico
+        const keys = Object.keys(rawData[0]);
+        const dateKey = keys.find(k => /fecha|date/i.test(k)) || keys[0];
+        const conceptKey = keys.find(k => /concepto|descripci/i.test(k)) || keys[1];
+        const amountKey = keys.find(k => /importe|amount/i.test(k)) || keys[2];
+        const balanceKey = keys.find(k => /saldo|balance/i.test(k)) || keys[3];
+
+        const transactions = rawData.map(row => {
+          let dateVal = row[dateKey];
+          if (dateVal instanceof Date) {
+            dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
+          }
+          return {
+            date: String(dateVal || ''),
+            concept: String(row[conceptKey] || ''),
+            amount: String(row[amountKey] || '0'),
+            balance: String(row[balanceKey] || '0'),
+          };
+        }).filter(tx => tx.concept.trim() !== '');
+
+        await sendImport(transactions);
         return;
       }
 
-      // Map Excel columns - detect common Santander/bank formats
-      const transactions = rawData.map(row => {
-        const keys = Object.keys(row);
-        // Try to detect date, concept, amount, balance columns
-        const dateKey = keys.find(k => /fecha|date|f\.?\s*valor/i.test(k)) || keys[0];
-        const conceptKey = keys.find(k => /concepto|descripci|movimiento|concept/i.test(k)) || keys[1];
-        const amountKey = keys.find(k => /importe|amount|cantidad|monto/i.test(k)) || keys[2];
-        const balanceKey = keys.find(k => /saldo|balance/i.test(k)) || keys[3];
+      // Mapear cabeceras del banco (Santander, BBVA, etc.)
+      const headers = allRows[headerRowIndex].map((h: any) => String(h).trim());
+      const dateCol = headers.findIndex((h: string) => /fecha\s*(operaci|op)/i.test(h));
+      const valueDateCol = headers.findIndex((h: string) => /fecha\s*valor/i.test(h));
+      const conceptCol = headers.findIndex((h: string) => /concepto/i.test(h));
+      const amountCol = headers.findIndex((h: string) => /importe/i.test(h));
+      const balanceCol = headers.findIndex((h: string) => /saldo/i.test(h));
 
-        let dateVal = row[dateKey];
-        if (dateVal instanceof Date) {
-          dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
-        }
+      const dataRows = allRows.slice(headerRowIndex + 1);
+      const transactions = dataRows
+        .filter(row => {
+          const concept = String(row[conceptCol >= 0 ? conceptCol : 2] || '').trim();
+          const date = row[dateCol >= 0 ? dateCol : 0];
+          return concept !== '' && date !== '';
+        })
+        .map(row => {
+          let dateVal = row[dateCol >= 0 ? dateCol : 0];
+          if (dateVal instanceof Date) {
+            dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
+          }
 
-        return {
-          date: String(dateVal || ''),
-          concept: String(row[conceptKey] || ''),
-          amount: String(row[amountKey] || '0'),
-          balance: String(row[balanceKey] || '0'),
-        };
-      }).filter(tx => tx.concept.trim() !== '');
+          const rawAmount = row[amountCol >= 0 ? amountCol : 3];
+          const rawBalance = row[balanceCol >= 0 ? balanceCol : 5];
 
-      // Send to API
-      const res = await fetch('/api/extracto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', transactions }),
-      });
+          // Si XLSX ya parseó como número, usar directamente
+          const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/\./g, '').replace(',', '.')) || 0;
+          const balance = typeof rawBalance === 'number' ? rawBalance : parseFloat(String(rawBalance).replace(/\./g, '').replace(',', '.')) || 0;
 
-      const data = await res.json();
-      if (res.ok) {
-        alert(`✅ Importadas ${data.imported} transacciones`);
-        await fetchTransactions();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
+          return {
+            date: String(dateVal || ''),
+            concept: String(row[conceptCol >= 0 ? conceptCol : 2] || ''),
+            amount: String(amount),
+            balance: String(balance),
+          };
+        });
+
+      await sendImport(transactions);
     } catch (err) {
+      console.error('Import error:', err);
       alert('Error al procesar el archivo Excel: ' + (err instanceof Error ? err.message : 'desconocido'));
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function sendImport(transactions: { date: string; concept: string; amount: string; balance: string }[]) {
+    if (transactions.length === 0) {
+      alert('No se encontraron transacciones en el archivo');
+      return;
+    }
+
+    const res = await fetch('/api/extracto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'import', transactions }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      alert(`✅ Importadas ${data.imported} transacciones`);
+      await fetchTransactions();
+    } else {
+      alert(`Error: ${data.error}`);
     }
   }
 

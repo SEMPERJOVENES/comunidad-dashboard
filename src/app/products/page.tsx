@@ -17,15 +17,17 @@ export default function InventarioPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [adjustment, setAdjustment] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(false);
   }, []);
 
-  async function fetchProducts() {
+  async function fetchProducts(fresh = false) {
     setLoading(true);
     try {
-      const res = await fetch('/api/shopify/products');
+      const url = fresh ? '/api/shopify/products?fresh=1' : '/api/shopify/products';
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Error');
       const data = await res.json();
       setProducts(data.products || []);
@@ -39,9 +41,10 @@ export default function InventarioPage() {
   async function handleAdjustInventory(product: ShopifyProduct) {
     if (adjustment === 0) { setEditingId(null); return; }
     setSaving(true);
+    setSaveMsg(null);
     try {
       const variantId = product.variants?.[0]?.id;
-      if (!variantId) return;
+      if (!variantId) throw new Error('Variante no encontrada');
       const res = await fetch('/api/shopify/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,14 +55,18 @@ export default function InventarioPage() {
           adjustment,
         }),
       });
-      if (res.ok) {
-        // Refresh products to get updated inventory
-        await fetchProducts();
-      }
-    } catch {} finally {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al ajustar inventario');
+      setSaveMsg({ type: 'success', text: `Stock de "${product.title}" actualizado (${adjustment > 0 ? '+' : ''}${adjustment})` });
+      // Re-fetch sin caché para obtener datos frescos
+      await fetchProducts(true);
+    } catch (err: any) {
+      setSaveMsg({ type: 'error', text: err.message || 'Error al ajustar inventario en Shopify' });
+    } finally {
       setSaving(false);
       setEditingId(null);
       setAdjustment(0);
+      setTimeout(() => setSaveMsg(null), 5000);
     }
   }
 
@@ -87,6 +94,15 @@ export default function InventarioPage() {
             <p className="text-sm text-gray-500">{products.length} productos de Shopify · Edita stock y se sincroniza</p>
           </div>
         </div>
+
+        {/* Feedback message */}
+        {saveMsg && (
+          <div className={`rounded-lg p-3 text-sm font-medium ${
+            saveMsg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+            {saveMsg.text}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">

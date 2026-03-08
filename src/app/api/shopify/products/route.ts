@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProducts, adjustInventory, getLocations } from '@/lib/shopify';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const products = await getProducts({ limit: 250 });
+    const { searchParams } = new URL(request.url);
+    const noCache = searchParams.get('fresh') === '1';
+    const products = await getProducts({ limit: 250, noCache });
     return NextResponse.json({ products });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';

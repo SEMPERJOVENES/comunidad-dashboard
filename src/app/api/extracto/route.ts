@@ -114,10 +114,10 @@ export async function POST(request: NextRequest) {
 
       const rows = transactions.map((tx: any, idx: number) => {
         const concept = tx.concept || tx.Concepto || tx.CONCEPTO || '';
-        const amountStr = String(tx.amount || tx.Importe || tx.IMPORTE || '0');
-        const amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
-        const balanceStr = String(tx.balance || tx.Saldo || tx.SALDO || '0');
-        const balance = parseFloat(balanceStr.replace(/\./g, '').replace(',', '.'));
+        const rawAmount = tx.amount || tx.Importe || tx.IMPORTE || '0';
+        const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/\./g, '').replace(',', '.')) || 0;
+        const rawBalance = tx.balance || tx.Saldo || tx.SALDO || '0';
+        const balance = typeof rawBalance === 'number' ? rawBalance : parseFloat(String(rawBalance).replace(/\./g, '').replace(',', '.')) || 0;
         const dateStr = tx.date || tx.Fecha || tx['F. Valor'] || tx.FECHA || '';
 
         let parsedDate = dateStr;

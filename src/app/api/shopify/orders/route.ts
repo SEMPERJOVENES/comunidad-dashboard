@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const orders = await getOrders({
       created_at_min: startDate || undefined,
       created_at_max: endDate || undefined,
+      status: 'any',
       limit: limit ? parseInt(limit) : 250,
     });
 
