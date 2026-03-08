@@ -12,6 +12,7 @@ import {
   Landmark,
   Church,
   BarChart3,
+  Tag,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ const navSections = [
   {
     title: 'Finanzas',
     items: [
+      { href: '/categorias', label: 'Categorías', icon: Tag },
       { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
       { href: '/stripe', label: 'Stripe', icon: CreditCard },
     ],

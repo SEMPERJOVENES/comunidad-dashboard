@@ -32,20 +32,25 @@ export async function getPayouts(params: { limit?: number; created?: { gte?: num
 export async function getCharges(params: { limit?: number; created?: { gte?: number; lte?: number } } = {}) {
   const charges = await stripe.charges.list({
     limit: params.limit || 100,
+    expand: ['data.customer'],
     ...(params.created && { created: params.created }),
   });
-  return charges.data.map((c) => ({
-    id: c.id,
-    amount: c.amount / 100,
-    currency: c.currency,
-    status: c.status,
-    created: new Date(c.created * 1000).toISOString(),
-    description: c.description,
-    paid: c.paid,
-    refunded: c.refunded,
-    disputed: c.disputed,
-    customer: c.customer,
-  }));
+  return charges.data.map((c) => {
+    const customer = c.customer as Stripe.Customer | null;
+    return {
+      id: c.id,
+      amount: c.amount / 100,
+      currency: c.currency,
+      status: c.status,
+      created: new Date(c.created * 1000).toISOString(),
+      description: c.description,
+      paid: c.paid,
+      refunded: c.refunded,
+      disputed: c.disputed,
+      customerName: customer && typeof customer === 'object' ? (customer.name || customer.email || null) : null,
+      customerEmail: customer && typeof customer === 'object' ? (customer.email || null) : null,
+    };
+  });
 }
 
 export async function getBalanceTransactions(params: { limit?: number; created?: { gte?: number; lte?: number }; type?: string } = {}) {

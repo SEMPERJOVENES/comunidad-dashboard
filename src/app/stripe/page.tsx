@@ -6,12 +6,25 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
-import { CreditCard, TrendingUp, ArrowUpRight, ArrowDownRight, Loader2, CheckCircle } from 'lucide-react';
+import { CreditCard, TrendingUp, ArrowUpRight, Loader2, CheckCircle } from 'lucide-react';
+
+interface StripeCharge {
+  id: string;
+  amount: number;
+  status: string;
+  created: string;
+  paid: boolean;
+  refunded: boolean;
+  disputed: boolean;
+  customerName: string | null;
+  customerEmail: string | null;
+  description: string | null;
+}
 
 interface StripeData {
   balance: { available: number; pending: number; currency: string };
   payouts: { id: string; amount: number; status: string; arrival_date: string; created: string }[];
-  charges: { id: string; amount: number; status: string; created: string; paid: boolean; refunded: boolean; disputed: boolean }[];
+  charges: StripeCharge[];
   volume: { volume: number; count: number; refunded: number; disputed: number };
 }
 
@@ -51,15 +64,12 @@ export default function StripePage() {
           </div>
         </div>
 
-        {/* Status banner */}
         <Card className="bg-green-50 border-green-200">
           <div className="flex items-center gap-3">
             <CheckCircle size={20} className="text-green-600 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-green-800">Stripe conectado</p>
-              <p className="text-xs text-green-600 mt-0.5">
-                Cuenta: acct_1Q3yYyRojFhYIQW6 — Datos en tiempo real
-              </p>
+              <p className="text-xs text-green-600 mt-0.5">Datos en tiempo real</p>
             </div>
           </div>
         </Card>
@@ -76,52 +86,24 @@ export default function StripePage() {
         ) : data ? (
           <>
             {/* Balance cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Balance Disponible</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.balance.available)}</p>
-                  </div>
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <TrendingUp size={16} className="text-green-600" />
-                  </div>
-                </div>
+                <p className="text-xs text-gray-500 font-medium">Balance Disponible</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.balance.available)}</p>
               </Card>
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Balance Pendiente</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.balance.pending)}</p>
-                  </div>
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <ArrowUpRight size={16} className="text-amber-600" />
-                  </div>
-                </div>
+                <p className="text-xs text-gray-500 font-medium">Balance Pendiente</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.balance.pending)}</p>
               </Card>
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Volumen del Mes</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.volume.volume)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{data.volume.count} cobros</p>
-                  </div>
-                  <div className="p-2 bg-violet-100 rounded-lg">
-                    <CreditCard size={16} className="text-violet-600" />
-                  </div>
-                </div>
+                <p className="text-xs text-gray-500 font-medium">Volumen del Mes</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(data.volume.volume)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{data.volume.count} cobros</p>
               </Card>
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Disputas</p>
-                    <p className="text-xl font-bold text-gray-900 mt-1">{data.volume.disputed}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{data.volume.refunded} reembolsos</p>
-                  </div>
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <ArrowDownRight size={16} className="text-gray-600" />
-                  </div>
-                </div>
+                <p className="text-xs text-gray-500 font-medium">Reembolsos</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{data.volume.refunded}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{data.volume.disputed} disputas</p>
               </Card>
             </div>
 
@@ -152,7 +134,7 @@ export default function StripePage() {
               )}
             </Card>
 
-            {/* Recent charges */}
+            {/* Recent charges - WITH customer names */}
             <Card>
               <CardHeader>
                 <CardTitle>Últimos Cobros</CardTitle>
@@ -161,18 +143,28 @@ export default function StripePage() {
                 <p className="text-sm text-gray-400 text-center py-4">Sin cobros recientes</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[500px]">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-2">Fecha</th>
+                        <th className="text-left text-xs font-medium text-gray-500 px-4 py-2">Cliente</th>
                         <th className="text-right text-xs font-medium text-gray-500 px-4 py-2">Monto</th>
                         <th className="text-center text-xs font-medium text-gray-500 px-4 py-2">Estado</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.charges.slice(0, 15).map((charge) => (
+                      {data.charges.slice(0, 20).map((charge) => (
                         <tr key={charge.id} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="px-4 py-2 text-sm text-gray-700">{formatDate(charge.created)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-500">{formatDate(charge.created)}</td>
+                          <td className="px-4 py-2">
+                            <p className="text-sm font-medium text-gray-900">{charge.customerName || 'Anónimo'}</p>
+                            {charge.customerEmail && charge.customerEmail !== charge.customerName && (
+                              <p className="text-xs text-gray-400">{charge.customerEmail}</p>
+                            )}
+                            {charge.description && (
+                              <p className="text-xs text-gray-400">{charge.description}</p>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-sm font-semibold text-right">{formatCurrency(charge.amount)}</td>
                           <td className="px-4 py-2 text-center">
                             <Badge variant={charge.paid ? 'success' : charge.refunded ? 'danger' : 'warning'}>

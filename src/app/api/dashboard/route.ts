@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrders } from '@/lib/shopify';
-import { getPaymentVolume } from '@/lib/stripe';
+import { getPaymentVolume, getBalance } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -11,69 +11,96 @@ export async function GET(request: NextRequest) {
     const start = searchParams.get('start') || subDays(new Date(), 30).toISOString();
     const end = searchParams.get('end') || new Date().toISOString();
 
-    // Fetch all data sources in parallel
     const startTs = Math.floor(new Date(start).getTime() / 1000);
     const endTs = Math.floor(new Date(end).getTime() / 1000);
-    const startDate = new Date(start);
-    const endDate = new Date(end);
+    const startDate = new Date(start).toISOString().split('T')[0];
+    const endDate = new Date(end).toISOString().split('T')[0];
 
-    const [orders, prevOrders, stripeVolume, ventasResult, diezmosResult] = await Promise.all([
+    // Fetch all data in parallel
+    const [orders, stripeVolume, stripeBalance, bankTxsResult] = await Promise.all([
       getOrders({ created_at_min: start, created_at_max: end, status: 'any', limit: 250 }),
-      (() => {
-        const periodMs = endDate.getTime() - startDate.getTime();
-        const prevStart = new Date(startDate.getTime() - periodMs).toISOString();
-        return getOrders({ created_at_min: prevStart, created_at_max: start, status: 'any', limit: 250 });
-      })(),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
-      supabase
-        .from('ventas_presenciales')
-        .select('*')
-        .gte('date', start)
-        .lte('date', end),
+      getBalance().catch(() => ({ available: 0, pending: 0, currency: 'eur' })),
       supabase
         .from('bank_transactions')
         .select('*')
-        .gte('date', start.split('T')[0])
-        .lte('date', end.split('T')[0])
-        .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo'),
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false }),
     ]);
 
-    // KPIs
-    const totalRevenue = orders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
-    const totalOrders = orders.length;
-    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    const refundedOrders = orders.filter((o: any) => o.financial_status === 'refunded' || o.financial_status === 'partially_refunded');
-    const refundRate = totalOrders > 0 ? (refundedOrders.length / totalOrders) * 100 : 0;
+    const bankTxs = bankTxsResult.data || [];
 
-    // Customer stats
-    const newCustomerIds = new Set<number>();
-    const returningCustomerIds = new Set<number>();
-    for (const o of orders) {
-      if (o.customer) {
-        if (o.customer.orders_count <= 1) {
-          newCustomerIds.add(o.customer.id);
-        } else {
-          returningCustomerIds.add(o.customer.id);
-        }
+    // === GLOBAL FINANCIALS from bank transactions ===
+    const totalBankIncome = bankTxs.filter((tx: any) => parseFloat(tx.amount) > 0).reduce((s: number, tx: any) => s + parseFloat(tx.amount), 0);
+    const totalBankExpenses = bankTxs.filter((tx: any) => parseFloat(tx.amount) < 0).reduce((s: number, tx: any) => s + Math.abs(parseFloat(tx.amount)), 0);
+    const bankBalance = bankTxs.length > 0 ? parseFloat(bankTxs[0].balance || '0') : 0; // latest balance
+
+    // === GROUP BY MACRO CATEGORIES ===
+    // Diezmos: etiqueta "Diezmo" o is_diezmo
+    // Semper Brand: etiquetas "Merch", "Shopify", "Stripe", "Venta presencial", "Proveedor", "Semper CD"
+    // Otros: todo lo demás
+
+    const BRAND_TAGS = ['Merch', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
+    const DIEZMO_TAGS = ['Diezmo'];
+
+    function getMacroCategory(tx: any) {
+      const tag = tx.manual_tag || tx.auto_tag || '';
+      if (tx.is_diezmo || DIEZMO_TAGS.includes(tag)) return 'diezmos';
+      if (BRAND_TAGS.includes(tag)) return 'brand';
+      return 'otros';
+    }
+
+    // Aggregate by macro category
+    const macroGroups: Record<string, { income: number; expenses: number; tags: Record<string, { income: number; expenses: number }> }> = {
+      diezmos: { income: 0, expenses: 0, tags: {} },
+      brand: { income: 0, expenses: 0, tags: {} },
+      otros: { income: 0, expenses: 0, tags: {} },
+    };
+
+    for (const tx of bankTxs) {
+      const macro = getMacroCategory(tx);
+      const amt = parseFloat(tx.amount || '0');
+      const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
+
+      if (amt > 0) {
+        macroGroups[macro].income += amt;
+      } else {
+        macroGroups[macro].expenses += Math.abs(amt);
+      }
+
+      if (!macroGroups[macro].tags[tag]) {
+        macroGroups[macro].tags[tag] = { income: 0, expenses: 0 };
+      }
+      if (amt > 0) {
+        macroGroups[macro].tags[tag].income += amt;
+      } else {
+        macroGroups[macro].tags[tag].expenses += Math.abs(amt);
       }
     }
 
-    // Previous period comparison
-    const prevRevenue = prevOrders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
-    const prevTotalOrders = prevOrders.length;
-    const revenueChange = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
-    const ordersChange = prevTotalOrders > 0 ? ((totalOrders - prevTotalOrders) / prevTotalOrders) * 100 : 0;
+    // === CAJA: Balance breakdown by category from ALL bank transactions ===
+    // Get ALL transactions for "caja" (not date-filtered)
+    const { data: allBankTxs } = await supabase
+      .from('bank_transactions')
+      .select('amount, manual_tag, auto_tag, is_diezmo')
+      .order('date', { ascending: false });
 
-    const kpi = {
-      totalRevenue,
-      totalOrders,
-      averageOrderValue,
-      refundRate,
-      newCustomers: newCustomerIds.size,
-      returningCustomers: returningCustomerIds.size,
-      revenueChange,
-      ordersChange,
-    };
+    const cajaByCategory: Record<string, number> = {};
+    for (const tx of (allBankTxs || [])) {
+      const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
+      const amt = parseFloat(tx.amount || '0');
+      cajaByCategory[tag] = (cajaByCategory[tag] || 0) + amt;
+    }
+
+    // Sort caja by absolute value
+    const cajaSorted = Object.entries(cajaByCategory)
+      .map(([tag, net]) => ({ tag, net }))
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+
+    // === SHOPIFY DATA ===
+    const shopifyRevenue = orders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
+    const shopifyOrders = orders.length;
 
     // Revenue chart data (daily)
     const dailyMap = new Map<string, { revenue: number; orders: number }>();
@@ -102,51 +129,57 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    // Tag breakdown (was "projects")
-    const TAG_COLORS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
-    const tagMap = new Map<string, { revenue: number; orders: number }>();
-    for (const o of orders) {
-      const tags = (o.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
-      const tag = tags[0] || 'Sin etiqueta';
-      const existing = tagMap.get(tag) || { revenue: 0, orders: 0 };
-      existing.revenue += parseFloat(o.total_price || '0');
-      existing.orders += 1;
-      tagMap.set(tag, existing);
-    }
-    const projects = Array.from(tagMap.entries())
-      .map(([name, data], i) => ({
-        projectName: name,
-        color: TAG_COLORS[i % TAG_COLORS.length],
-        totalRevenue: Math.round(data.revenue * 100) / 100,
-        totalOrders: data.orders,
-        percentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.totalRevenue - a.totalRevenue);
-
     // Recent orders (last 10)
     const recentOrders = orders
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10);
 
-    // Consolidated income from all sources (Supabase data)
-    const ventasPresencialesTotal = (ventasResult.data || []).reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
-    const diezmosTotal = (diezmosResult.data || []).reduce((s: number, tx: any) => s + Math.abs(parseFloat(tx.amount || '0')), 0);
-
-    const incomeSources = {
-      shopify: totalRevenue,
-      stripe: stripeVolume.volume,
-      ventasPresenciales: ventasPresencialesTotal,
-      diezmos: diezmosTotal,
-      totalConsolidado: totalRevenue + ventasPresencialesTotal + diezmosTotal,
-    };
-
     return NextResponse.json({
-      kpi,
+      // Global financials (from bank)
+      financials: {
+        totalIncome: totalBankIncome,
+        totalExpenses: totalBankExpenses,
+        profit: totalBankIncome - totalBankExpenses,
+        bankBalance,
+      },
+      // Macro groups
+      macroGroups: {
+        diezmos: {
+          income: macroGroups.diezmos.income,
+          expenses: macroGroups.diezmos.expenses,
+          net: macroGroups.diezmos.income - macroGroups.diezmos.expenses,
+          tags: Object.entries(macroGroups.diezmos.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+        },
+        brand: {
+          income: macroGroups.brand.income,
+          expenses: macroGroups.brand.expenses,
+          net: macroGroups.brand.income - macroGroups.brand.expenses,
+          tags: Object.entries(macroGroups.brand.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+        },
+        otros: {
+          income: macroGroups.otros.income,
+          expenses: macroGroups.otros.expenses,
+          net: macroGroups.otros.income - macroGroups.otros.expenses,
+          tags: Object.entries(macroGroups.otros.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+        },
+      },
+      // Caja breakdown
+      caja: cajaSorted,
+      // Stripe
+      stripe: {
+        volume: stripeVolume.volume,
+        available: stripeBalance.available,
+        pending: stripeBalance.pending,
+      },
+      // Shopify
+      shopify: {
+        revenue: shopifyRevenue,
+        orders: shopifyOrders,
+      },
+      // Charts & details
       revenueData,
       topProducts,
-      projects,
       recentOrders,
-      incomeSources,
     });
   } catch (error: any) {
     console.error('Dashboard API error:', error);

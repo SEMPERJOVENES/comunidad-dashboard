@@ -139,18 +139,28 @@ export async function getInventoryLevels(inventoryItemIds: number[]) {
   return data.inventory_levels;
 }
 
-// Adjust inventory
-export async function adjustInventory(inventoryItemId: number, locationId: number, adjustment: number) {
+// Set inventory (absolute value) - replaces deprecated inventory_levels/adjust
+export async function setInventory(inventoryItemId: number, locationId: number, available: number) {
   const data = await shopifyFetch<{ inventory_level: any }>({
-    endpoint: 'inventory_levels/adjust',
+    endpoint: 'inventory_levels/set',
     method: 'POST',
     body: {
       inventory_item_id: inventoryItemId,
       location_id: locationId,
-      available_adjustment: adjustment,
+      available,
     },
   });
   return data.inventory_level;
+}
+
+// Legacy wrapper - calcula el valor absoluto internamente
+export async function adjustInventory(inventoryItemId: number, locationId: number, adjustment: number) {
+  // Primero obtener el nivel actual
+  const levels = await getInventoryLevels([inventoryItemId]);
+  const current = levels.find((l: any) => l.location_id === locationId);
+  const currentQty = current?.available || 0;
+  const newQty = Math.max(0, currentQty + adjustment);
+  return setInventory(inventoryItemId, locationId, newQty);
 }
 
 // Get locations
