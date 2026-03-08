@@ -14,6 +14,7 @@ import {
   BarChart3,
   Tag,
   BookOpen,
+  Plane,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ const navSections = [
     title: 'Comunidad',
     items: [
       { href: '/diezmos', label: 'Diezmos', icon: Church },
+      { href: '/viajes-eventos', label: 'Viajes y Eventos', icon: Plane },
     ],
   },
 ];
