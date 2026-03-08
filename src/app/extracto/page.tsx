@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
 import { DateRange, BankTransaction } from '@/lib/types';
-import { Landmark, Upload, Tag, Search, Loader2, Check, Filter } from 'lucide-react';
+import { Landmark, Upload, Tag, Search, Loader2, Check, Filter, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const TAG_OPTIONS = [
   'Diezmo', 'Merch', 'Donativo', 'Misa/Tabor', 'Retiros',
@@ -24,6 +25,7 @@ export default function ExtractoPage() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetchTransactions();
@@ -58,17 +60,61 @@ export default function ExtractoPage() {
   }
 
   async function handleImportExcel(file: File) {
-    // Parse Excel manually - for now, import as JSON data
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        // The user will need to provide parsed data or we parse it server-side
-        // For now, demonstrate with a simple JSON upload
-        const text = e.target?.result as string;
-        alert('Para importar el extracto, sube el archivo Excel. La importación automática desde Santander se procesará aquí.');
-      } catch {}
-    };
-    reader.readAsText(file);
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawData: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (rawData.length === 0) {
+        alert('El archivo no contiene datos');
+        setImporting(false);
+        return;
+      }
+
+      // Map Excel columns - detect common Santander/bank formats
+      const transactions = rawData.map(row => {
+        const keys = Object.keys(row);
+        // Try to detect date, concept, amount, balance columns
+        const dateKey = keys.find(k => /fecha|date|f\.?\s*valor/i.test(k)) || keys[0];
+        const conceptKey = keys.find(k => /concepto|descripci|movimiento|concept/i.test(k)) || keys[1];
+        const amountKey = keys.find(k => /importe|amount|cantidad|monto/i.test(k)) || keys[2];
+        const balanceKey = keys.find(k => /saldo|balance/i.test(k)) || keys[3];
+
+        let dateVal = row[dateKey];
+        if (dateVal instanceof Date) {
+          dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
+        }
+
+        return {
+          date: String(dateVal || ''),
+          concept: String(row[conceptKey] || ''),
+          amount: String(row[amountKey] || '0'),
+          balance: String(row[balanceKey] || '0'),
+        };
+      }).filter(tx => tx.concept.trim() !== '');
+
+      // Send to API
+      const res = await fetch('/api/extracto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import', transactions }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ Importadas ${data.imported} transacciones`);
+        await fetchTransactions();
+      } else {
+        alert(`Error: ${data.error}`);
+      }
+    } catch (err) {
+      alert('Error al procesar el archivo Excel: ' + (err instanceof Error ? err.message : 'desconocido'));
+    } finally {
+      setImporting(false);
+    }
   }
 
   const filtered = transactions.filter(tx => {

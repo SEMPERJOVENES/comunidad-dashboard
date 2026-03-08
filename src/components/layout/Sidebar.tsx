@@ -6,9 +6,6 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
-  Users,
-  FolderKanban,
-  Tags,
   Settings,
   CreditCard,
   Store,
@@ -23,25 +20,27 @@ const navSections = [
     title: 'General',
     items: [
       { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
-      { href: '/products', label: 'Productos', icon: Package },
-      { href: '/customers', label: 'Clientes', icon: Users },
     ],
   },
   {
-    title: 'Ventas & Finanzas',
+    title: 'Semper Brand',
     items: [
+      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
+      { href: '/products', label: 'Inventario', icon: Package },
       { href: '/ventas', label: 'Ventas Presenciales', icon: Store },
-      { href: '/stripe', label: 'Stripe', icon: CreditCard },
-      { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
     ],
   },
   {
-    title: 'Gestión',
+    title: 'Finanzas',
+    items: [
+      { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
+      { href: '/stripe', label: 'Stripe', icon: CreditCard },
+    ],
+  },
+  {
+    title: 'Comunidad',
     items: [
       { href: '/diezmos', label: 'Diezmos', icon: Church },
-      { href: '/projects', label: 'Proyectos', icon: FolderKanban },
-      { href: '/tagging', label: 'Etiquetado', icon: Tags },
     ],
   },
 ];
@@ -75,11 +74,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center text-sm font-bold">
-              AM
+              SD
             </div>
             <div>
-              <h1 className="text-sm font-semibold">Ad Maximam</h1>
-              <p className="text-xs text-gray-400">Caja de Sastre</p>
+              <h1 className="text-sm font-semibold">Semper Dashboard</h1>
+              <p className="text-xs text-gray-400">Financial Hub</p>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden text-gray-400 hover:text-white">

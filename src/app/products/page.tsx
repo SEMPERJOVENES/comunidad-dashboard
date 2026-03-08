@@ -6,42 +6,102 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, getDateRanges } from '@/lib/utils';
 import { DateRange, ShopifyProduct } from '@/lib/types';
-import { Search, Package, Loader2 } from 'lucide-react';
+import { Search, Package, Loader2, Minus, Plus, Check, X } from 'lucide-react';
 
-export default function ProductsPage() {
+export default function InventarioPage() {
   const ranges = getDateRanges();
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [adjustment, setAdjustment] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    async function fetchProducts() {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/shopify/products');
-        if (!res.ok) throw new Error('Error al cargar productos');
-        const data = await res.json();
-        setProducts(data.products || []);
-      } catch {
-        setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchProducts();
   }, []);
+
+  async function fetchProducts() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/shopify/products');
+      if (!res.ok) throw new Error('Error');
+      const data = await res.json();
+      setProducts(data.products || []);
+    } catch {
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdjustInventory(product: ShopifyProduct) {
+    if (adjustment === 0) { setEditingId(null); return; }
+    setSaving(true);
+    try {
+      const variantId = product.variants?.[0]?.id;
+      if (!variantId) return;
+      const res = await fetch('/api/shopify/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'adjust_inventory',
+          productId: product.id,
+          variantId,
+          adjustment,
+        }),
+      });
+      if (res.ok) {
+        // Refresh products to get updated inventory
+        await fetchProducts();
+      }
+    } catch {} finally {
+      setSaving(false);
+      setEditingId(null);
+      setAdjustment(0);
+    }
+  }
 
   const filtered = products.filter((p) =>
     p.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalStock = products.reduce((s, p) => s + (p.variants?.reduce((v, va) => v + (va.inventory_quantity || 0), 0) || 0), 0);
+  const lowStock = products.filter(p => {
+    const inv = p.variants?.reduce((s, v) => s + (v.inventory_quantity || 0), 0) || 0;
+    return inv > 0 && inv <= 5;
+  }).length;
+  const outOfStock = products.filter(p => {
+    const inv = p.variants?.reduce((s, v) => s + (v.inventory_quantity || 0), 0) || 0;
+    return inv <= 0;
+  }).length;
+
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Productos</h1>
-          <p className="text-sm text-gray-500">{products.length} productos de Shopify</p>
+        <div className="flex items-center gap-3">
+          <Package size={24} className="text-violet-600" />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Inventario</h1>
+            <p className="text-sm text-gray-500">{products.length} productos de Shopify · Edita stock y se sincroniza</p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          <Card>
+            <p className="text-xs text-gray-500 font-medium">Stock Total</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{totalStock}</p>
+          </Card>
+          <Card>
+            <p className="text-xs text-gray-500 font-medium">Stock Bajo (≤5)</p>
+            <p className="text-2xl font-bold text-amber-600 mt-1">{lowStock}</p>
+          </Card>
+          <Card>
+            <p className="text-xs text-gray-500 font-medium">Agotados</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">{outOfStock}</p>
+          </Card>
         </div>
 
         <Card>
@@ -61,25 +121,25 @@ export default function ProductsPage() {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="animate-spin text-violet-600" size={24} />
-              <span className="ml-2 text-gray-500 text-sm">Cargando productos...</span>
+              <span className="ml-2 text-gray-500 text-sm">Cargando inventario...</span>
             </div>
           ) : (
             <div className="overflow-x-auto -mx-4 sm:-mx-6">
-              <table className="w-full min-w-[600px]">
+              <table className="w-full min-w-[650px]">
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Producto</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Tipo</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Estado</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Inventario</th>
+                    <th className="text-center text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Stock</th>
                     <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Precio</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Vendor</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((product) => {
                     const totalInventory = product.variants?.reduce((sum, v) => sum + (v.inventory_quantity || 0), 0) || 0;
                     const price = product.variants?.[0]?.price || '0';
+                    const isEditing = editingId === product.id;
                     return (
                       <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="px-4 sm:px-6 py-3">
@@ -100,15 +160,57 @@ export default function ProductsPage() {
                             {product.status === 'active' ? 'Activo' : product.status === 'draft' ? 'Borrador' : product.status}
                           </Badge>
                         </td>
-                        <td className="px-4 sm:px-6 py-3 text-right text-sm text-gray-700">{totalInventory}</td>
+                        <td className="px-4 sm:px-6 py-3">
+                          {isEditing ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={() => setAdjustment(a => a - 1)} className="p-1 rounded hover:bg-gray-200">
+                                <Minus size={14} />
+                              </button>
+                              <span className="text-sm font-bold w-16 text-center">
+                                {totalInventory + adjustment}
+                                {adjustment !== 0 && (
+                                  <span className={`text-xs ml-1 ${adjustment > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    ({adjustment > 0 ? '+' : ''}{adjustment})
+                                  </span>
+                                )}
+                              </span>
+                              <button onClick={() => setAdjustment(a => a + 1)} className="p-1 rounded hover:bg-gray-200">
+                                <Plus size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleAdjustInventory(product)}
+                                disabled={saving}
+                                className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 ml-1"
+                              >
+                                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                              </button>
+                              <button
+                                onClick={() => { setEditingId(null); setAdjustment(0); }}
+                                className="p-1 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingId(product.id); setAdjustment(0); }}
+                              className={`block mx-auto text-sm font-semibold px-3 py-1 rounded-lg hover:ring-2 hover:ring-violet-300 transition-all ${
+                                totalInventory <= 0 ? 'text-red-600 bg-red-50' :
+                                totalInventory <= 5 ? 'text-amber-600 bg-amber-50' :
+                                'text-gray-700 bg-gray-50'
+                              }`}
+                            >
+                              {totalInventory}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 sm:px-6 py-3 text-right text-sm font-semibold">{formatCurrency(parseFloat(price))}</td>
-                        <td className="px-4 sm:px-6 py-3 text-sm text-gray-500">{product.vendor || '-'}</td>
                       </tr>
                     );
                   })}
                   {filtered.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={6} className="text-center py-8 text-sm text-gray-400">
+                      <td colSpan={5} className="text-center py-8 text-sm text-gray-400">
                         Sin productos
                       </td>
                     </tr>

@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrders } from '@/lib/shopify';
 import { getPaymentVolume } from '@/lib/stripe';
+import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-async function readJSON(filepath: string) {
-  try {
-    const data = await fs.readFile(filepath, 'utf-8');
-    return JSON.parse(data);
-  } catch { return []; }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,17 +14,28 @@ export async function GET(request: NextRequest) {
     // Fetch all data sources in parallel
     const startTs = Math.floor(new Date(start).getTime() / 1000);
     const endTs = Math.floor(new Date(end).getTime() / 1000);
+    const startDate = new Date(start);
+    const endDate = new Date(end);
 
-    const [orders, prevOrders, stripeVolume, ventasPresenciales, extracto] = await Promise.all([
+    const [orders, prevOrders, stripeVolume, ventasResult, diezmosResult] = await Promise.all([
       getOrders({ created_at_min: start, created_at_max: end, status: 'any', limit: 250 }),
       (() => {
-        const periodMs = new Date(end).getTime() - new Date(start).getTime();
-        const prevStart = new Date(new Date(start).getTime() - periodMs).toISOString();
+        const periodMs = endDate.getTime() - startDate.getTime();
+        const prevStart = new Date(startDate.getTime() - periodMs).toISOString();
         return getOrders({ created_at_min: prevStart, created_at_max: start, status: 'any', limit: 250 });
       })(),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
-      readJSON(path.join(process.cwd(), 'data', 'ventas-presenciales.json')),
-      readJSON(path.join(process.cwd(), 'data', 'extracto.json')),
+      supabase
+        .from('ventas_presenciales')
+        .select('*')
+        .gte('date', start)
+        .lte('date', end),
+      supabase
+        .from('bank_transactions')
+        .select('*')
+        .gte('date', start.split('T')[0])
+        .lte('date', end.split('T')[0])
+        .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo'),
     ]);
 
     // KPIs
@@ -43,12 +46,10 @@ export async function GET(request: NextRequest) {
     const refundRate = totalOrders > 0 ? (refundedOrders.length / totalOrders) * 100 : 0;
 
     // Customer stats
-    const customerIds = new Set<number>();
     const newCustomerIds = new Set<number>();
     const returningCustomerIds = new Set<number>();
     for (const o of orders) {
       if (o.customer) {
-        customerIds.add(o.customer.id);
         if (o.customer.orders_count <= 1) {
           newCustomerIds.add(o.customer.id);
         } else {
@@ -84,12 +85,7 @@ export async function GET(request: NextRequest) {
       dailyMap.set(day, existing);
     }
     const revenueData = Array.from(dailyMap.entries())
-      .map(([date, data]) => ({ date, revenue: Math.round(data.revenue * 100) / 100, orders: data.orders }))
-      .sort((a, b) => {
-        const idxA = Array.from(dailyMap.keys()).indexOf(a.date);
-        const idxB = Array.from(dailyMap.keys()).indexOf(b.date);
-        return idxA - idxB;
-      });
+      .map(([date, data]) => ({ date, revenue: Math.round(data.revenue * 100) / 100, orders: data.orders }));
 
     // Top products from line items
     const productMap = new Map<string, { id: number; title: string; revenue: number; unitsSold: number }>();
@@ -106,21 +102,21 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    // Project breakdown from tags
-    const PROJECT_COLORS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
-    const projectMap = new Map<string, { revenue: number; orders: number }>();
+    // Tag breakdown (was "projects")
+    const TAG_COLORS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
+    const tagMap = new Map<string, { revenue: number; orders: number }>();
     for (const o of orders) {
       const tags = (o.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
-      const projectTag = tags[0] || 'Sin etiqueta';
-      const existing = projectMap.get(projectTag) || { revenue: 0, orders: 0 };
+      const tag = tags[0] || 'Sin etiqueta';
+      const existing = tagMap.get(tag) || { revenue: 0, orders: 0 };
       existing.revenue += parseFloat(o.total_price || '0');
       existing.orders += 1;
-      projectMap.set(projectTag, existing);
+      tagMap.set(tag, existing);
     }
-    const projects = Array.from(projectMap.entries())
+    const projects = Array.from(tagMap.entries())
       .map(([name, data], i) => ({
         projectName: name,
-        color: PROJECT_COLORS[i % PROJECT_COLORS.length],
+        color: TAG_COLORS[i % TAG_COLORS.length],
         totalRevenue: Math.round(data.revenue * 100) / 100,
         totalOrders: data.orders,
         percentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 1000) / 10 : 0,
@@ -132,21 +128,9 @@ export async function GET(request: NextRequest) {
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10);
 
-    // Consolidated income from all sources
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-
-    const ventasFiltered = ventasPresenciales.filter((v: any) => {
-      const d = new Date(v.date);
-      return d >= startDate && d <= endDate;
-    });
-    const ventasPresencialesTotal = ventasFiltered.reduce((s: number, v: any) => s + (v.totalAmount || 0), 0);
-
-    const diezmosExtracto = extracto.filter((tx: any) => {
-      const d = new Date(tx.date);
-      return d >= startDate && d <= endDate && (tx.isDiezmo || tx.manualTag === 'Diezmo' || tx.autoTag === 'Diezmo');
-    });
-    const diezmosTotal = diezmosExtracto.reduce((s: number, tx: any) => s + Math.abs(tx.amount || 0), 0);
+    // Consolidated income from all sources (Supabase data)
+    const ventasPresencialesTotal = (ventasResult.data || []).reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+    const diezmosTotal = (diezmosResult.data || []).reduce((s: number, tx: any) => s + Math.abs(parseFloat(tx.amount || '0')), 0);
 
     const incomeSources = {
       shopify: totalRevenue,

@@ -1,25 +1,6 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { supabase } from '@/lib/supabase';
 import { getSubscriptions } from '@/lib/stripe';
-
-const MEMBERS_FILE = path.join(process.cwd(), 'data', 'diezmos-members.json');
-const EXTRACTO_FILE = path.join(process.cwd(), 'data', 'extracto.json');
-
-async function readJSON(filepath: string) {
-  try {
-    const data = await fs.readFile(filepath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return filepath.includes('diezmos-members') ? { communities: ['San Pablo', 'San Ignacio', 'P. Pio'], members: [] } : [];
-  }
-}
-
-async function writeMembers(data: any) {
-  const dir = path.dirname(MEMBERS_FILE);
-  try { await fs.mkdir(dir, { recursive: true }); } catch {}
-  await fs.writeFile(MEMBERS_FILE, JSON.stringify(data, null, 2));
-}
 
 function normalize(name: string) {
   return name.toLowerCase()
@@ -34,11 +15,46 @@ function getMonthKey(date: string | Date) {
 
 export async function GET() {
   try {
-    const data = await readJSON(MEMBERS_FILE);
-    const members = data.members || [];
-    const communities = data.communities || ['San Pablo', 'San Ignacio', 'P. Pio'];
+    // 1. Get members from Supabase
+    const { data: membersData, error: membersErr } = await supabase
+      .from('diezmos_members')
+      .select('*')
+      .order('name');
+    if (membersErr) throw membersErr;
 
-    // 1. Get Stripe subscriptions for "Diezmo" products
+    // 2. Get communities from Supabase
+    const { data: commData, error: commErr } = await supabase
+      .from('diezmos_communities')
+      .select('*')
+      .order('name');
+    if (commErr) throw commErr;
+
+    // 3. Get payments from Supabase
+    const { data: paymentsData, error: paymentsErr } = await supabase
+      .from('diezmos_payments')
+      .select('*');
+    if (paymentsErr) throw paymentsErr;
+
+    const communities = (commData || []).map((c: any) => c.name);
+    const members = (membersData || []).map((m: any) => {
+      const memberPayments: Record<string, { amount: number; source: string }> = {};
+      (paymentsData || []).filter((p: any) => p.member_id === m.id).forEach((p: any) => {
+        memberPayments[p.month] = { amount: parseFloat(p.amount), source: p.source };
+      });
+      return {
+        id: m.id,
+        name: m.name,
+        community: m.community,
+        email: m.email,
+        isActive: m.is_active,
+        stripeSubscriptionId: m.stripe_subscription_id,
+        stripeAmount: m.stripe_amount ? parseFloat(m.stripe_amount) : null,
+        stripeInterval: m.stripe_interval,
+        payments: memberPayments,
+      };
+    });
+
+    // 4. Get Stripe subscriptions for "Diezmo" products
     let stripeSubs: any[] = [];
     try {
       const allSubs = await getSubscriptions({ status: 'active', limit: 100 });
@@ -48,19 +64,18 @@ export async function GET() {
       );
     } catch {}
 
-    // 2. Get bank transactions tagged as diezmo
-    const extracto = await readJSON(EXTRACTO_FILE);
-    const diezmosBanco = (Array.isArray(extracto) ? extracto : []).filter((tx: any) =>
-      tx.isDiezmo || tx.manualTag === 'Diezmo' || tx.autoTag === 'Diezmo'
-    );
+    // 5. Get bank transactions tagged as diezmo
+    const { data: bankDiezmos } = await supabase
+      .from('bank_transactions')
+      .select('*')
+      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo');
 
-    // 3. Match Stripe subscriptions to members
+    // 6. Match Stripe subscriptions to members
     for (const sub of stripeSubs) {
       const subName = normalize(sub.customerName || '');
       const subEmail = (sub.customerEmail || '').toLowerCase();
-      const monthKey = getMonthKey(sub.created);
 
-      let matched = members.find((m: any) => {
+      const matched = members.find((m: any) => {
         const mName = normalize(m.name);
         return mName === subName ||
           subName.includes(mName) || mName.includes(subName) ||
@@ -72,31 +87,46 @@ export async function GET() {
         matched.stripeAmount = sub.amount;
         matched.stripeInterval = sub.interval;
         matched.email = sub.customerEmail || matched.email;
+
+        // Update Stripe info in DB
+        await supabase.from('diezmos_members').update({
+          stripe_subscription_id: sub.id,
+          stripe_amount: sub.amount,
+          stripe_interval: sub.interval,
+          email: sub.customerEmail || matched.email,
+        }).eq('id', matched.id);
+
         // Mark current month as paid via Stripe
-        const now = new Date();
-        const currentMonth = getMonthKey(now);
-        if (!matched.payments) matched.payments = {};
+        const currentMonth = getMonthKey(new Date());
         if (!matched.payments[currentMonth]) {
           const monthlyAmount = sub.interval === 'year' ? sub.amount / 12 : sub.amount;
           matched.payments[currentMonth] = { amount: monthlyAmount, source: 'stripe' };
+
+          // Upsert payment in DB
+          await supabase.from('diezmos_payments').upsert({
+            id: `dp-stripe-${matched.id}-${currentMonth}`,
+            member_id: matched.id,
+            month: currentMonth,
+            amount: monthlyAmount,
+            source: 'stripe',
+          }, { onConflict: 'member_id,month' });
         }
       }
     }
 
-    // 4. Match bank diezmo transactions to members
-    for (const tx of diezmosBanco) {
-      const txName = normalize(tx.memberName || tx.senderName || tx.concept || '');
+    // 7. Match bank diezmo transactions to members
+    for (const tx of (bankDiezmos || [])) {
+      const txName = normalize(tx.member_name || tx.concept || '');
       const monthKey = getMonthKey(tx.date);
 
-      let matched = members.find((m: any) => {
+      const matched = members.find((m: any) => {
         const mName = normalize(m.name);
         return txName.includes(mName) || mName.includes(txName);
       });
 
       if (matched) {
-        if (!matched.payments) matched.payments = {};
         const existing = matched.payments[monthKey];
-        const amt = Math.abs(tx.amount);
+        const amt = Math.abs(parseFloat(tx.amount));
         if (existing) {
           matched.payments[monthKey] = {
             amount: existing.amount + amt,
@@ -105,13 +135,20 @@ export async function GET() {
         } else {
           matched.payments[monthKey] = { amount: amt, source: 'banco' };
         }
+
+        // Upsert payment in DB
+        await supabase.from('diezmos_payments').upsert({
+          id: `dp-banco-${matched.id}-${monthKey}`,
+          member_id: matched.id,
+          month: monthKey,
+          amount: matched.payments[monthKey].amount,
+          source: matched.payments[monthKey].source,
+        }, { onConflict: 'member_id,month' });
       }
     }
 
-    // 5. Build summary
-    const now = new Date();
-    const currentMonth = getMonthKey(now);
-
+    // 8. Build summary
+    const currentMonth = getMonthKey(new Date());
     const communityStats = communities.map((c: string) => {
       const cmembers = members.filter((m: any) => m.community === c);
       const paying = cmembers.filter((m: any) => m.payments?.[currentMonth]);
@@ -133,11 +170,12 @@ export async function GET() {
         totalActive,
         totalPaying,
         fromStripe: stripeSubs.length,
-        fromBanco: diezmosBanco.length,
+        fromBanco: (bankDiezmos || []).length,
       },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('Error in diezmos GET:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -145,73 +183,80 @@ export async function GET() {
 export async function POST(request: import('next/server').NextRequest) {
   try {
     const body = await request.json();
-    const data = await readJSON(MEMBERS_FILE);
-    const members = data.members || [];
-    const communities = data.communities || ['San Pablo', 'San Ignacio', 'P. Pio'];
 
     if (body.action === 'add_member') {
       const id = `m${Date.now()}`;
-      members.push({
+      const { error } = await supabase.from('diezmos_members').insert({
         id,
         name: body.name.trim(),
         community: body.community || 'San Pablo',
         email: body.email || null,
-        isActive: true,
-        payments: {},
+        is_active: true,
       });
-      await writeMembers({ communities, members });
+      if (error) throw error;
       return NextResponse.json({ success: true, id });
     }
 
     if (body.action === 'delete_member') {
-      const idx = members.findIndex((m: any) => m.id === body.id);
-      if (idx !== -1) members.splice(idx, 1);
-      await writeMembers({ communities, members });
+      // Payments are cascaded automatically via FK
+      const { error } = await supabase
+        .from('diezmos_members')
+        .delete()
+        .eq('id', body.id);
+      if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     if (body.action === 'update_member') {
-      const member = members.find((m: any) => m.id === body.id);
-      if (member) {
-        if (body.name !== undefined) member.name = body.name;
-        if (body.community !== undefined) member.community = body.community;
-        if (body.email !== undefined) member.email = body.email;
-        if (body.isActive !== undefined) member.isActive = body.isActive;
-      }
-      await writeMembers({ communities, members });
+      const updates: any = {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.community !== undefined) updates.community = body.community;
+      if (body.email !== undefined) updates.email = body.email;
+      if (body.isActive !== undefined) updates.is_active = body.isActive;
+
+      const { error } = await supabase
+        .from('diezmos_members')
+        .update(updates)
+        .eq('id', body.id);
+      if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     if (body.action === 'manual_payment') {
-      const member = members.find((m: any) => m.id === body.memberId);
-      if (member) {
-        if (!member.payments) member.payments = {};
-        member.payments[body.month] = { amount: body.amount, source: 'manual' };
-      }
-      await writeMembers({ communities, members });
+      const { error } = await supabase.from('diezmos_payments').upsert({
+        id: `dp-manual-${body.memberId}-${body.month}`,
+        member_id: body.memberId,
+        month: body.month,
+        amount: body.amount,
+        source: 'manual',
+      }, { onConflict: 'member_id,month' });
+      if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     if (body.action === 'delete_payment') {
-      const member = members.find((m: any) => m.id === body.memberId);
-      if (member && member.payments) {
-        delete member.payments[body.month];
-      }
-      await writeMembers({ communities, members });
+      const { error } = await supabase
+        .from('diezmos_payments')
+        .delete()
+        .eq('member_id', body.memberId)
+        .eq('month', body.month);
+      if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     if (body.action === 'add_community') {
-      if (!communities.includes(body.name)) {
-        communities.push(body.name);
-      }
-      await writeMembers({ communities, members });
+      const { error } = await supabase.from('diezmos_communities').insert({
+        id: `com-${Date.now()}`,
+        name: body.name,
+      });
+      if (error) throw error;
       return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('Error in diezmos POST:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
