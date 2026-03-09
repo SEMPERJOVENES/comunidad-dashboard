@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
 import { DateRange, BankTransaction } from '@/lib/types';
-import { Landmark, Upload, Search, Loader2, BookOpen } from 'lucide-react';
+import { Landmark, Upload, Search, Loader2, BookOpen, AlertCircle, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const DEFAULT_TAG_OPTIONS = [
@@ -22,6 +22,7 @@ export default function ExtractoPage() {
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'all' | 'sin_clasificar'>('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -139,8 +140,9 @@ export default function ExtractoPage() {
   }
 
   const filtered = transactions.filter(tx => {
+    const tag = tx.manualTag || tx.autoTag || '';
+    if (activeTab === 'sin_clasificar' && tag) return false;
     if (filterCategory !== 'all') {
-      const tag = tx.manualTag || tx.autoTag || '';
       if (filterCategory === 'sin_clasificar') { if (tag) return false; }
       else if (!tag.toLowerCase().includes(filterCategory.toLowerCase())) return false;
     }
@@ -204,6 +206,37 @@ export default function ExtractoPage() {
             <p className="text-xs text-gray-500 font-medium">Sin Clasificar</p>
             <p className="text-xl font-bold text-amber-600 mt-1">{sinClasificar}</p>
           </Card>
+        </div>
+
+        {/* Quick Access Tabs */}
+        <div className="flex gap-2 border-b border-gray-200 -mb-2">
+          <button
+            onClick={() => { setActiveTab('all'); setFilterCategory('all'); }}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'all'
+                ? 'border-violet-600 text-violet-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <List size={15} />
+            Todos
+          </button>
+          <button
+            onClick={() => { setActiveTab('sin_clasificar'); setFilterCategory('all'); }}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'sin_clasificar'
+                ? 'border-amber-500 text-amber-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <AlertCircle size={15} />
+            Sin clasificar
+            {sinClasificar > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-700">
+                {sinClasificar}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Filters */}
