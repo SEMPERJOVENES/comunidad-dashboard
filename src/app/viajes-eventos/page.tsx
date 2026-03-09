@@ -8,7 +8,7 @@ import { formatCurrency, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Loader2, Plane, TrendingUp, TrendingDown, Calendar,
-  ChevronDown, ChevronRight, Mountain, Music, Church, Heart, Ticket,
+  ChevronDown, ChevronRight, Mountain, Music, Church, Heart, Ticket, MoreHorizontal,
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -43,6 +43,7 @@ const CATEGORY_ICONS: Record<string, any> = {
   'Música': Music,
   'Misa/Tabor': Church,
   'Donativo': Heart,
+  'Otros': MoreHorizontal,
 };
 
 const CATEGORY_COLORS: Record<string, { border: string; bg: string; text: string }> = {
@@ -52,6 +53,7 @@ const CATEGORY_COLORS: Record<string, { border: string; bg: string; text: string
   'Música': { border: 'border-l-fuchsia-500', bg: 'bg-fuchsia-50', text: 'text-fuchsia-600' },
   'Misa/Tabor': { border: 'border-l-amber-500', bg: 'bg-amber-50', text: 'text-amber-600' },
   'Donativo': { border: 'border-l-pink-500', bg: 'bg-pink-50', text: 'text-pink-600' },
+  'Otros': { border: 'border-l-slate-500', bg: 'bg-slate-50', text: 'text-slate-600' },
 };
 
 interface CategoryData {
@@ -109,7 +111,7 @@ export default function ViajesEventosPage() {
         <div className="flex items-center gap-3">
           <Plane size={24} className="text-rose-600" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Viajes y Eventos — P&L</h1>
+            <h1 className="text-xl font-bold text-gray-900">Viajes, eventos y otros — P&L</h1>
             <p className="text-sm text-gray-500">Ingresos vs gastos por categoría</p>
           </div>
         </div>

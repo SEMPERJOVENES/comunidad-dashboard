@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
 
     // === GROUP BY MACRO CATEGORIES ===
     // Diezmos: etiqueta "Diezmo" o is_diezmo
-    // Semper Brand: etiquetas "Merch", "Shopify", "Stripe", "Venta presencial", "Proveedor", "Semper CD"
+    // Semper Brand: etiquetas "Brand", "Shopify", "Stripe", "Venta presencial", "Proveedor", "Semper CD"
     // Otros: todo lo demás
 
-    const BRAND_TAGS = ['Merch', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
+    const BRAND_TAGS = ['Brand', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
     const DIEZMO_TAGS = ['Diezmo'];
 
     function getMacroCategory(tx: any) {

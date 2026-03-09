@@ -59,7 +59,7 @@ interface DashboardData {
 }
 
 const TAG_COLORS: Record<string, string> = {
-  'Diezmo': 'bg-violet-500', 'Donativo': 'bg-pink-500', 'Merch': 'bg-indigo-500',
+  'Diezmo': 'bg-violet-500', 'Donativo': 'bg-pink-500', 'Brand': 'bg-indigo-500',
   'Shopify': 'bg-green-500', 'Stripe': 'bg-blue-500', 'Bizum': 'bg-cyan-500',
   'Transferencia': 'bg-teal-500', 'Misa/Tabor': 'bg-amber-500', 'Retiros': 'bg-orange-500',
   'Viajes': 'bg-rose-500', 'Música': 'bg-fuchsia-500', 'Nómina': 'bg-red-500',

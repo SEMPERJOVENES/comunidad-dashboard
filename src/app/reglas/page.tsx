@@ -6,11 +6,11 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
-import { BookOpen, Plus, Trash2, Search, Loader2, ArrowLeft } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Search, Loader2, ArrowLeft, Edit3, Check, X } from 'lucide-react';
 import Link from 'next/link';
 
-const CATEGORIES = [
-  'Diezmo', 'Merch', 'Donativo', 'Misa/Tabor', 'Retiros',
+const DEFAULT_CATEGORIES = [
+  'Diezmo', 'Brand', 'Donativo', 'Misa/Tabor', 'Retiros',
   'Viajes', 'Material', 'Música', 'Semper CD', 'BAC',
   'Gastos Varios', 'Stripe', 'Shopify', 'Bizum', 'Transferencia',
   'Comisión bancaria', 'Venta presencial', 'Gasto operativo',
@@ -29,8 +29,15 @@ export default function ReglasPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
-  const [newCategory, setNewCategory] = useState('Diezmo');
+  const [newCategory, setNewCategory] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [editingRule, setEditingRule] = useState<{ keyword: string; newCategory: string } | null>(null);
+
+  const allCategories = useMemo(() => {
+    const fromRules = rules.map(r => r.category);
+    const merged = new Set([...DEFAULT_CATEGORIES, ...fromRules]);
+    return Array.from(merged).sort();
+  }, [rules]);
 
   useEffect(() => { fetchRules(); }, []);
 
@@ -48,11 +55,11 @@ export default function ReglasPage() {
   }
 
   async function handleAdd() {
-    if (!newKeyword.trim()) return;
+    if (!newKeyword.trim() || !newCategory.trim()) return;
     const res = await fetch('/api/reglas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add', keyword: newKeyword, category: newCategory }),
+      body: JSON.stringify({ action: 'add', keyword: newKeyword, category: newCategory.trim() }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -71,6 +78,20 @@ export default function ReglasPage() {
     });
     const data = await res.json();
     if (res.ok) setRules(data.rules);
+  }
+
+  async function handleUpdateCategory(oldKeyword: string, newCat: string) {
+    if (!newCat.trim()) return;
+    const res = await fetch('/api/reglas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update', oldKeyword, keyword: oldKeyword, category: newCat.trim() }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setRules(data.rules);
+      setEditingRule(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -96,7 +117,7 @@ export default function ReglasPage() {
 
   const categoryColors: Record<string, string> = {
     'Diezmo': 'bg-violet-100 text-violet-700',
-    'Merch': 'bg-pink-100 text-pink-700',
+    'Brand': 'bg-pink-100 text-pink-700',
     'Donativo': 'bg-green-100 text-green-700',
     'Viajes': 'bg-blue-100 text-blue-700',
     'Material': 'bg-orange-100 text-orange-700',
@@ -142,20 +163,24 @@ export default function ReglasPage() {
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
             </div>
-            <div>
+            <div className="flex-1 sm:flex-initial">
               <label className="text-xs text-gray-500 mb-1 block">Entonces es...</label>
-              <select
+              <input
+                type="text"
+                list="category-options"
                 value={newCategory}
                 onChange={e => setNewCategory(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
-              >
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                placeholder="Seleccionar o escribir nueva..."
+                className="w-full sm:w-48 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <datalist id="category-options">
+                {allCategories.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div className="flex items-end">
               <button
                 onClick={handleAdd}
-                disabled={!newKeyword.trim()}
+                disabled={!newKeyword.trim() || !newCategory.trim()}
                 className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
               >
                 <Plus size={16} /> Añadir
@@ -182,7 +207,7 @@ export default function ReglasPage() {
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
             <option value="all">Todas las categorías</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -205,21 +230,55 @@ export default function ReglasPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {catRules.map(rule => (
-                    <div
-                      key={rule.keyword}
-                      className="group flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 hover:border-red-200 transition-colors"
-                    >
-                      <span className="text-sm text-gray-700">"{rule.keyword}"</span>
-                      <button
-                        onClick={() => handleDelete(rule.keyword)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-red-500 transition-all"
-                        title="Eliminar regla"
+                  {catRules.map(rule => {
+                    const isEditingThis = editingRule?.keyword === rule.keyword;
+                    return (
+                      <div
+                        key={rule.keyword}
+                        className="group flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-300 transition-colors"
                       >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
+                        <span className="text-sm text-gray-700">&quot;{rule.keyword}&quot;</span>
+                        {isEditingThis ? (
+                          <div className="flex items-center gap-1 ml-1">
+                            <input
+                              type="text"
+                              list="edit-category-options"
+                              value={editingRule.newCategory}
+                              onChange={e => setEditingRule({ ...editingRule, newCategory: e.target.value })}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleUpdateCategory(rule.keyword, editingRule.newCategory);
+                                if (e.key === 'Escape') setEditingRule(null);
+                              }}
+                              autoFocus
+                              className="w-28 px-1.5 py-0.5 text-xs border border-violet-300 rounded focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                            />
+                            <datalist id="edit-category-options">
+                              {allCategories.map(c => <option key={c} value={c} />)}
+                            </datalist>
+                            <button onClick={() => handleUpdateCategory(rule.keyword, editingRule.newCategory)} className="p-0.5 text-emerald-500 hover:text-emerald-700"><Check size={12} /></button>
+                            <button onClick={() => setEditingRule(null)} className="p-0.5 text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                              onClick={() => setEditingRule({ keyword: rule.keyword, newCategory: rule.category })}
+                              className="p-0.5 text-gray-400 hover:text-violet-500"
+                              title="Cambiar categoría"
+                            >
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(rule.keyword)}
+                              className="p-0.5 text-gray-400 hover:text-red-500"
+                              title="Eliminar regla"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             ))}

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { promises as fs } from 'fs';
-import path from 'path';
 
-// Load tagging rules from file (static config)
+// Load tagging rules from Supabase
 async function loadTaggingRules(): Promise<{ keyword: string; category: string }[]> {
   try {
-    const filePath = path.join(process.cwd(), 'data', 'tagging-rules.json');
-    const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    const { data, error } = await supabase
+      .from('tagging_rules')
+      .select('keyword, category');
+    if (error) throw error;
+    return data || [];
   } catch {
     return [];
   }

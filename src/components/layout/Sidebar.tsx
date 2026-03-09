@@ -48,7 +48,7 @@ const navSections = [
     title: 'Comunidad',
     items: [
       { href: '/diezmos', label: 'Diezmos', icon: Church },
-      { href: '/viajes-eventos', label: 'Viajes y Eventos', icon: Plane },
+      { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },
     ],
   },
 ];

@@ -9,8 +9,8 @@ import { DateRange, BankTransaction } from '@/lib/types';
 import { Landmark, Upload, Search, Loader2, BookOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const TAG_OPTIONS = [
-  'Diezmo', 'Merch', 'Donativo', 'Misa/Tabor', 'Retiros',
+const DEFAULT_TAG_OPTIONS = [
+  'Diezmo', 'Brand', 'Donativo', 'Misa/Tabor', 'Retiros',
   'Viajes', 'Material', 'Música', 'Semper CD', 'BAC',
   'Gastos Varios', 'Stripe', 'Shopify', 'Bizum', 'Transferencia',
   'Comisión bancaria', 'Venta presencial', 'Gasto operativo',
@@ -26,8 +26,16 @@ export default function ExtractoPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [tagOptions, setTagOptions] = useState<string[]>(DEFAULT_TAG_OPTIONS);
 
-  useEffect(() => { fetchTransactions(); }, []);
+  useEffect(() => {
+    fetchTransactions();
+    fetch('/api/reglas').then(r => r.json()).then(data => {
+      const fromRules = (data.rules || []).map((r: any) => r.category as string);
+      const merged = new Set([...DEFAULT_TAG_OPTIONS, ...fromRules]);
+      setTagOptions(Array.from(merged).sort());
+    }).catch(() => {});
+  }, []);
 
   async function fetchTransactions() {
     setLoading(true);
@@ -210,7 +218,7 @@ export default function ExtractoPage() {
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
             <option value="all">Todas las categorías</option>
             <option value="sin_clasificar">Sin clasificar</option>
-            {TAG_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            {tagOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
         </div>
 
@@ -261,7 +269,7 @@ export default function ExtractoPage() {
                               className="text-xs px-2 py-1 border border-violet-300 rounded focus:ring-2 focus:ring-violet-500"
                             >
                               <option value="">Sin etiqueta</option>
-                              {TAG_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                              {tagOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                           ) : (
                             <button

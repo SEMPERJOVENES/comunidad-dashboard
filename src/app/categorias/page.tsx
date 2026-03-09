@@ -117,7 +117,7 @@ export default function CategoriasPage() {
   const TAG_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
     'Diezmo': { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' },
     'Donativo': { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-500' },
-    'Merch': { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+    'Brand': { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
     'Shopify': { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
     'Stripe': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
     'Bizum': { bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },

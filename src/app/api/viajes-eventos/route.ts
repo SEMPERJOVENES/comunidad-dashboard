@@ -10,6 +10,10 @@ const EVENT_CATEGORIES: Record<string, string[]> = {
   'Donativo': ['Donativo'],
 };
 
+const BRAND_TAGS = ['Brand', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
+const DIEZMO_TAGS = ['Diezmo'];
+const ALL_EVENT_TAGS = Object.values(EVENT_CATEGORIES).flat();
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -28,16 +32,21 @@ export async function GET(request: NextRequest) {
 
     const categories: Record<string, { income: number; expenses: number; transactions: any[] }> = {};
 
-    // Initialize all categories
+    // Initialize all categories including "Otros"
     for (const cat of Object.keys(EVENT_CATEGORIES)) {
       categories[cat] = { income: 0, expenses: 0, transactions: [] };
     }
+    categories['Otros'] = { income: 0, expenses: 0, transactions: [] };
 
     for (const tx of (bankTxs || [])) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
 
-      // Find which category this tag belongs to
+      // Skip Brand and Diezmo tags (they belong to other sections)
+      if (BRAND_TAGS.includes(tag) || DIEZMO_TAGS.includes(tag) || tx.is_diezmo) continue;
+
+      // Find which specific category this tag belongs to
+      let matched = false;
       for (const [category, tags] of Object.entries(EVENT_CATEGORIES)) {
         if (tags.includes(tag)) {
           if (amount > 0) {
@@ -52,8 +61,25 @@ export async function GET(request: NextRequest) {
             amount,
             tag,
           });
+          matched = true;
           break;
         }
+      }
+
+      // If not matched to any specific category, goes to "Otros"
+      if (!matched && tag) {
+        if (amount > 0) {
+          categories['Otros'].income += amount;
+        } else {
+          categories['Otros'].expenses += Math.abs(amount);
+        }
+        categories['Otros'].transactions.push({
+          id: tx.id,
+          date: tx.date,
+          concept: tx.concept,
+          amount,
+          tag,
+        });
       }
     }
 
