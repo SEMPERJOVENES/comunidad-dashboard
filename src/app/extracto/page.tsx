@@ -288,7 +288,6 @@ export default function ExtractoPage() {
                               )}
                             </button>
                           )}
-                          {tx.isDiezmo && <span className="ml-1 text-xs text-violet-600 font-medium">⛪</span>}
                         </td>
                       </tr>
                     );
