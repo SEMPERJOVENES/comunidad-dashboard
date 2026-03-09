@@ -17,6 +17,7 @@ import {
   Plane,
   Box,
   X,
+  PieChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +49,7 @@ const navSections = [
   {
     title: 'Comunidad',
     items: [
+      { href: '/comunidad', label: 'Dashboard Comunidad', icon: PieChart },
       { href: '/diezmos', label: 'Diezmos', icon: Church },
       { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },
       { href: '/inventario-comunidad', label: 'Inventario Material', icon: Box },

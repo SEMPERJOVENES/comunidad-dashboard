@@ -232,16 +232,21 @@ export async function POST(request: NextRequest) {
 
       if (fetchErr) throw fetchErr;
 
+      let updated = 0;
       for (const tx of (allTx || [])) {
         const { tag, memberName, isDiezmo } = autoTagTransaction(tx.concept, rules);
-        if (tag && tag !== tx.auto_tag) {
+        const needsUpdate = (tag && tag !== tx.auto_tag) ||
+          (memberName && memberName !== tx.member_name) ||
+          (isDiezmo !== tx.is_diezmo);
+        if (tag && needsUpdate) {
           await supabase.from('bank_transactions')
             .update({ auto_tag: tag, member_name: memberName, is_diezmo: isDiezmo })
             .eq('id', tx.id);
+          updated++;
         }
       }
 
-      return NextResponse.json({ retagged: (allTx || []).length });
+      return NextResponse.json({ retagged: (allTx || []).length, updated });
     }
 
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
