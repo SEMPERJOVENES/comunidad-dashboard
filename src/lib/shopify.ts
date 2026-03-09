@@ -1,6 +1,6 @@
 const SHOPIFY_STORE = process.env.SHOPIFY_STORE!;
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN!;
-const API_VERSION = '2024-10';
+const API_VERSION = '2025-04';
 
 interface ShopifyFetchOptions {
   endpoint: string;

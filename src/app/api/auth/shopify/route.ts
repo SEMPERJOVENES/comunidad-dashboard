@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Parámetro shop requerido' }, { status: 400 });
   }
 
-  const scopes = 'read_orders,read_products,read_customers,read_inventory,read_analytics,read_shopify_payments_bank_accounts,read_shopify_payments_disputes';
+  const scopes = 'read_orders,read_all_orders,read_products,read_customers,read_inventory,read_analytics,read_shopify_payments_bank_accounts,read_shopify_payments_disputes';
   const redirectUri = `${APP_URL}/api/auth/shopify`;
   const nonce = Math.random().toString(36).substring(7);
 

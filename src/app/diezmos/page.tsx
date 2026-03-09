@@ -75,12 +75,16 @@ export default function DiezmosPage() {
   const [showStripeDebug, setShowStripeDebug] = useState(false);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
 
-  useEffect(() => { fetchDiezmos(); }, []);
+  useEffect(() => { fetchDiezmos(); }, [selectedRange]);
 
   async function fetchDiezmos() {
     setLoading(true);
     try {
-      const res = await fetch('/api/diezmos');
+      const params = new URLSearchParams({
+        start: selectedRange.startDate.toISOString(),
+        end: selectedRange.endDate.toISOString(),
+      });
+      const res = await fetch(`/api/diezmos?${params}`);
       const data = await res.json();
       setMembers(data.members || []);
       setCommunities(data.communities || []);

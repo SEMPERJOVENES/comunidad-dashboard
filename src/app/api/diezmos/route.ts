@@ -8,13 +8,47 @@ function normalize(name: string) {
     .replace(/[^a-z\s]/g, '').trim();
 }
 
+// Fuzzy matching: compara palabras individuales entre dos nombres
+// Devuelve true si al menos 2 palabras coinciden, o si un nombre corto (1 palabra) coincide con alguna palabra del otro
+function fuzzyNameMatch(nameA: string, nameB: string): boolean {
+  const wordsA = normalize(nameA).split(/\s+/).filter(w => w.length > 2);
+  const wordsB = normalize(nameB).split(/\s+/).filter(w => w.length > 2);
+  if (wordsA.length === 0 || wordsB.length === 0) return false;
+
+  // Exact substring match (existing logic)
+  const nA = normalize(nameA);
+  const nB = normalize(nameB);
+  if (nA.includes(nB) || nB.includes(nA)) return true;
+
+  // Word overlap: count matching words
+  const matchingWords = wordsA.filter(wa => wordsB.some(wb => wa === wb || wa.includes(wb) || wb.includes(wa)));
+
+  // Si un nombre es solo 1 palabra (apodo), basta con que coincida con alguna palabra
+  if (wordsA.length === 1 || wordsB.length === 1) return matchingWords.length >= 1;
+
+  // Para nombres con 2+ palabras, al menos 2 palabras deben coincidir
+  return matchingWords.length >= 2;
+}
+
 function getMonthKey(date: string | Date) {
   const d = new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export async function GET() {
+export async function GET(request: import('next/server').NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const startParam = searchParams.get('start');
+    const endParam = searchParams.get('end');
+
+    // Date range for filtering
+    const startDate = startParam ? new Date(startParam).toISOString().split('T')[0] : null;
+    const endDate = endParam ? new Date(endParam).toISOString().split('T')[0] : null;
+
+    // Stripe timestamps for filtering
+    const stripeStartTs = startParam ? Math.floor(new Date(startParam).getTime() / 1000) : Math.floor(new Date('2020-01-01').getTime() / 1000);
+    const stripeEndTs = endParam ? Math.floor(new Date(endParam).getTime() / 1000) : Math.floor(Date.now() / 1000);
+
     // 1. Get members from Supabase
     const { data: membersData, error: membersErr } = await supabase
       .from('diezmos_members')
@@ -72,11 +106,12 @@ export async function GET() {
       const subEmail = (sub.customerEmail || '').toLowerCase();
 
       const matched = members.find((m: any) => {
-        const mName = normalize(m.name);
         if (m.stripeSubscriptionId === sub.id) return true;
-        return mName === subName ||
-          subName.includes(mName) || mName.includes(subName) ||
-          (m.email && m.email.toLowerCase() === subEmail);
+        if (m.email && m.email.toLowerCase() === subEmail) return true;
+        const custName = sub.customerName || '';
+        if (fuzzyNameMatch(m.name, custName)) return true;
+        if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
+        return false;
       });
 
       if (matched) {
@@ -96,12 +131,11 @@ export async function GET() {
       }
     }
 
-    // 6. Get paid Stripe invoices (all history)
+    // 6. Get paid Stripe invoices (filtered by date range)
     let stripeInvoices: any[] = [];
     try {
-      const jan2026 = new Date('2020-01-01T00:00:00Z');
       stripeInvoices = await getInvoices({
-        created: { gte: Math.floor(jan2026.getTime() / 1000) },
+        created: { gte: stripeStartTs, lte: stripeEndTs },
         status: 'paid',
         limit: 100,
       });
@@ -115,11 +149,12 @@ export async function GET() {
 
       const matched = members.find((m: any) => {
         if (m.stripeSubscriptionId && inv.subscriptionId === m.stripeSubscriptionId) return true;
-        const invName = normalize(inv.customerName || '');
         const invEmail = (inv.customerEmail || '').toLowerCase();
-        const mName = normalize(m.name);
-        return mName === invName || invName.includes(mName) || mName.includes(invName) ||
-          (m.email && m.email.toLowerCase() === invEmail);
+        if (m.email && m.email.toLowerCase() === invEmail) return true;
+        const custName = inv.customerName || '';
+        if (fuzzyNameMatch(m.name, custName)) return true;
+        if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
+        return false;
       });
 
       if (matched) {
@@ -146,9 +181,8 @@ export async function GET() {
     let stripeCharges: any[] = [];
     let totalStripeCollected = 0;
     try {
-      const jan2026 = new Date('2020-01-01T00:00:00Z');
       stripeCharges = await getCharges({
-        created: { gte: Math.floor(jan2026.getTime() / 1000) },
+        created: { gte: stripeStartTs, lte: stripeEndTs },
         limit: 100,
       });
     } catch (e) {
@@ -161,11 +195,12 @@ export async function GET() {
 
       const matched = members.find((m: any) => {
         if (!charge.customerName && !charge.customerEmail) return false;
-        const chargeName = normalize(charge.customerName || '');
         const chargeEmail = (charge.customerEmail || '').toLowerCase();
-        const mName = normalize(m.name);
         if (m.email && m.email.toLowerCase() === chargeEmail) return true;
-        return mName === chargeName || chargeName.includes(mName) || mName.includes(chargeName);
+        const custName = charge.customerName || '';
+        if (fuzzyNameMatch(m.name, custName)) return true;
+        if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
+        return false;
       });
 
       if (matched) {
@@ -185,20 +220,24 @@ export async function GET() {
       }
     }
 
-    // 8. Get bank diezmo transactions
-    const { data: bankDiezmos } = await supabase
+    // 8. Get bank diezmo transactions (filtered by date)
+    let bankDiezmosQuery = supabase
       .from('bank_transactions')
       .select('*')
       .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo');
+    if (startDate) bankDiezmosQuery = bankDiezmosQuery.gte('date', startDate);
+    if (endDate) bankDiezmosQuery = bankDiezmosQuery.lte('date', endDate);
+    const { data: bankDiezmos } = await bankDiezmosQuery;
 
-    // 9. Match bank transactions to members
+    // 9. Match bank transactions to members (fuzzy matching con nicknames)
     for (const tx of (bankDiezmos || [])) {
-      const txName = normalize(tx.member_name || tx.concept || '');
+      const txName = tx.member_name || tx.concept || '';
       const monthKey = getMonthKey(tx.date);
 
       const matched = members.find((m: any) => {
-        const mName = normalize(m.name);
-        return txName.includes(mName) || mName.includes(txName);
+        if (fuzzyNameMatch(m.name, txName)) return true;
+        if (m.nickname && fuzzyNameMatch(m.nickname, txName)) return true;
+        return false;
       });
 
       if (matched) {
@@ -245,10 +284,13 @@ export async function GET() {
       orFilters.push(`auto_tag.in.(${diezmoTagsList.join(',')})`);
     }
 
-    const { data: allDiezmoBankTxs } = await supabase
+    let allDiezmoQuery = supabase
       .from('bank_transactions')
       .select('*')
       .or(orFilters.join(','));
+    if (startDate) allDiezmoQuery = allDiezmoQuery.gte('date', startDate);
+    if (endDate) allDiezmoQuery = allDiezmoQuery.lte('date', endDate);
+    const { data: allDiezmoBankTxs } = await allDiezmoQuery;
 
     // Separate income (diezmos received) vs expenses (operational costs)
     const diezmoIncome: { month: string; amount: number; concept: string }[] = [];
@@ -276,12 +318,19 @@ export async function GET() {
           expensesByMonth[monthKey]['Diezmo (gasto)'] = (expensesByMonth[monthKey]['Diezmo (gasto)'] || 0) + Math.abs(amt);
         }
       } else if (diezmoTags.has(tag)) {
-        const absAmt = Math.abs(amt);
-        diezmoExpenses.push({ month: monthKey, amount: absAmt, concept: tx.concept || '', tag });
-        expensesByTag[tag] = (expensesByTag[tag] || 0) + absAmt;
-        totalDiezmoExpenses += absAmt;
-        if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
-        expensesByMonth[monthKey][tag] = (expensesByMonth[monthKey][tag] || 0) + absAmt;
+        // Donativo con importe positivo es ingreso, no gasto
+        const isIncomeTag = tag === 'Donativo';
+        if (isIncomeTag && amt > 0) {
+          diezmoIncome.push({ month: monthKey, amount: amt, concept: tx.concept || '' });
+          totalDiezmoIncome += amt;
+        } else {
+          const absAmt = Math.abs(amt);
+          diezmoExpenses.push({ month: monthKey, amount: absAmt, concept: tx.concept || '', tag });
+          expensesByTag[tag] = (expensesByTag[tag] || 0) + absAmt;
+          totalDiezmoExpenses += absAmt;
+          if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
+          expensesByMonth[monthKey][tag] = (expensesByMonth[monthKey][tag] || 0) + absAmt;
+        }
       }
     }
 
