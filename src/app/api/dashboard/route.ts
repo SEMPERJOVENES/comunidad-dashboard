@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     // Get ALL transactions for "caja" (not date-filtered)
     const { data: allBankTxs } = await supabase
       .from('bank_transactions')
-      .select('amount, manual_tag, auto_tag, is_diezmo, date, description')
+      .select('amount, manual_tag, auto_tag, is_diezmo, date, concept, description')
       .order('date', { ascending: false });
 
     const cajaByCategory: Record<string, { net: number; count: number; transactions: TagTx[] }> = {};

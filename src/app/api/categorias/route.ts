@@ -186,13 +186,13 @@ export async function POST(request: NextRequest) {
       const { count: manualCount } = await supabase.from('bank_transactions')
         .update({ manual_tag: null })
         .eq('manual_tag', name)
-        .select('id', { count: 'exact', head: true });
+        .select();
 
       // Null out auto_tag on affected bank_transactions
       const { count: autoCount } = await supabase.from('bank_transactions')
         .update({ auto_tag: null })
         .eq('auto_tag', name)
-        .select('id', { count: 'exact', head: true });
+        .select();
 
       // Also delete associated tagging_rules
       await supabase.from('tagging_rules')

@@ -20,9 +20,9 @@ const VIEW_TABS: { key: ViewMode; label: string; icon: any; desc: string }[] = [
   { key: 'summary', label: 'Resumen', icon: PieChart, desc: 'Por comunidad' },
 ];
 
-function getMonthsFrom2026(): string[] {
+function getMonthsFrom2023(): string[] {
   const months: string[] = [];
-  const start = new Date(2026, 0, 1);
+  const start = new Date(2023, 0, 1);
   const now = new Date();
   const d = new Date(start);
   while (d <= now) {
@@ -136,7 +136,7 @@ export default function DiezmosPage() {
     fetchDiezmos();
   }
 
-  const allMonths = useMemo(() => getMonthsFrom2026(), []);
+  const allMonths = useMemo(() => getMonthsFrom2023(), []);
   const currentMonth = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
