@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       }
       macroGroups[macro].tags[tag].transactions.push({
         date: tx.date,
-        description: tx.description || '',
+        description: tx.concept || tx.description || '',
         amount: amt,
       });
     }
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
       cajaByCategory[tag].count += 1;
       cajaByCategory[tag].transactions.push({
         date: tx.date,
-        description: tx.description || '',
+        description: tx.concept || tx.description || '',
         amount: amt,
       });
 
