@@ -41,8 +41,8 @@ export async function GET(request: NextRequest) {
     // Semper Brand: etiquetas "Brand", "Shopify", "Stripe", "Venta presencial", "Proveedor", "Semper CD"
     // Otros: todo lo demás
 
-    const BRAND_TAGS = ['Brand', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
-    const DIEZMO_TAGS = ['Diezmo'];
+    const BRAND_TAGS = ['Brand', 'Shopify', 'Venta presencial', 'Proveedor', 'Semper CD'];
+    const DIEZMO_TAGS = ['Diezmo', 'Stripe'];
 
     function getMacroCategory(tx: any) {
       const tag = tx.manual_tag || tx.auto_tag || '';
