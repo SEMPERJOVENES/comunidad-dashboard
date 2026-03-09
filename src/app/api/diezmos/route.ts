@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getSubscriptions, getInvoices, getCharges } from '@/lib/stripe';
+import { getSubscriptions, getInvoices, getAllCharges, getAllBalanceTransactions } from '@/lib/stripe';
 
 function normalize(name: string) {
   return name.toLowerCase()
@@ -177,13 +177,14 @@ export async function GET(request: import('next/server').NextRequest) {
       }
     }
 
-    // 7b. Also use Stripe charges to find diezmo payments (backup for invoices)
+    // 7b. Fetch ALL Stripe charges with auto-pagination (290+)
     let stripeCharges: any[] = [];
     let totalStripeCollected = 0;
+    const brandSales: { amount: number; customerName: string; customerEmail: string; created: string; description: string }[] = [];
+    let totalBrandSales = 0;
     try {
-      stripeCharges = await getCharges({
+      stripeCharges = await getAllCharges({
         created: { gte: stripeStartTs, lte: stripeEndTs },
-        limit: 100,
       });
     } catch (e) {
       console.error('Error fetching Stripe charges:', e);
@@ -193,6 +194,23 @@ export async function GET(request: import('next/server').NextRequest) {
       if (!charge.paid || charge.refunded || charge.amount <= 0) continue;
       totalStripeCollected += charge.amount;
 
+      // Si NO tiene descripción de suscripción y NO tiene customer name (invitado) → venta Brand
+      const isSubscription = (charge.description || '').toLowerCase().includes('subscription');
+      const isGuest = !charge.customerName && !charge.customerEmail;
+
+      if (!isSubscription && isGuest) {
+        brandSales.push({
+          amount: charge.amount,
+          customerName: charge.customerName || 'Invitado',
+          customerEmail: charge.customerEmail || '',
+          created: charge.created,
+          description: charge.description || '',
+        });
+        totalBrandSales += charge.amount;
+        continue; // No es diezmo, es venta de brand
+      }
+
+      // Intentar match con miembros (diezmo)
       const matched = members.find((m: any) => {
         if (!charge.customerName && !charge.customerEmail) return false;
         const chargeEmail = (charge.customerEmail || '').toLowerCase();
@@ -218,6 +236,25 @@ export async function GET(request: import('next/server').NextRequest) {
           }, { onConflict: 'member_id,month' });
         }
       }
+    }
+
+    // 7c. Calculate Stripe commission from balance transactions
+    let stripeCommission = 0;
+    let totalStripeTransferred = 0;
+    try {
+      const balanceTxs = await getAllBalanceTransactions({
+        created: { gte: stripeStartTs, lte: stripeEndTs },
+      });
+      for (const tx of balanceTxs) {
+        if (tx.type === 'charge') {
+          stripeCommission += tx.fee;
+        }
+        if (tx.type === 'payout') {
+          totalStripeTransferred += Math.abs(tx.amount);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching Stripe balance transactions:', e);
     }
 
     // 8. Get bank diezmo transactions (filtered by date)
@@ -381,6 +418,17 @@ export async function GET(request: import('next/server').NextRequest) {
         .reduce((s, p) => s + p.amount, 0);
     }, 0);
 
+    // Add Stripe commission as operational expense
+    if (stripeCommission > 0) {
+      expensesByTag['Comisión Stripe'] = stripeCommission;
+      totalDiezmoExpenses += stripeCommission;
+      // Distribute commission across months proportionally (simplification: put in current range)
+      const commMonthKey = getMonthKey(new Date());
+      if (!expensesByMonth[commMonthKey]) expensesByMonth[commMonthKey] = {};
+      expensesByMonth[commMonthKey]['Comisión Stripe'] = stripeCommission;
+      diezmoExpenses.push({ month: commMonthKey, amount: stripeCommission, concept: 'Comisión Stripe (fees de todas las transacciones)', tag: 'Comisión Stripe' });
+    }
+
     // Stripe debug info
     const stripeDebug = {
       totalSubsFetched: stripeSubs.length,
@@ -395,18 +443,10 @@ export async function GET(request: import('next/server').NextRequest) {
       totalChargesFetched: stripeCharges.length,
       totalStripeCollected,
       totalStripeFromPayments,
-      invoicesSample: stripeInvoices.slice(0, 5).map(i => ({
-        name: i.customerName,
-        amount: i.amount,
-        subId: i.subscriptionId,
-        period: i.periodStart,
-      })),
-      chargesSample: stripeCharges.filter(c => c.paid).slice(0, 5).map(c => ({
-        name: c.customerName,
-        email: c.customerEmail,
-        amount: c.amount,
-        date: c.created,
-      })),
+      stripeCommission,
+      totalStripeTransferred,
+      totalBrandSales,
+      brandSalesCount: brandSales.length,
     };
 
     return NextResponse.json({
@@ -424,6 +464,8 @@ export async function GET(request: import('next/server').NextRequest) {
         matchedStripeSubs: matchedSubIds.size,
         totalStripeCollected,
         totalStripeFromPayments,
+        stripeCommission,
+        totalStripeTransferred,
       },
       // Operational expenses section
       operationalExpenses: {
@@ -434,6 +476,12 @@ export async function GET(request: import('next/server').NextRequest) {
         byMonth: expensesByMonth,
         monthlyChart,
         recentExpenses: diezmoExpenses.sort((a, b) => b.month.localeCompare(a.month)).slice(0, 20),
+      },
+      // Brand sales (pagos de invitados en Stripe, no diezmos)
+      brandSales: {
+        total: totalBrandSales,
+        count: brandSales.length,
+        transactions: brandSales.sort((a, b) => b.created.localeCompare(a.created)),
       },
       stripeDebug,
     });
