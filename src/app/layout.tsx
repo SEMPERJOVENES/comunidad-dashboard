@@ -8,8 +8,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Semper Brand - Dashboard Financiero",
+  title: "Semper Dashboard",
   description: "Dashboard financiero integrado con Shopify y Stripe",
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
+    ],
+    apple: '/apple-icon.png',
+  },
 };
 
 export default function RootLayout({

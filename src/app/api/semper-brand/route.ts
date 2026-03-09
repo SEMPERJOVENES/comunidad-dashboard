@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const start = searchParams.get('start') || '2026-01-01T00:00:00Z';
+    const start = searchParams.get('start') || '2020-01-01T00:00:00Z';
     const end = searchParams.get('end') || new Date().toISOString();
 
     // 1. Shopify orders (todas son Semper Brand)

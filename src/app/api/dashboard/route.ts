@@ -53,8 +53,9 @@ export async function GET(request: NextRequest) {
       return 'otros';
     }
 
-    // Aggregate by macro category
-    const macroGroups: Record<string, { income: number; expenses: number; tags: Record<string, { income: number; expenses: number }> }> = {
+    // Aggregate by macro category (with individual transactions per tag)
+    interface TagTx { date: string; description: string; amount: number }
+    const macroGroups: Record<string, { income: number; expenses: number; tags: Record<string, { income: number; expenses: number; transactions: TagTx[] }> }> = {
       diezmos: { income: 0, expenses: 0, tags: {} },
       brand: { income: 0, expenses: 0, tags: {} },
       otros: { income: 0, expenses: 0, tags: {} },
@@ -72,28 +73,42 @@ export async function GET(request: NextRequest) {
       }
 
       if (!macroGroups[macro].tags[tag]) {
-        macroGroups[macro].tags[tag] = { income: 0, expenses: 0 };
+        macroGroups[macro].tags[tag] = { income: 0, expenses: 0, transactions: [] };
       }
       if (amt > 0) {
         macroGroups[macro].tags[tag].income += amt;
       } else {
         macroGroups[macro].tags[tag].expenses += Math.abs(amt);
       }
+      macroGroups[macro].tags[tag].transactions.push({
+        date: tx.date,
+        description: tx.description || '',
+        amount: amt,
+      });
     }
 
     // === CAJA: Balance breakdown by category from ALL bank transactions ===
     // Get ALL transactions for "caja" (not date-filtered)
     const { data: allBankTxs } = await supabase
       .from('bank_transactions')
-      .select('amount, manual_tag, auto_tag, is_diezmo')
+      .select('amount, manual_tag, auto_tag, is_diezmo, date, description')
       .order('date', { ascending: false });
 
-    const cajaByCategory: Record<string, number> = {};
+    const cajaByCategory: Record<string, { net: number; count: number; transactions: TagTx[] }> = {};
     const cajaMacro = { comunidad: 0, brand: 0, otros: 0 };
     for (const tx of (allBankTxs || [])) {
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
       const amt = parseFloat(tx.amount || '0');
-      cajaByCategory[tag] = (cajaByCategory[tag] || 0) + amt;
+      if (!cajaByCategory[tag]) {
+        cajaByCategory[tag] = { net: 0, count: 0, transactions: [] };
+      }
+      cajaByCategory[tag].net += amt;
+      cajaByCategory[tag].count += 1;
+      cajaByCategory[tag].transactions.push({
+        date: tx.date,
+        description: tx.description || '',
+        amount: amt,
+      });
 
       // Aggregate by macro category
       const macro = getMacroCategory(tx);
@@ -104,7 +119,7 @@ export async function GET(request: NextRequest) {
 
     // Sort caja by absolute value
     const cajaSorted = Object.entries(cajaByCategory)
-      .map(([tag, net]) => ({ tag, net }))
+      .map(([tag, data]) => ({ tag, net: data.net, count: data.count, transactions: data.transactions.slice(0, 20) }))
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 
     // === SHOPIFY DATA ===
@@ -157,19 +172,19 @@ export async function GET(request: NextRequest) {
           income: macroGroups.diezmos.income,
           expenses: macroGroups.diezmos.expenses,
           net: macroGroups.diezmos.income - macroGroups.diezmos.expenses,
-          tags: Object.entries(macroGroups.diezmos.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+          tags: Object.entries(macroGroups.diezmos.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
         },
         brand: {
           income: macroGroups.brand.income,
           expenses: macroGroups.brand.expenses,
           net: macroGroups.brand.income - macroGroups.brand.expenses,
-          tags: Object.entries(macroGroups.brand.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+          tags: Object.entries(macroGroups.brand.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
         },
         otros: {
           income: macroGroups.otros.income,
           expenses: macroGroups.otros.expenses,
           net: macroGroups.otros.income - macroGroups.otros.expenses,
-          tags: Object.entries(macroGroups.otros.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses })),
+          tags: Object.entries(macroGroups.otros.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
         },
       },
       // Caja breakdown

@@ -40,17 +40,19 @@ function getMonthFilters() {
   return filters;
 }
 
+interface TagTransaction { date: string; description: string; amount: number }
+
 interface MacroGroup {
   income: number;
   expenses: number;
   net: number;
-  tags: { tag: string; income: number; expenses: number; net: number }[];
+  tags: { tag: string; income: number; expenses: number; net: number; transactions: TagTransaction[] }[];
 }
 
 interface DashboardData {
   financials: { totalIncome: number; totalExpenses: number; profit: number; bankBalance: number };
   macroGroups: { diezmos: MacroGroup; brand: MacroGroup; otros: MacroGroup };
-  caja: { tag: string; net: number }[];
+  caja: { tag: string; net: number; count: number; transactions: TagTransaction[] }[];
   cajaMacro: { comunidad: number; brand: number; otros: number };
   stripe: { volume: number; available: number; pending: number };
   shopify: { revenue: number; orders: number };
@@ -76,6 +78,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const [expandedTag, setExpandedTag] = useState<string | null>(null);
+  const [expandedCajaTag, setExpandedCajaTag] = useState<string | null>(null);
   const [showAllCaja, setShowAllCaja] = useState(false);
   const [monthFilter, setMonthFilter] = useState('year');
 
@@ -237,14 +241,36 @@ export default function DashboardPage() {
                   <span className="text-red-500">▼ {formatCurrency(data.macroGroups.diezmos.expenses)}</span>
                 </div>
                 {expandedGroup === 'diezmos' && data.macroGroups.diezmos.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1.5">
+                  <div className="px-4 pb-4 space-y-1">
                     {data.macroGroups.diezmos.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                          <span className="text-gray-700">{t.tag}</span>
-                        </div>
-                        <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                      <div key={t.tag}>
+                        <button onClick={() => setExpandedTag(expandedTag === `d-${t.tag}` ? null : `d-${t.tag}`)}
+                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                            <span className="text-gray-700">{t.tag}</span>
+                            <span className="text-gray-400">({t.transactions.length})</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                            {expandedTag === `d-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
+                          </div>
+                        </button>
+                        {expandedTag === `d-${t.tag}` && t.transactions.length > 0 && (
+                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                            {t.transactions.map((tx, i) => (
+                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                  <span className="truncate">{tx.description || '—'}</span>
+                                </div>
+                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -273,14 +299,36 @@ export default function DashboardPage() {
                   <span className="text-red-500">▼ {formatCurrency(data.macroGroups.brand.expenses)}</span>
                 </div>
                 {expandedGroup === 'brand' && data.macroGroups.brand.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1.5">
+                  <div className="px-4 pb-4 space-y-1">
                     {data.macroGroups.brand.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                          <span className="text-gray-700">{t.tag}</span>
-                        </div>
-                        <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                      <div key={t.tag}>
+                        <button onClick={() => setExpandedTag(expandedTag === `b-${t.tag}` ? null : `b-${t.tag}`)}
+                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                            <span className="text-gray-700">{t.tag}</span>
+                            <span className="text-gray-400">({t.transactions.length})</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                            {expandedTag === `b-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
+                          </div>
+                        </button>
+                        {expandedTag === `b-${t.tag}` && t.transactions.length > 0 && (
+                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                            {t.transactions.map((tx, i) => (
+                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                  <span className="truncate">{tx.description || '—'}</span>
+                                </div>
+                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -309,14 +357,36 @@ export default function DashboardPage() {
                   <span className="text-red-500">▼ {formatCurrency(data.macroGroups.otros.expenses)}</span>
                 </div>
                 {expandedGroup === 'otros' && data.macroGroups.otros.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1.5">
+                  <div className="px-4 pb-4 space-y-1">
                     {data.macroGroups.otros.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                          <span className="text-gray-700">{t.tag}</span>
-                        </div>
-                        <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                      <div key={t.tag}>
+                        <button onClick={() => setExpandedTag(expandedTag === `o-${t.tag}` ? null : `o-${t.tag}`)}
+                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                            <span className="text-gray-700">{t.tag}</span>
+                            <span className="text-gray-400">({t.transactions.length})</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
+                            {expandedTag === `o-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
+                          </div>
+                        </button>
+                        {expandedTag === `o-${t.tag}` && t.transactions.length > 0 && (
+                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                            {t.transactions.map((tx, i) => (
+                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                  <span className="truncate">{tx.description || '—'}</span>
+                                </div>
+                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -341,23 +411,47 @@ export default function DashboardPage() {
                 {(showAllCaja ? data.caja : data.caja.slice(0, 8)).map(item => {
                   const maxAbs = Math.max(...data.caja.map(c => Math.abs(c.net)), 1);
                   const pct = (Math.abs(item.net) / maxAbs) * 100;
+                  const isExpanded = expandedCajaTag === item.tag;
                   return (
                     <div key={item.tag}>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2.5 h-2.5 rounded-full ${TAG_COLORS[item.tag] || 'bg-gray-400'}`} />
-                          <span className="text-xs font-medium text-gray-700">{item.tag}</span>
+                      <button onClick={() => setExpandedCajaTag(isExpanded ? null : item.tag)}
+                        className="w-full text-left hover:bg-gray-50 rounded-lg p-1 -m-1 transition-colors">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2.5 h-2.5 rounded-full ${TAG_COLORS[item.tag] || 'bg-gray-400'}`} />
+                            <span className="text-xs font-medium text-gray-700">{item.tag}</span>
+                            <span className="text-[10px] text-gray-400">({item.count})</span>
+                            {isExpanded ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
+                          </div>
+                          <span className={`text-sm font-semibold ${item.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {item.net >= 0 ? '+' : ''}{formatCurrency(item.net)}
+                          </span>
                         </div>
-                        <span className={`text-sm font-semibold ${item.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {item.net >= 0 ? '+' : ''}{formatCurrency(item.net)}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${item.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
-                          style={{ width: `${Math.max(pct, 3)}%` }}
-                        />
-                      </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${item.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
+                            style={{ width: `${Math.max(pct, 3)}%` }}
+                          />
+                        </div>
+                      </button>
+                      {isExpanded && item.transactions && item.transactions.length > 0 && (
+                        <div className="ml-5 mt-1.5 mb-1 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                          {item.transactions.map((tx, i) => (
+                            <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                <span className="truncate">{tx.description || '—'}</span>
+                              </div>
+                              <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                              </span>
+                            </div>
+                          ))}
+                          {item.count > 20 && (
+                            <p className="text-[10px] text-gray-400 pt-1">Mostrando 20 de {item.count} movimientos</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

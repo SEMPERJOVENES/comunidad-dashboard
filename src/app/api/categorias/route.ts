@@ -183,16 +183,23 @@ export async function POST(request: NextRequest) {
       if (catError) throw catError;
 
       // Null out manual_tag on affected bank_transactions
-      await supabase.from('bank_transactions')
+      const { count: manualCount } = await supabase.from('bank_transactions')
         .update({ manual_tag: null })
-        .eq('manual_tag', name);
+        .eq('manual_tag', name)
+        .select('id', { count: 'exact', head: true });
 
       // Null out auto_tag on affected bank_transactions
-      await supabase.from('bank_transactions')
+      const { count: autoCount } = await supabase.from('bank_transactions')
         .update({ auto_tag: null })
-        .eq('auto_tag', name);
+        .eq('auto_tag', name)
+        .select('id', { count: 'exact', head: true });
 
-      return NextResponse.json({ success: true });
+      // Also delete associated tagging_rules
+      await supabase.from('tagging_rules')
+        .delete()
+        .eq('category', name);
+
+      return NextResponse.json({ success: true, cleared: { manual: manualCount || 0, auto: autoCount || 0 } });
     }
 
     if (body.action === 'update_category') {

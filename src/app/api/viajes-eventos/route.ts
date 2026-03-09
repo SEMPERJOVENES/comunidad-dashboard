@@ -17,7 +17,7 @@ const ALL_EVENT_TAGS = Object.values(EVENT_CATEGORIES).flat();
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const start = searchParams.get('start') || '2026-01-01';
+    const start = searchParams.get('start') || '2020-01-01';
     const end = searchParams.get('end') || new Date().toISOString().split('T')[0];
 
     const startDate = start.split('T')[0];

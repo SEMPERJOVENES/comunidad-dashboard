@@ -96,10 +96,10 @@ export async function GET() {
       }
     }
 
-    // 6. Get paid Stripe invoices from Jan 2026 for payment history
+    // 6. Get paid Stripe invoices (all history)
     let stripeInvoices: any[] = [];
     try {
-      const jan2026 = new Date('2026-01-01T00:00:00Z');
+      const jan2026 = new Date('2020-01-01T00:00:00Z');
       stripeInvoices = await getInvoices({
         created: { gte: Math.floor(jan2026.getTime() / 1000) },
         status: 'paid',
@@ -146,7 +146,7 @@ export async function GET() {
     let stripeCharges: any[] = [];
     let totalStripeCollected = 0;
     try {
-      const jan2026 = new Date('2026-01-01T00:00:00Z');
+      const jan2026 = new Date('2020-01-01T00:00:00Z');
       stripeCharges = await getCharges({
         created: { gte: Math.floor(jan2026.getTime() / 1000) },
         limit: 100,
