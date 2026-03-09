@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getOrders } from '@/lib/shopify';
 
 // Load tagging rules from Supabase
 async function loadTaggingRules(): Promise<{ keyword: string; category: string }[]> {
@@ -49,12 +50,26 @@ function autoTagTransaction(concept: string, rules: { keyword: string; category:
   return { tag, memberName, isDiezmo };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const year = searchParams.get('year');
+    const includeShopify = searchParams.get('shopify') === '1';
+
+    let query = supabase
       .from('bank_transactions')
       .select('*')
       .order('date', { ascending: false });
+
+    if (year) {
+      query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`);
+    }
+
+    // Fetch bank transactions and tag_categories in parallel
+    const [{ data, error }, { data: tagCategories }] = await Promise.all([
+      query,
+      supabase.from('tag_categories').select('*').order('name'),
+    ]);
 
     if (error) throw error;
 
@@ -69,13 +84,57 @@ export async function GET() {
       manualTag: row.manual_tag,
       isDiezmo: row.is_diezmo,
       memberName: row.member_name,
+      source: 'bank' as const,
     }));
 
-    return NextResponse.json({ transactions });
+    // Fetch Shopify orders if requested
+    let shopifyTransactions: any[] = [];
+    if (includeShopify && year) {
+      try {
+        const orders = await getOrders({
+          created_at_min: `${year}-01-01T00:00:00Z`,
+          created_at_max: `${year}-12-31T23:59:59Z`,
+          status: 'any',
+          limit: 250,
+        });
+        shopifyTransactions = orders.map((o: any) => {
+          const items = (o.line_items || []).map((i: any) => i.title).join(', ');
+          const customerName = o.customer
+            ? `${o.customer.first_name || ''} ${o.customer.last_name || ''}`.trim()
+            : null;
+          return {
+            id: `shopify_${o.id}`,
+            date: o.created_at?.split('T')[0] || '',
+            valueDate: o.created_at?.split('T')[0] || '',
+            concept: `Shopify #${o.order_number || o.name || o.id} — ${items || 'Orden'}`,
+            amount: parseFloat(o.total_price || '0'),
+            balance: 0,
+            autoTag: 'Shopify',
+            manualTag: null,
+            isDiezmo: false,
+            memberName: customerName,
+            source: 'shopify' as const,
+          };
+        });
+      } catch (err) {
+        console.error('Error fetching Shopify orders:', err);
+      }
+    }
+
+    return NextResponse.json({
+      transactions,
+      shopifyTransactions,
+      tagCategories: (tagCategories || []).map((tc: any) => ({
+        id: tc.id,
+        name: tc.name,
+        color: tc.color,
+        macroGroup: tc.macro_group,
+      })),
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     console.error('Error fetching extracto:', message);
-    return NextResponse.json({ transactions: [], error: message });
+    return NextResponse.json({ transactions: [], shopifyTransactions: [], tagCategories: [], error: message });
   }
 }
 
@@ -100,6 +159,7 @@ export async function POST(request: NextRequest) {
           concept: data.concept, amount: parseFloat(data.amount),
           balance: parseFloat(data.balance || 0), autoTag: data.auto_tag,
           manualTag: data.manual_tag, isDiezmo: data.is_diezmo, memberName: data.member_name,
+          source: 'bank',
         },
       });
     }
@@ -158,6 +218,7 @@ export async function POST(request: NextRequest) {
           concept: row.concept, amount: parseFloat(row.amount),
           balance: parseFloat(row.balance || 0), autoTag: row.auto_tag,
           manualTag: row.manual_tag, isDiezmo: row.is_diezmo, memberName: row.member_name,
+          source: 'bank',
         })),
       });
     }

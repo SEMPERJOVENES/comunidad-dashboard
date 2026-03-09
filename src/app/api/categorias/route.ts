@@ -10,12 +10,19 @@ export async function GET(request: NextRequest) {
     const startDate = start.split('T')[0];
     const endDate = end.split('T')[0];
 
-    const { data: bankTxs, error } = await supabase
-      .from('bank_transactions')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: false });
+    // Fetch tag_categories and bank_transactions in parallel
+    const [{ data: bankTxs, error }, { data: tagCategories }] = await Promise.all([
+      supabase
+        .from('bank_transactions')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false }),
+      supabase
+        .from('tag_categories')
+        .select('*')
+        .order('name'),
+    ]);
 
     if (error) throw error;
 
@@ -99,6 +106,12 @@ export async function GET(request: NextRequest) {
         expensesCount: c.expensesCount,
         totalOps: c.incomeCount + c.expensesCount,
       })),
+      tagCategories: (tagCategories || []).map((tc: any) => ({
+        id: tc.id,
+        name: tc.name,
+        color: tc.color,
+        macroGroup: tc.macro_group,
+      })),
       totalIncome,
       totalExpenses,
       net: totalIncome - totalExpenses,
@@ -108,6 +121,98 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Categorías API error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    if (body.action === 'add_category') {
+      const { name, color, macroGroup } = body;
+      if (!name) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+      const { error } = await supabase.from('tag_categories').insert({
+        name: name.trim(),
+        color: color || 'gray',
+        macro_group: macroGroup || 'otros',
+      });
+      if (error) {
+        if (error.code === '23505') return NextResponse.json({ error: 'Ya existe una categoría con ese nombre' }, { status: 400 });
+        throw error;
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'rename_category') {
+      const { oldName, newName } = body;
+      if (!oldName || !newName) return NextResponse.json({ error: 'Nombres requeridos' }, { status: 400 });
+
+      // Update tag_categories
+      const { error: catError } = await supabase.from('tag_categories')
+        .update({ name: newName.trim() })
+        .eq('name', oldName);
+      if (catError) throw catError;
+
+      // Update bank_transactions manual_tag
+      await supabase.from('bank_transactions')
+        .update({ manual_tag: newName.trim() })
+        .eq('manual_tag', oldName);
+
+      // Update bank_transactions auto_tag
+      await supabase.from('bank_transactions')
+        .update({ auto_tag: newName.trim() })
+        .eq('auto_tag', oldName);
+
+      // Update tagging_rules
+      await supabase.from('tagging_rules')
+        .update({ category: newName.trim() })
+        .eq('category', oldName);
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'delete_category') {
+      const { name } = body;
+      if (!name) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+
+      // Delete from tag_categories
+      const { error: catError } = await supabase.from('tag_categories')
+        .delete()
+        .eq('name', name);
+      if (catError) throw catError;
+
+      // Null out manual_tag on affected bank_transactions
+      await supabase.from('bank_transactions')
+        .update({ manual_tag: null })
+        .eq('manual_tag', name);
+
+      // Null out auto_tag on affected bank_transactions
+      await supabase.from('bank_transactions')
+        .update({ auto_tag: null })
+        .eq('auto_tag', name);
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'update_category') {
+      const { name, color, macroGroup } = body;
+      if (!name) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+
+      const updates: Record<string, string> = {};
+      if (color !== undefined) updates.color = color;
+      if (macroGroup !== undefined) updates.macro_group = macroGroup;
+
+      const { error } = await supabase.from('tag_categories')
+        .update(updates)
+        .eq('name', name);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
+  } catch (error: any) {
+    console.error('Categorías POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

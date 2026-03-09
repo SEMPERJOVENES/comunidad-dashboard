@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const endDate = new Date(end).toISOString().split('T')[0];
 
     // Fetch all data in parallel
-    const [orders, stripeVolume, stripeBalance, bankTxsResult] = await Promise.all([
+    const [orders, stripeVolume, stripeBalance, bankTxsResult, tagCatsResult] = await Promise.all([
       getOrders({ created_at_min: start, created_at_max: end, status: 'any', limit: 250 }),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
       getBalance().catch(() => ({ available: 0, pending: 0, currency: 'eur' })),
@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
         .gte('date', startDate)
         .lte('date', endDate)
         .order('date', { ascending: false }),
+      supabase
+        .from('tag_categories')
+        .select('name, macro_group'),
     ]);
 
     const bankTxs = bankTxsResult.data || [];
@@ -36,18 +39,17 @@ export async function GET(request: NextRequest) {
     const totalBankExpenses = bankTxs.filter((tx: any) => parseFloat(tx.amount) < 0).reduce((s: number, tx: any) => s + Math.abs(parseFloat(tx.amount)), 0);
     const bankBalance = bankTxs.length > 0 ? parseFloat(bankTxs[0].balance || '0') : 0; // latest balance
 
-    // === GROUP BY MACRO CATEGORIES ===
-    // Diezmos: etiqueta "Diezmo" o is_diezmo
-    // Semper Brand: etiquetas "Brand", "Shopify", "Stripe", "Venta presencial", "Proveedor", "Semper CD"
-    // Otros: todo lo demás
-
-    const BRAND_TAGS = ['Brand', 'Shopify', 'Venta presencial', 'Proveedor', 'Semper CD'];
-    const DIEZMO_TAGS = ['Diezmo', 'Stripe'];
+    // === GROUP BY MACRO CATEGORIES (dynamic from tag_categories table) ===
+    const tagMacroMap: Record<string, string> = {};
+    for (const tc of (tagCatsResult.data || [])) {
+      tagMacroMap[tc.name] = tc.macro_group;
+    }
 
     function getMacroCategory(tx: any) {
       const tag = tx.manual_tag || tx.auto_tag || '';
-      if (tx.is_diezmo || DIEZMO_TAGS.includes(tag)) return 'diezmos';
-      if (BRAND_TAGS.includes(tag)) return 'brand';
+      if (tx.is_diezmo) return 'diezmos';
+      const macro = tagMacroMap[tag];
+      if (macro) return macro;
       return 'otros';
     }
 

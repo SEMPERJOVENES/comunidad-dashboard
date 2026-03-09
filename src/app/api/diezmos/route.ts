@@ -226,13 +226,29 @@ export async function GET() {
     }
 
     // 10. Get operational expenses covered by diezmos from bank
-    // Tags that represent expenses paid with diezmo money
-    const DIEZMO_EXPENSE_TAGS = ['Música', 'Misa/Tabor', 'Retiros', 'Donativo', 'BAC'];
+    // Tags dinámicos desde tag_categories con macro_group === 'diezmos'
+    const { data: tagCatsData } = await supabase
+      .from('tag_categories')
+      .select('name, macro_group');
+
+    const diezmoTags = new Set<string>();
+    for (const tc of (tagCatsData || [])) {
+      if (tc.macro_group === 'diezmos') {
+        diezmoTags.add(tc.name);
+      }
+    }
+    // Build dynamic OR filter for bank transactions
+    const diezmoTagsList = Array.from(diezmoTags).filter(t => t !== 'Diezmo');
+    const orFilters = ['is_diezmo.eq.true', 'manual_tag.eq.Diezmo', 'auto_tag.eq.Diezmo'];
+    if (diezmoTagsList.length > 0) {
+      orFilters.push(`manual_tag.in.(${diezmoTagsList.join(',')})`);
+      orFilters.push(`auto_tag.in.(${diezmoTagsList.join(',')})`);
+    }
 
     const { data: allDiezmoBankTxs } = await supabase
       .from('bank_transactions')
       .select('*')
-      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo,manual_tag.in.(Música,Misa/Tabor,Retiros,Donativo,BAC),auto_tag.in.(Música,Misa/Tabor,Retiros,Donativo,BAC)');
+      .or(orFilters.join(','));
 
     // Separate income (diezmos received) vs expenses (operational costs)
     const diezmoIncome: { month: string; amount: number; concept: string }[] = [];
@@ -259,7 +275,7 @@ export async function GET() {
           if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
           expensesByMonth[monthKey]['Diezmo (gasto)'] = (expensesByMonth[monthKey]['Diezmo (gasto)'] || 0) + Math.abs(amt);
         }
-      } else if (DIEZMO_EXPENSE_TAGS.includes(tag)) {
+      } else if (diezmoTags.has(tag)) {
         const absAmt = Math.abs(amt);
         diezmoExpenses.push({ month: monthKey, amount: absAmt, concept: tx.concept || '', tag });
         expensesByTag[tag] = (expensesByTag[tag] || 0) + absAmt;

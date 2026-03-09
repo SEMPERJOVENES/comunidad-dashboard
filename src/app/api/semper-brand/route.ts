@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getOrders } from '@/lib/shopify';
 import { supabase } from '@/lib/supabase';
 
-// Etiquetas que NO son de Semper Brand (se excluyen del cálculo)
-const EXCLUDED_TAGS = ['Diezmo', 'Donativo', 'Misa/Tabor', 'BAC', 'Retiros', 'Viajes', 'Música'];
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -34,27 +31,41 @@ export async function GET(request: NextRequest) {
 
     const ventasTotal = (ventas || []).reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
 
-    // 3. Bank transactions (filtrar por fecha y excluir tags no-brand)
+    // 3. Bank transactions — SOLO las categorizadas como "brand" en tag_categories
     const startDate = start.split('T')[0];
     const endDate = end.split('T')[0];
-    const { data: bankTxs } = await supabase
-      .from('bank_transactions')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate);
 
-    // Categorizar transacciones bancarias
+    const [{ data: bankTxs }, { data: tagCats }] = await Promise.all([
+      supabase
+        .from('bank_transactions')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate),
+      supabase
+        .from('tag_categories')
+        .select('name, macro_group'),
+    ]);
+
+    // Construir set de tags que son "brand"
+    const brandTags = new Set<string>();
+    for (const tc of (tagCats || [])) {
+      if (tc.macro_group === 'brand') {
+        brandTags.add(tc.name);
+      }
+    }
+
+    // Categorizar transacciones bancarias — SOLO contar las de macro_group "brand"
     const incomeByTag: Record<string, number> = {};
     const expensesByTag: Record<string, number> = {};
     let totalBankIncome = 0;
     let totalBankExpenses = 0;
 
     for (const tx of (bankTxs || [])) {
-      const tag = tx.manual_tag || tx.auto_tag || 'Sin etiqueta';
+      const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
 
-      // Excluir transacciones de categorías no-brand
-      if (EXCLUDED_TAGS.includes(tag)) continue;
+      // Solo incluir transacciones cuyo tag pertenezca al grupo "brand"
+      if (!brandTags.has(tag)) continue;
 
       if (amount > 0) {
         incomeByTag[tag] = (incomeByTag[tag] || 0) + amount;
@@ -84,8 +95,8 @@ export async function GET(request: NextRequest) {
     }
 
     for (const tx of (bankTxs || [])) {
-      const tag = tx.manual_tag || tx.auto_tag || 'Sin etiqueta';
-      if (EXCLUDED_TAGS.includes(tag)) continue;
+      const tag = tx.manual_tag || tx.auto_tag || '';
+      if (!brandTags.has(tag)) continue;
       const month = new Date(tx.date).toISOString().substring(0, 7);
       const existing = monthlyMap.get(month) || { shopify: 0, ventas: 0, bankIncome: 0, expenses: 0, orders: 0 };
       const amount = parseFloat(tx.amount || '0');
@@ -121,7 +132,7 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    // Totales
+    // Totales — Ingresos Brand = Shopify + Ventas presenciales + Bank (solo tags brand)
     const totalIncome = shopifyRevenue + ventasTotal + totalBankIncome;
     const profit = totalIncome - totalBankExpenses;
     const margin = totalIncome > 0 ? (profit / totalIncome) * 100 : 0;
