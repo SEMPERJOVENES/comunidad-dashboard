@@ -80,17 +80,6 @@ export interface ShopifyRefund {
 }
 
 // Dashboard Types
-export interface KPIData {
-  totalRevenue: number;
-  totalOrders: number;
-  averageOrderValue: number;
-  refundRate: number;
-  newCustomers: number;
-  returningCustomers: number;
-  revenueChange: number;
-  ordersChange: number;
-}
-
 export interface RevenueDataPoint {
   date: string;
   revenue: number;
@@ -103,40 +92,6 @@ export interface TopProduct {
   revenue: number;
   unitsSold: number;
   image?: string;
-}
-
-export interface ProjectTag {
-  id: string;
-  name: string;
-  color: string;
-  rules: TagRule[];
-}
-
-export interface TagRule {
-  type: 'product' | 'collection' | 'tag' | 'custom';
-  field: string;
-  operator: 'contains' | 'equals' | 'starts_with';
-  value: string;
-}
-
-export interface TaggedTransaction {
-  orderId: number;
-  orderName: string;
-  date: string;
-  amount: number;
-  projectTag: string;
-  autoTagged: boolean;
-  reviewed: boolean;
-  reviewedBy?: string;
-  notes?: string;
-}
-
-export interface ProjectSummary {
-  projectName: string;
-  color: string;
-  totalRevenue: number;
-  totalOrders: number;
-  percentage: number;
 }
 
 export type DateRange = {
@@ -179,20 +134,3 @@ export interface BankTransaction {
   memberName?: string;
 }
 
-// Diezmos
-export interface TitheMember {
-  name: string;
-  email?: string;
-  source: 'stripe' | 'banco' | 'ambos';
-  totalPaid: number;
-  payments: TithePayment[];
-  lastPayment?: string;
-  isActive: boolean;
-}
-
-export interface TithePayment {
-  date: string;
-  amount: number;
-  source: 'stripe' | 'banco';
-  reference?: string;
-}

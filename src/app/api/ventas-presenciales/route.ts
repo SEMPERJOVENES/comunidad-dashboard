@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
+
+    let query = supabase
       .from('ventas_presenciales')
       .select('*')
       .order('date', { ascending: false });
+
+    if (start) query = query.gte('date', new Date(start).toISOString());
+    if (end) query = query.lte('date', new Date(end).toISOString());
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

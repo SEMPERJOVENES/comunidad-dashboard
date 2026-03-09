@@ -12,7 +12,7 @@ import { getDateRanges, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
-  Calendar,
+  Calendar, CreditCard,
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -56,7 +56,7 @@ interface DashboardData {
   caja: { tag: string; net: number; count: number; transactions: TagTransaction[] }[];
   cajaMacro: { comunidad: number; brand: number; otros: number };
   stripe: { volume: number; available: number; pending: number };
-  shopify: { revenue: number; orders: number };
+  shopify: { revenue: number; orders: number; stockValue: number; stockCost: number; totalUnits: number; productCount: number };
   revenueData: RevenueDataPoint[];
   topProducts: TopProduct[];
   recentOrders: ShopifyOrder[];
@@ -203,6 +203,33 @@ export default function DashboardPage() {
               </Card>
             </div>
 
+            {/* === STRIPE KPIs === */}
+            {data.stripe && (data.stripe.available > 0 || data.stripe.pending > 0 || data.stripe.volume > 0) && (
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard size={14} className="text-violet-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Stripe Disponible</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-violet-600">{formatCurrency(data.stripe.available)}</p>
+                </Card>
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard size={14} className="text-amber-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Stripe Pendiente</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-amber-600">{formatCurrency(data.stripe.pending)}</p>
+                </Card>
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard size={14} className="text-blue-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Volumen Stripe</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-blue-600">{formatCurrency(data.stripe.volume)}</p>
+                </Card>
+              </div>
+            )}
+
             {/* === DESGLOSE DE CAJA === */}
             {data.cajaMacro && (
               <div className="grid grid-cols-3 gap-3 sm:gap-4">
@@ -223,6 +250,24 @@ export default function DashboardPage() {
                   <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.brand >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
                     {formatCurrency(data.cajaMacro.brand)}
                   </p>
+                  {data.shopify.stockValue > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-500">Stock Valor</span>
+                        <span className="font-semibold text-indigo-600">{formatCurrency(data.shopify.stockValue)}</span>
+                      </div>
+                      {data.shopify.stockCost > 0 && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-gray-500">Stock Coste</span>
+                          <span className="font-semibold text-gray-700">{formatCurrency(data.shopify.stockCost)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-500">Unidades</span>
+                        <span className="font-medium text-gray-600">{data.shopify.totalUnits.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
                 </Card>
                 <Card className="!p-4">
                   <div className="flex items-center gap-2 mb-1">
@@ -313,9 +358,17 @@ export default function DashboardPage() {
                   </div>
                   {expandedGroup === 'brand' ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
                 </button>
-                <div className="px-4 pb-2 flex gap-4 text-xs border-t border-gray-50 pt-2">
+                <div className="px-4 pb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs border-t border-gray-50 pt-2">
                   <span className="text-emerald-600">▲ {formatCurrency(data.macroGroups.brand.income)}</span>
                   <span className="text-red-500">▼ {formatCurrency(data.macroGroups.brand.expenses)}</span>
+                  {data.shopify.stockValue > 0 && (
+                    <>
+                      <span className="text-indigo-600" title="Stock a precio de venta">📦 Valor: {formatCurrency(data.shopify.stockValue)}</span>
+                      {data.shopify.stockCost > 0 && (
+                        <span className="text-gray-500" title="Stock a precio de coste">Coste: {formatCurrency(data.shopify.stockCost)}</span>
+                      )}
+                    </>
+                  )}
                 </div>
                 {expandedGroup === 'brand' && data.macroGroups.brand.tags.length > 0 && (
                   <div className="px-4 pb-4 space-y-1">

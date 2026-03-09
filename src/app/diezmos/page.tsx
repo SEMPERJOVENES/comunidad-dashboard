@@ -7,7 +7,7 @@ import { formatCurrency, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
-  ChevronLeft, ChevronRight, CreditCard, Landmark,
+  ChevronLeft, ChevronRight, CreditCard, Landmark, Link2, Unlink,
   TrendingUp, TrendingDown, Wallet, AlertTriangle, ChevronDown, ChevronUp,
   Users, LayoutGrid, Table2, PieChart, Plus, Minus,
 } from 'lucide-react';
@@ -74,6 +74,16 @@ export default function DiezmosPage() {
   const [nicknameValue, setNicknameValue] = useState('');
   const [showStripeDebug, setShowStripeDebug] = useState(false);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
+  // Reconciliation state
+  const [unmatchedStripe, setUnmatchedStripe] = useState<any[]>([]);
+  const [unmatchedBank, setUnmatchedBank] = useState<any[]>([]);
+  const [bankRules, setBankRules] = useState<any[]>([]);
+  const [linkingStripe, setLinkingStripe] = useState<string | null>(null); // subscriptionId being linked
+  const [linkingBank, setLinkingBank] = useState<string | null>(null); // bank tx id being linked
+  const [selectedMemberForLink, setSelectedMemberForLink] = useState<string>('');
+  const [createBankRuleChecked, setCreateBankRuleChecked] = useState(true);
+  const [creatingFromStripe, setCreatingFromStripe] = useState<any | null>(null);
+  const [newMemberCommunity, setNewMemberCommunity] = useState('San Pablo');
 
   useEffect(() => { fetchDiezmos(); }, [selectedRange]);
 
@@ -92,6 +102,9 @@ export default function DiezmosPage() {
       setSummary(data.summary || null);
       setOpExpenses(data.operationalExpenses || null);
       setStripeDebug(data.stripeDebug || null);
+      setUnmatchedStripe(data.unmatchedStripeSubscribers || []);
+      setUnmatchedBank(data.unmatchedBankTransfers || []);
+      setBankRules(data.bankRules || []);
     } catch {
       setMembers([]);
     } finally {
@@ -137,6 +150,70 @@ export default function DiezmosPage() {
       body: JSON.stringify({ action: 'update_member', id, nickname: nicknameValue }),
     });
     setEditingNickname(null);
+    fetchDiezmos();
+  }
+
+  // ── Reconciliation handlers ──
+  async function handleLinkStripe(sub: any, memberId: string) {
+    if (!memberId) return;
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'link_stripe',
+        memberId,
+        stripeCustomerId: sub.customerId,
+        stripeCustomerEmail: sub.customerEmail,
+      }),
+    });
+    setLinkingStripe(null);
+    setSelectedMemberForLink('');
+    fetchDiezmos();
+  }
+
+  async function handleCreateFromStripe(sub: any, community: string) {
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create_from_stripe',
+        name: sub.customerName,
+        email: sub.customerEmail,
+        community,
+        stripeCustomerId: sub.customerId,
+      }),
+    });
+    setCreatingFromStripe(null);
+    setNewMemberCommunity('San Pablo');
+    fetchDiezmos();
+  }
+
+  async function handleLinkBank(txId: string, memberId: string, concept: string, createRule: boolean) {
+    if (!memberId) return;
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'link_bank_tx', txId, memberId }),
+    });
+    if (createRule && concept) {
+      await fetch('/api/diezmos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_bank_rule', pattern: concept.toLowerCase().trim(), memberId }),
+      });
+    }
+    setLinkingBank(null);
+    setSelectedMemberForLink('');
+    setCreateBankRuleChecked(true);
+    fetchDiezmos();
+  }
+
+  async function handleDeleteBankRule(ruleId: string) {
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_bank_rule', ruleId }),
+    });
     fetchDiezmos();
   }
 
@@ -604,103 +681,276 @@ export default function DiezmosPage() {
           </div>
         ) : view === 'list' ? (
           /* ===================== LIST VIEW ===================== */
-          <Card>
-            <div className="overflow-x-auto -mx-4 sm:-mx-6">
-              <table className="w-full min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/50">
-                    <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Miembro</th>
-                    <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Comunidad</th>
-                    <th className="text-center text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Fuente</th>
-                    <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Este Mes</th>
-                    <th className="text-center text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3 w-24">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedFiltered.map(m => {
-                    const payment = m.payments?.[currentMonth];
-                    return (
-                      <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!payment ? 'opacity-50' : ''}`}>
-                        <td className="px-4 sm:px-6 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${payment ? 'bg-green-100' : 'bg-gray-100'}`}>
-                              <span className={`text-xs font-bold ${payment ? 'text-green-600' : 'text-gray-400'}`}>
-                                {displayName(m).split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
-                              </span>
+          <div className="space-y-4">
+            <Card>
+              <div className="overflow-x-auto -mx-4 sm:-mx-6">
+                <table className="w-full min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/50">
+                      <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Miembro</th>
+                      <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Comunidad</th>
+                      <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Vinculación</th>
+                      <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Este Mes</th>
+                      <th className="text-center text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3 w-24">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedFiltered.map(m => {
+                      const payment = m.payments?.[currentMonth];
+                      const memberBankRules = bankRules.filter((r: any) => r.member_id === m.id);
+                      return (
+                        <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!payment ? 'opacity-50' : ''}`}>
+                          <td className="px-4 sm:px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${payment ? 'bg-green-100' : 'bg-gray-100'}`}>
+                                <span className={`text-xs font-bold ${payment ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {displayName(m).split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{displayName(m)}</p>
+                                {m.nickname && <p className="text-xs text-gray-400">{m.name}</p>}
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{displayName(m)}</p>
-                              {m.nickname && <p className="text-xs text-gray-400">{m.name}</p>}
-                              {m.stripeSubscriptionId && (
-                                <span className="text-[10px] text-blue-500 font-medium flex items-center gap-0.5">
-                                  <CreditCard size={9} /> Stripe activo
+                          </td>
+                          <td className="px-4 sm:px-6 py-3">
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                              m.community === 'San Pablo' ? 'bg-blue-50 text-blue-700' :
+                              m.community === 'San Ignacio' ? 'bg-green-50 text-green-700' :
+                              'bg-orange-50 text-orange-700'
+                            }`}>{m.community}</span>
+                          </td>
+                          <td className="px-4 sm:px-6 py-3">
+                            <div className="flex flex-wrap gap-1.5">
+                              {m.stripe_customer_id && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
+                                  <CreditCard size={9} />
+                                  {m.stripe_customer_email ? m.stripe_customer_email.split('@')[0] : 'Stripe'}
+                                  {m.stripeSubscriptionId && ` · ${formatCurrency(m.stripeAmount || 0)}/mes`}
                                 </span>
                               )}
+                              {memberBankRules.map((rule: any) => (
+                                <span key={rule.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 group">
+                                  <Landmark size={9} />
+                                  &quot;{rule.pattern.length > 20 ? rule.pattern.substring(0, 20) + '…' : rule.pattern}&quot;
+                                  <button onClick={() => handleDeleteBankRule(rule.id)} className="opacity-0 group-hover:opacity-100 ml-0.5 text-red-400 hover:text-red-600 transition-all">
+                                    <X size={8} />
+                                  </button>
+                                </span>
+                              ))}
+                              {!m.stripe_customer_id && memberBankRules.length === 0 && (
+                                <span className="text-xs text-gray-300">—</span>
+                              )}
                             </div>
+                          </td>
+                          <td className="px-4 sm:px-6 py-3 text-right">
+                            {payment ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  payment.source === 'stripe' ? 'bg-blue-50 text-blue-600' :
+                                  payment.source === 'banco' ? 'bg-amber-50 text-amber-600' :
+                                  'bg-violet-50 text-violet-600'
+                                }`}>
+                                  {payment.source === 'stripe' ? <CreditCard size={9} /> :
+                                   payment.source === 'banco' ? <Landmark size={9} /> :
+                                   <Edit3 size={9} />}
+                                </span>
+                                <span className="text-sm font-semibold text-green-600">{formatCurrency(payment.amount)}</span>
+                              </div>
+                            ) : <span className="text-xs text-gray-300">—</span>}
+                          </td>
+                          <td className="px-4 sm:px-6 py-3">
+                            {deletingId === m.id ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button onClick={() => handleDelete(m.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Check size={14} /></button>
+                                <button onClick={() => setDeletingId(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"><X size={14} /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <button onClick={() => { setEditingNickname(m.id); setNicknameValue(m.nickname || ''); }}
+                                  className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Editar apodo">
+                                  <Edit3 size={14} />
+                                </button>
+                                <button onClick={() => setDeletingId(m.id)}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {editingNickname && (
+                <div className="mt-3 p-3 bg-violet-50 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <span className="text-sm text-violet-700 font-medium">Apodo:</span>
+                  <input type="text" value={nicknameValue} onChange={e => setNicknameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveNickname(editingNickname); if (e.key === 'Escape') setEditingNickname(null); }}
+                    placeholder="Ej: Stef, Manu..." autoFocus
+                    className="flex-1 w-full sm:w-auto px-3 py-1.5 text-sm border border-violet-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSaveNickname(editingNickname)} className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded-xl hover:bg-violet-700">Guardar</button>
+                    <button onClick={() => setEditingNickname(null)} className="p-1.5 text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* ⚠️ STRIPE SIN VINCULAR */}
+            {unmatchedStripe.length > 0 && (
+              <Card className="border-2 border-blue-200 bg-blue-50/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Unlink size={16} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-blue-800">Stripe sin vincular ({unmatchedStripe.length})</h3>
+                    <p className="text-[11px] text-blue-500">Suscriptores activos que no están asignados a ningún miembro</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {unmatchedStripe.map((sub: any) => (
+                    <div key={sub.subscriptionId} className="p-3 bg-white rounded-xl border border-blue-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <CreditCard size={14} className="text-blue-500" />
                           </div>
-                        </td>
-                        <td className="px-4 sm:px-6 py-3">
-                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                            m.community === 'San Pablo' ? 'bg-blue-50 text-blue-700' :
-                            m.community === 'San Ignacio' ? 'bg-green-50 text-green-700' :
-                            'bg-orange-50 text-orange-700'
-                          }`}>{m.community}</span>
-                        </td>
-                        <td className="px-4 sm:px-6 py-3 text-center">
-                          {payment ? (
-                            <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              payment.source === 'stripe' ? 'bg-blue-50 text-blue-600' :
-                              payment.source === 'banco' ? 'bg-amber-50 text-amber-600' :
-                              'bg-violet-50 text-violet-600'
-                            }`}>
-                              {payment.source === 'stripe' ? <CreditCard size={10} /> :
-                               payment.source === 'banco' ? <Landmark size={10} /> :
-                               <Edit3 size={10} />}
-                              {payment.source === 'stripe' ? 'Stripe' :
-                               payment.source === 'banco' ? 'Banco' : 'Manual'}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{sub.customerName}</p>
+                            <p className="text-xs text-gray-500">{sub.customerEmail} · {formatCurrency(sub.amount)}/mes</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {linkingStripe === sub.subscriptionId ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <select value={selectedMemberForLink} onChange={e => setSelectedMemberForLink(e.target.value)}
+                                className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Seleccionar miembro...</option>
+                                {members.map((m: any) => (
+                                  <option key={m.id} value={m.id}>{displayName(m)} ({m.community})</option>
+                                ))}
+                              </select>
+                              <div className="flex gap-1">
+                                <button onClick={() => handleLinkStripe(sub, selectedMemberForLink)}
+                                  disabled={!selectedMemberForLink}
+                                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                                  <Link2 size={12} className="inline mr-1" />Vincular
+                                </button>
+                                <button onClick={() => { setLinkingStripe(null); setSelectedMemberForLink(''); }}
+                                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={14} /></button>
+                              </div>
                             </div>
-                          ) : <span className="text-xs text-gray-300">—</span>}
-                        </td>
-                        <td className={`px-4 sm:px-6 py-3 text-right text-sm font-semibold ${payment ? 'text-green-600' : 'text-gray-300'}`}>
-                          {payment ? formatCurrency(payment.amount) : '—'}
-                        </td>
-                        <td className="px-4 sm:px-6 py-3">
-                          {deletingId === m.id ? (
-                            <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => handleDelete(m.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Check size={14} /></button>
-                              <button onClick={() => setDeletingId(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"><X size={14} /></button>
+                          ) : creatingFromStripe?.subscriptionId === sub.subscriptionId ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <select value={newMemberCommunity} onChange={e => setNewMemberCommunity(e.target.value)}
+                                className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                {communities.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <div className="flex gap-1">
+                                <button onClick={() => handleCreateFromStripe(sub, newMemberCommunity)}
+                                  className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors">
+                                  <UserPlus size={12} className="inline mr-1" />Crear
+                                </button>
+                                <button onClick={() => setCreatingFromStripe(null)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={14} /></button>
+                              </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => { setEditingNickname(m.id); setNicknameValue(m.nickname || ''); }}
-                                className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Editar apodo">
-                                <Edit3 size={14} />
+                            <div className="flex gap-1">
+                              <button onClick={() => { setLinkingStripe(sub.subscriptionId); setSelectedMemberForLink(''); }}
+                                className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                                <Link2 size={12} className="inline mr-1" />Vincular
                               </button>
-                              <button onClick={() => setDeletingId(m.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                <Trash2 size={14} />
+                              <button onClick={() => setCreatingFromStripe(sub)}
+                                className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                                <UserPlus size={12} className="inline mr-1" />Crear nuevo
                               </button>
                             </div>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {editingNickname && (
-              <div className="mt-3 p-3 bg-violet-50 rounded-xl flex items-center gap-3">
-                <span className="text-sm text-violet-700 font-medium">Apodo:</span>
-                <input type="text" value={nicknameValue} onChange={e => setNicknameValue(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveNickname(editingNickname); if (e.key === 'Escape') setEditingNickname(null); }}
-                  placeholder="Ej: Stef, Manu..." autoFocus
-                  className="flex-1 px-3 py-1.5 text-sm border border-violet-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                <button onClick={() => handleSaveNickname(editingNickname)} className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded-xl hover:bg-violet-700">Guardar</button>
-                <button onClick={() => setEditingNickname(null)} className="p-1.5 text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* ⚠️ BANCO SIN VINCULAR */}
+            {unmatchedBank.length > 0 && (
+              <Card className="border-2 border-amber-200 bg-amber-50/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <Unlink size={16} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-800">Transferencias sin vincular ({unmatchedBank.length})</h3>
+                    <p className="text-[11px] text-amber-500">Transferencias bancarias marcadas como diezmo sin miembro asignado</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {unmatchedBank.map((tx: any) => (
+                    <div key={tx.id} className="p-3 bg-white rounded-xl border border-amber-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                            <Landmark size={14} className="text-amber-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{tx.concept}</p>
+                            <p className="text-xs text-gray-500">{tx.date} · {formatCurrency(tx.amount)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {linkingBank === tx.id ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <select value={selectedMemberForLink} onChange={e => setSelectedMemberForLink(e.target.value)}
+                                className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                <option value="">Seleccionar miembro...</option>
+                                {members.map((m: any) => (
+                                  <option key={m.id} value={m.id}>{displayName(m)} ({m.community})</option>
+                                ))}
+                              </select>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                                <input type="checkbox" checked={createBankRuleChecked} onChange={e => setCreateBankRuleChecked(e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                                Crear regla
+                              </label>
+                              <div className="flex gap-1">
+                                <button onClick={() => handleLinkBank(tx.id, selectedMemberForLink, tx.concept, createBankRuleChecked)}
+                                  disabled={!selectedMemberForLink}
+                                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                                  <Link2 size={12} className="inline mr-1" />Vincular
+                                </button>
+                                <button onClick={() => { setLinkingBank(null); setSelectedMemberForLink(''); }}
+                                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={14} /></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setLinkingBank(tx.id); setSelectedMemberForLink(''); setCreateBankRuleChecked(true); }}
+                              className="px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
+                              <Link2 size={12} className="inline mr-1" />Vincular a miembro
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* ✅ Todo vinculado */}
+            {unmatchedStripe.length === 0 && unmatchedBank.length === 0 && !loading && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-green-50 rounded-xl border border-green-100">
+                <Check size={16} className="text-green-600" />
+                <p className="text-sm text-green-700 font-medium">Todas las suscripciones Stripe y transferencias bancarias están vinculadas a miembros</p>
               </div>
             )}
-          </Card>
+          </div>
         ) : (
           /* ===================== GRID VIEW ===================== */
           <Card>

@@ -1,6 +1,10 @@
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Falta la variable de entorno STRIPE_SECRET_KEY');
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-02-24.acacia' as any,
 });
 
@@ -35,22 +39,46 @@ export async function getCharges(params: { limit?: number; created?: { gte?: num
     expand: ['data.customer'],
     ...(params.created && { created: params.created }),
   });
-  return charges.data.map((c) => {
-    const customer = c.customer as Stripe.Customer | null;
-    return {
-      id: c.id,
-      amount: c.amount / 100,
-      currency: c.currency,
-      status: c.status,
-      created: new Date(c.created * 1000).toISOString(),
-      description: c.description,
-      paid: c.paid,
-      refunded: c.refunded,
-      disputed: c.disputed,
-      customerName: customer && typeof customer === 'object' ? (customer.name || customer.email || null) : null,
-      customerEmail: customer && typeof customer === 'object' ? (customer.email || null) : null,
-    };
-  });
+  return charges.data.map(mapCharge);
+}
+
+// Fetch ALL charges with auto-pagination (sin límite de 100)
+export async function getAllCharges(params: { created?: { gte?: number; lte?: number } } = {}) {
+  const all: ReturnType<typeof mapCharge>[] = [];
+  let hasMore = true;
+  let startingAfter: string | undefined;
+
+  while (hasMore) {
+    const charges = await stripe.charges.list({
+      limit: 100,
+      expand: ['data.customer'],
+      ...(params.created && { created: params.created }),
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+    all.push(...charges.data.map(mapCharge));
+    hasMore = charges.has_more;
+    if (charges.data.length > 0) {
+      startingAfter = charges.data[charges.data.length - 1].id;
+    }
+  }
+  return all;
+}
+
+function mapCharge(c: Stripe.Charge) {
+  const customer = c.customer as Stripe.Customer | null;
+  return {
+    id: c.id,
+    amount: c.amount / 100,
+    currency: c.currency,
+    status: c.status,
+    created: new Date(c.created * 1000).toISOString(),
+    description: c.description,
+    paid: c.paid,
+    refunded: c.refunded,
+    disputed: c.disputed,
+    customerName: customer && typeof customer === 'object' ? (customer.name || customer.email || null) : null,
+    customerEmail: customer && typeof customer === 'object' ? (customer.email || null) : null,
+  };
 }
 
 export async function getBalanceTransactions(params: { limit?: number; created?: { gte?: number; lte?: number }; type?: string } = {}) {
@@ -59,7 +87,33 @@ export async function getBalanceTransactions(params: { limit?: number; created?:
     ...(params.created && { created: params.created }),
     ...(params.type && { type: params.type }),
   });
-  return txs.data.map((t) => ({
+  return txs.data.map(mapBalanceTx);
+}
+
+// Fetch ALL balance transactions with auto-pagination
+export async function getAllBalanceTransactions(params: { created?: { gte?: number; lte?: number }; type?: string } = {}) {
+  const all: ReturnType<typeof mapBalanceTx>[] = [];
+  let hasMore = true;
+  let startingAfter: string | undefined;
+
+  while (hasMore) {
+    const txs = await stripe.balanceTransactions.list({
+      limit: 100,
+      ...(params.created && { created: params.created }),
+      ...(params.type && { type: params.type }),
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+    all.push(...txs.data.map(mapBalanceTx));
+    hasMore = txs.has_more;
+    if (txs.data.length > 0) {
+      startingAfter = txs.data[txs.data.length - 1].id;
+    }
+  }
+  return all;
+}
+
+function mapBalanceTx(t: Stripe.BalanceTransaction) {
+  return {
     id: t.id,
     amount: t.amount / 100,
     fee: t.fee / 100,
@@ -69,14 +123,14 @@ export async function getBalanceTransactions(params: { limit?: number; created?:
     status: t.status,
     created: new Date(t.created * 1000).toISOString(),
     description: t.description,
-  }));
+  };
 }
 
 export async function getSubscriptions(params: { status?: string; limit?: number } = {}) {
   const subs = await stripe.subscriptions.list({
     limit: params.limit || 100,
     status: (params.status as any) || 'active',
-    expand: ['data.customer', 'data.items.data.price.product'],
+    expand: ['data.customer', 'data.items.data.price'],
   });
   return subs.data.map((s) => {
     const customer = s.customer as Stripe.Customer;
@@ -155,6 +209,46 @@ export async function getPaymentVolume(params: { created?: { gte?: number; lte?:
     }
     if (c.refunded) refunded++;
     if (c.disputed) disputed++;
+  }
+
+  return {
+    volume: volume / 100,
+    count,
+    refunded,
+    disputed,
+    currency: 'eur',
+  };
+}
+
+// Fetch ALL payment volume with auto-pagination (sin límite de 100)
+export async function getAllPaymentVolume(params: { created?: { gte?: number; lte?: number } } = {}) {
+  let volume = 0;
+  let count = 0;
+  let refunded = 0;
+  let disputed = 0;
+  let hasMore = true;
+  let startingAfter: string | undefined;
+
+  while (hasMore) {
+    const charges = await stripe.charges.list({
+      limit: 100,
+      ...(params.created && { created: params.created }),
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+
+    for (const c of charges.data) {
+      if (c.paid) {
+        volume += c.amount;
+        count++;
+      }
+      if (c.refunded) refunded++;
+      if (c.disputed) disputed++;
+    }
+
+    hasMore = charges.has_more;
+    if (charges.data.length > 0) {
+      startingAfter = charges.data[charges.data.length - 1].id;
+    }
   }
 
   return {

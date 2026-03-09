@@ -29,8 +29,12 @@ export default function VentasPresencialesPage() {
     async function fetchData() {
       setLoading(true);
       try {
+        const params = new URLSearchParams({
+          start: selectedRange.startDate.toISOString(),
+          end: selectedRange.endDate.toISOString(),
+        });
         const [salesRes, productsRes] = await Promise.all([
-          fetch('/api/ventas-presenciales'),
+          fetch(`/api/ventas-presenciales?${params}`),
           fetch('/api/shopify/products'),
         ]);
         const salesData = await salesRes.json();
@@ -44,7 +48,7 @@ export default function VentasPresencialesPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [selectedRange]);
 
   function addProduct(product: ShopifyProduct) {
     const existing = items.find(i => i.productId === product.id);

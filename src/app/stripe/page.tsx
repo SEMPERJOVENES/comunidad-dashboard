@@ -40,7 +40,11 @@ export default function StripePage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/stripe?days=30');
+        const params = new URLSearchParams({
+          start: selectedRange.startDate.toISOString(),
+          end: selectedRange.endDate.toISOString(),
+        });
+        const res = await fetch(`/api/stripe?${params}`);
         if (!res.ok) throw new Error('Error al cargar datos de Stripe');
         const json = await res.json();
         setData(json);
@@ -51,7 +55,7 @@ export default function StripePage() {
       }
     }
     fetchData();
-  }, []);
+  }, [selectedRange]);
 
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>

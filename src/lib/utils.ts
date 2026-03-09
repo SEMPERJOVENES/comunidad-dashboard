@@ -81,35 +81,3 @@ export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ');
 }
 
-export function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    paid: 'bg-green-100 text-green-800',
-    pending: 'bg-yellow-100 text-yellow-800',
-    refunded: 'bg-red-100 text-red-800',
-    partially_refunded: 'bg-orange-100 text-orange-800',
-    voided: 'bg-gray-100 text-gray-800',
-    authorized: 'bg-blue-100 text-blue-800',
-  };
-  return colors[status] || 'bg-gray-100 text-gray-800';
-}
-
-export function getFulfillmentColor(status: string | null): string {
-  if (!status) return 'bg-gray-100 text-gray-800';
-  const colors: Record<string, string> = {
-    fulfilled: 'bg-green-100 text-green-800',
-    partial: 'bg-yellow-100 text-yellow-800',
-    unfulfilled: 'bg-red-100 text-red-800',
-    restocked: 'bg-blue-100 text-blue-800',
-  };
-  return colors[status] || 'bg-gray-100 text-gray-800';
-}
-
-const PROJECT_COLORS = [
-  '#8B5CF6', '#EC4899', '#F59E0B', '#10B981',
-  '#3B82F6', '#EF4444', '#6366F1', '#14B8A6',
-  '#F97316', '#8B5CF6', '#06B6D4', '#84CC16',
-];
-
-export function getProjectColor(index: number): string {
-  return PROJECT_COLORS[index % PROJECT_COLORS.length];
-}

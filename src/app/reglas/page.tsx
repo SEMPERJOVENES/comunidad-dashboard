@@ -9,7 +9,7 @@ import { DateRange } from '@/lib/types';
 import { BookOpen, Plus, Trash2, Search, Loader2, ArrowLeft, Edit3, Check, X } from 'lucide-react';
 import Link from 'next/link';
 
-const DEFAULT_CATEGORIES = [
+const FALLBACK_CATEGORIES = [
   'Diezmo', 'Brand', 'Donativo', 'Misa/Tabor', 'Retiros',
   'Viajes', 'Material', 'Música', 'Semper CD', 'BAC',
   'Gastos Varios', 'Stripe', 'Shopify', 'Bizum', 'Transferencia',
@@ -26,6 +26,7 @@ export default function ReglasPage() {
   const ranges = getDateRanges();
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
@@ -35,11 +36,11 @@ export default function ReglasPage() {
 
   const allCategories = useMemo(() => {
     const fromRules = rules.map(r => r.category);
-    const merged = new Set([...DEFAULT_CATEGORIES, ...fromRules]);
+    const merged = new Set([...FALLBACK_CATEGORIES, ...dbCategories, ...fromRules]);
     return Array.from(merged).sort();
-  }, [rules]);
+  }, [rules, dbCategories]);
 
-  useEffect(() => { fetchRules(); }, []);
+  useEffect(() => { fetchRules(); fetchCategories(); }, []);
 
   async function fetchRules() {
     setLoading(true);
@@ -52,6 +53,16 @@ export default function ReglasPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function fetchCategories() {
+    try {
+      const res = await fetch('/api/categorias?start=2020-01-01&end=2099-12-31');
+      const data = await res.json();
+      if (data.tagCategories) {
+        setDbCategories(data.tagCategories.map((tc: any) => tc.name));
+      }
+    } catch { /* fallback to FALLBACK_CATEGORIES */ }
   }
 
   async function handleAdd() {

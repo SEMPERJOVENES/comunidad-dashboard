@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrders } from '@/lib/shopify';
+import { getOrders, getStockValuation } from '@/lib/shopify';
 import { getPaymentVolume, getBalance } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const endDate = new Date(end).toISOString().split('T')[0];
 
     // Fetch all data in parallel
-    const [orders, stripeVolume, stripeBalance, bankTxsResult, tagCatsResult] = await Promise.all([
+    const [orders, stripeVolume, stripeBalance, bankTxsResult, tagCatsResult, stockData] = await Promise.all([
       getOrders({ created_at_min: start, created_at_max: end, status: 'any', limit: 250 }),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
       getBalance().catch(() => ({ available: 0, pending: 0, currency: 'eur' })),
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from('tag_categories')
         .select('name, macro_group'),
+      getStockValuation().catch(() => ({ stockValue: 0, stockCost: 0, totalUnits: 0, productCount: 0 })),
     ]);
 
     const bankTxs = bankTxsResult.data || [];
@@ -37,7 +38,14 @@ export async function GET(request: NextRequest) {
     // === GLOBAL FINANCIALS from bank transactions ===
     const totalBankIncome = bankTxs.filter((tx: any) => parseFloat(tx.amount) > 0).reduce((s: number, tx: any) => s + parseFloat(tx.amount), 0);
     const totalBankExpenses = bankTxs.filter((tx: any) => parseFloat(tx.amount) < 0).reduce((s: number, tx: any) => s + Math.abs(parseFloat(tx.amount)), 0);
-    const bankBalance = bankTxs.length > 0 ? parseFloat(bankTxs[0].balance || '0') : 0; // latest balance
+
+    // Bank balance: get latest transaction globally (not filtered by date range)
+    const { data: latestBankTx } = await supabase
+      .from('bank_transactions')
+      .select('balance')
+      .order('date', { ascending: false })
+      .limit(1);
+    const bankBalance = latestBankTx && latestBankTx.length > 0 ? parseFloat(latestBankTx[0].balance || '0') : 0;
 
     // === GROUP BY MACRO CATEGORIES (dynamic from tag_categories table) ===
     const tagMacroMap: Record<string, string> = {};
@@ -200,6 +208,10 @@ export async function GET(request: NextRequest) {
       shopify: {
         revenue: shopifyRevenue,
         orders: shopifyOrders,
+        stockValue: stockData.stockValue,
+        stockCost: stockData.stockCost,
+        totalUnits: stockData.totalUnits,
+        productCount: stockData.productCount,
       },
       // Charts & details
       revenueData,

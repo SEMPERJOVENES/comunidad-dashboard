@@ -54,7 +54,32 @@ export default function OrdersPage() {
             <h1 className="text-xl font-bold text-gray-900">Órdenes</h1>
             <p className="text-sm text-gray-500">{orders.length} órdenes de Shopify</p>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors">
+          <button
+            onClick={() => {
+              if (filteredOrders.length === 0) return;
+              const headers = ['Orden', 'Cliente', 'Email', 'Fecha', 'Pago', 'Envío', 'Tags', 'Total'];
+              const rows = filteredOrders.map(o => [
+                o.name,
+                o.customer ? `${o.customer.first_name} ${o.customer.last_name}` : 'Sin cliente',
+                o.email || '',
+                new Date(o.created_at).toLocaleDateString('es-ES'),
+                o.financial_status,
+                o.fulfillment_status || 'pendiente',
+                (o.tags || '').replace(/,/g, ';'),
+                parseFloat(o.total_price).toFixed(2),
+              ]);
+              const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+              const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `ordenes-${new Date().toISOString().split('T')[0]}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            disabled={filteredOrders.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+          >
             <Download size={16} />
             Exportar
           </button>

@@ -8,25 +8,17 @@ function normalize(name: string) {
     .replace(/[^a-z\s]/g, '').trim();
 }
 
-// Fuzzy matching: compara palabras individuales entre dos nombres
-// Devuelve true si al menos 2 palabras coinciden, o si un nombre corto (1 palabra) coincide con alguna palabra del otro
 function fuzzyNameMatch(nameA: string, nameB: string): boolean {
   const wordsA = normalize(nameA).split(/\s+/).filter(w => w.length > 2);
   const wordsB = normalize(nameB).split(/\s+/).filter(w => w.length > 2);
   if (wordsA.length === 0 || wordsB.length === 0) return false;
 
-  // Exact substring match (existing logic)
   const nA = normalize(nameA);
   const nB = normalize(nameB);
   if (nA.includes(nB) || nB.includes(nA)) return true;
 
-  // Word overlap: count matching words
   const matchingWords = wordsA.filter(wa => wordsB.some(wb => wa === wb || wa.includes(wb) || wb.includes(wa)));
-
-  // Si un nombre es solo 1 palabra (apodo), basta con que coincida con alguna palabra
   if (wordsA.length === 1 || wordsB.length === 1) return matchingWords.length >= 1;
-
-  // Para nombres con 2+ palabras, al menos 2 palabras deben coincidir
   return matchingWords.length >= 2;
 }
 
@@ -41,40 +33,42 @@ export async function GET(request: import('next/server').NextRequest) {
     const startParam = searchParams.get('start');
     const endParam = searchParams.get('end');
 
-    // Date range for filtering
     const startDate = startParam ? new Date(startParam).toISOString().split('T')[0] : null;
     const endDate = endParam ? new Date(endParam).toISOString().split('T')[0] : null;
 
-    // Stripe timestamps for filtering
     const stripeStartTs = startParam ? Math.floor(new Date(startParam).getTime() / 1000) : Math.floor(new Date('2020-01-01').getTime() / 1000);
     const stripeEndTs = endParam ? Math.floor(new Date(endParam).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
-    // 1. Get members from Supabase
-    const { data: membersData, error: membersErr } = await supabase
-      .from('diezmos_members')
-      .select('*')
-      .order('name');
+    // ── 1. Fetch all DB data in parallel ───────────────────────────────
+    const [
+      { data: membersData, error: membersErr },
+      { data: commData, error: commErr },
+      { data: paymentsData, error: paymentsErr },
+      { data: bankRulesData },
+    ] = await Promise.all([
+      supabase.from('diezmos_members').select('*').order('name'),
+      supabase.from('diezmos_communities').select('*').order('name'),
+      supabase.from('diezmos_payments').select('*'),
+      supabase.from('diezmos_bank_rules').select('*'),
+    ]);
     if (membersErr) throw membersErr;
-
-    // 2. Get communities from Supabase
-    const { data: commData, error: commErr } = await supabase
-      .from('diezmos_communities')
-      .select('*')
-      .order('name');
     if (commErr) throw commErr;
-
-    // 3. Get payments from Supabase
-    const { data: paymentsData, error: paymentsErr } = await supabase
-      .from('diezmos_payments')
-      .select('*');
     if (paymentsErr) throw paymentsErr;
 
     const communities = (commData || []).map((c: any) => c.name);
+    const bankRules = bankRulesData || [];
+
+    // Build members array with their existing payments and persistent Stripe link
     const members = (membersData || []).map((m: any) => {
       const memberPayments: Record<string, { amount: number; source: string }> = {};
       (paymentsData || []).filter((p: any) => p.member_id === m.id).forEach((p: any) => {
         memberPayments[p.month] = { amount: parseFloat(p.amount), source: p.source };
       });
+      // Bank rules linked to this member
+      const memberBankRules = bankRules.filter((r: any) => r.member_id === m.id).map((r: any) => ({
+        id: r.id,
+        pattern: r.pattern,
+      }));
       return {
         id: m.id,
         name: m.name,
@@ -82,56 +76,92 @@ export async function GET(request: import('next/server').NextRequest) {
         community: m.community,
         email: m.email,
         isActive: m.is_active,
+        stripeCustomerId: m.stripe_customer_id || null,
+        stripeCustomerEmail: m.stripe_customer_email || null,
         stripeSubscriptionId: m.stripe_subscription_id,
         stripeAmount: m.stripe_amount ? parseFloat(m.stripe_amount) : null,
         stripeInterval: m.stripe_interval,
         payments: memberPayments,
+        bankRules: memberBankRules,
       };
     });
 
-    // 4. Get ALL Stripe subscriptions (sin filtrar por nombre de producto)
+    // ── 2. Stripe subscriptions ────────────────────────────────────────
     let stripeSubs: any[] = [];
     try {
-      const allSubs = await getSubscriptions({ status: 'active', limit: 100 });
-      stripeSubs = allSubs;
+      stripeSubs = await getSubscriptions({ status: 'active', limit: 100 });
     } catch (e) {
       console.error('Error fetching Stripe subscriptions:', e);
     }
 
-    // 5. Match Stripe subscriptions to members by name/email
+    // ── 3. Match Stripe subs → members (persistent-first) ──────────────
     const matchedSubIds = new Set<string>();
+    const unmatchedStripeSubscribers: any[] = [];
 
     for (const sub of stripeSubs) {
-      const subName = normalize(sub.customerName || '');
+      const customerId = sub.customerId || '';
       const subEmail = (sub.customerEmail || '').toLowerCase();
 
-      const matched = members.find((m: any) => {
-        if (m.stripeSubscriptionId === sub.id) return true;
-        if (m.email && m.email.toLowerCase() === subEmail) return true;
+      // Priority 1: Match by persistent stripe_customer_id
+      let matched = members.find((m: any) => m.stripeCustomerId && m.stripeCustomerId === customerId);
+
+      // Priority 2: Match by stripe_customer_email
+      if (!matched) {
+        matched = members.find((m: any) => m.stripeCustomerEmail && m.stripeCustomerEmail.toLowerCase() === subEmail && subEmail);
+      }
+
+      // Priority 3: Match by member email
+      if (!matched) {
+        matched = members.find((m: any) => m.email && m.email.toLowerCase() === subEmail && subEmail);
+      }
+
+      // Priority 4: Match by existing stripe_subscription_id
+      if (!matched) {
+        matched = members.find((m: any) => m.stripeSubscriptionId === sub.id);
+      }
+
+      // Priority 5: Fuzzy name match
+      if (!matched) {
         const custName = sub.customerName || '';
-        if (fuzzyNameMatch(m.name, custName)) return true;
-        if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
-        return false;
-      });
+        matched = members.find((m: any) => {
+          if (fuzzyNameMatch(m.name, custName)) return true;
+          if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
+          return false;
+        });
+      }
 
       if (matched) {
         matched.stripeSubscriptionId = sub.id;
         matched.stripeAmount = sub.amount;
         matched.stripeInterval = sub.interval;
+        matched.stripeCustomerId = customerId;
+        matched.stripeCustomerEmail = sub.customerEmail || matched.stripeCustomerEmail;
         matched.email = sub.customerEmail || matched.email;
         matchedSubIds.add(sub.id);
 
-        // Update Stripe info in DB
+        // Persist the link in DB
         await supabase.from('diezmos_members').update({
           stripe_subscription_id: sub.id,
           stripe_amount: sub.amount,
           stripe_interval: sub.interval,
+          stripe_customer_id: customerId,
+          stripe_customer_email: sub.customerEmail || matched.email,
           email: sub.customerEmail || matched.email,
         }).eq('id', matched.id);
+      } else {
+        unmatchedStripeSubscribers.push({
+          subscriptionId: sub.id,
+          customerId,
+          customerName: sub.customerName,
+          customerEmail: sub.customerEmail,
+          amount: sub.amount,
+          interval: sub.interval,
+          productName: sub.productName,
+        });
       }
     }
 
-    // 6. Get paid Stripe invoices (filtered by date range)
+    // ── 4. Stripe invoices → member payments ───────────────────────────
     let stripeInvoices: any[] = [];
     try {
       stripeInvoices = await getInvoices({
@@ -143,19 +173,25 @@ export async function GET(request: import('next/server').NextRequest) {
       console.error('Error fetching Stripe invoices:', e);
     }
 
-    // 7. Map invoices to member payments by month
     for (const inv of stripeInvoices) {
       if (inv.amount <= 0) continue;
 
-      const matched = members.find((m: any) => {
-        if (m.stripeSubscriptionId && inv.subscriptionId === m.stripeSubscriptionId) return true;
+      // Match by subscription_id first (most reliable after linking)
+      let matched = members.find((m: any) =>
+        m.stripeSubscriptionId && inv.subscriptionId === m.stripeSubscriptionId
+      );
+
+      if (!matched) {
         const invEmail = (inv.customerEmail || '').toLowerCase();
-        if (m.email && m.email.toLowerCase() === invEmail) return true;
-        const custName = inv.customerName || '';
-        if (fuzzyNameMatch(m.name, custName)) return true;
-        if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
-        return false;
-      });
+        matched = members.find((m: any) => {
+          if (m.stripeCustomerEmail && m.stripeCustomerEmail.toLowerCase() === invEmail) return true;
+          if (m.email && m.email.toLowerCase() === invEmail) return true;
+          const custName = inv.customerName || '';
+          if (fuzzyNameMatch(m.name, custName)) return true;
+          if (m.nickname && fuzzyNameMatch(m.nickname, custName)) return true;
+          return false;
+        });
+      }
 
       if (matched) {
         const monthKey = getMonthKey(inv.periodStart || inv.created);
@@ -177,7 +213,7 @@ export async function GET(request: import('next/server').NextRequest) {
       }
     }
 
-    // 7b. Fetch ALL Stripe charges with auto-pagination (290+)
+    // ── 5. Stripe charges (all, with brand sales separation) ───────────
     let stripeCharges: any[] = [];
     let totalStripeCollected = 0;
     const brandSales: { amount: number; customerName: string; customerEmail: string; created: string; description: string }[] = [];
@@ -194,7 +230,6 @@ export async function GET(request: import('next/server').NextRequest) {
       if (!charge.paid || charge.refunded || charge.amount <= 0) continue;
       totalStripeCollected += charge.amount;
 
-      // Si NO tiene descripción de suscripción y NO tiene customer name (invitado) → venta Brand
       const isSubscription = (charge.description || '').toLowerCase().includes('subscription');
       const isGuest = !charge.customerName && !charge.customerEmail;
 
@@ -207,13 +242,14 @@ export async function GET(request: import('next/server').NextRequest) {
           description: charge.description || '',
         });
         totalBrandSales += charge.amount;
-        continue; // No es diezmo, es venta de brand
+        continue;
       }
 
-      // Intentar match con miembros (diezmo)
+      // Try matching charges to members for additional payments
       const matched = members.find((m: any) => {
         if (!charge.customerName && !charge.customerEmail) return false;
         const chargeEmail = (charge.customerEmail || '').toLowerCase();
+        if (m.stripeCustomerEmail && m.stripeCustomerEmail.toLowerCase() === chargeEmail) return true;
         if (m.email && m.email.toLowerCase() === chargeEmail) return true;
         const custName = charge.customerName || '';
         if (fuzzyNameMatch(m.name, custName)) return true;
@@ -224,7 +260,6 @@ export async function GET(request: import('next/server').NextRequest) {
       if (matched) {
         const monthKey = getMonthKey(charge.created);
         const existing = matched.payments[monthKey];
-
         if (!existing) {
           matched.payments[monthKey] = { amount: charge.amount, source: 'stripe' };
           await supabase.from('diezmos_payments').upsert({
@@ -238,9 +273,10 @@ export async function GET(request: import('next/server').NextRequest) {
       }
     }
 
-    // 7c. Calculate Stripe commission from balance transactions
+    // ── 6. Stripe commission (distributed by actual month) ────────────
     let stripeCommission = 0;
     let totalStripeTransferred = 0;
+    const feeByMonth: Record<string, number> = {};
     try {
       const balanceTxs = await getAllBalanceTransactions({
         created: { gte: stripeStartTs, lte: stripeEndTs },
@@ -248,16 +284,16 @@ export async function GET(request: import('next/server').NextRequest) {
       for (const tx of balanceTxs) {
         if (tx.type === 'charge') {
           stripeCommission += tx.fee;
+          const txMonth = getMonthKey(tx.created);
+          feeByMonth[txMonth] = (feeByMonth[txMonth] || 0) + tx.fee;
         }
-        if (tx.type === 'payout') {
-          totalStripeTransferred += Math.abs(tx.amount);
-        }
+        if (tx.type === 'payout') totalStripeTransferred += Math.abs(tx.amount);
       }
     } catch (e) {
       console.error('Error fetching Stripe balance transactions:', e);
     }
 
-    // 8. Get bank diezmo transactions (filtered by date)
+    // ── 7. Bank diezmo transactions ────────────────────────────────────
     let bankDiezmosQuery = supabase
       .from('bank_transactions')
       .select('*')
@@ -266,20 +302,41 @@ export async function GET(request: import('next/server').NextRequest) {
     if (endDate) bankDiezmosQuery = bankDiezmosQuery.lte('date', endDate);
     const { data: bankDiezmos } = await bankDiezmosQuery;
 
-    // 9. Match bank transactions to members (fuzzy matching con nicknames)
+    // ── 8. Match bank transactions → members (rules-first, then fuzzy) ─
+    const unmatchedBankTransfers: any[] = [];
+
     for (const tx of (bankDiezmos || [])) {
       const txName = tx.member_name || tx.concept || '';
       const monthKey = getMonthKey(tx.date);
+      const amt = Math.abs(parseFloat(tx.amount));
+      if (amt <= 0) continue;
 
-      const matched = members.find((m: any) => {
-        if (fuzzyNameMatch(m.name, txName)) return true;
-        if (m.nickname && fuzzyNameMatch(m.nickname, txName)) return true;
-        return false;
-      });
+      // Only match positive amounts (income from transfers)
+      if (parseFloat(tx.amount) <= 0) continue;
+
+      // Priority 1: Match by bank rules
+      let matched: any = null;
+      const normalizedConcept = normalize(txName);
+
+      for (const rule of bankRules) {
+        const normalizedPattern = normalize(rule.pattern);
+        if (normalizedConcept.includes(normalizedPattern) || normalizedPattern.includes(normalizedConcept)) {
+          matched = members.find((m: any) => m.id === rule.member_id);
+          break;
+        }
+      }
+
+      // Priority 2: Fuzzy name match
+      if (!matched) {
+        matched = members.find((m: any) => {
+          if (fuzzyNameMatch(m.name, txName)) return true;
+          if (m.nickname && fuzzyNameMatch(m.nickname, txName)) return true;
+          return false;
+        });
+      }
 
       if (matched) {
         const existing = matched.payments[monthKey];
-        const amt = Math.abs(parseFloat(tx.amount));
         if (existing) {
           if (existing.source !== 'banco') {
             matched.payments[monthKey] = {
@@ -298,22 +355,28 @@ export async function GET(request: import('next/server').NextRequest) {
           amount: matched.payments[monthKey].amount,
           source: matched.payments[monthKey].source,
         }, { onConflict: 'member_id,month' });
+      } else {
+        unmatchedBankTransfers.push({
+          id: tx.id,
+          date: tx.date,
+          concept: tx.concept,
+          memberName: tx.member_name,
+          amount: amt,
+          month: monthKey,
+        });
       }
     }
 
-    // 10. Get operational expenses covered by diezmos from bank
-    // Tags dinámicos desde tag_categories con macro_group === 'diezmos'
+    // ── 9. Operational expenses ────────────────────────────────────────
     const { data: tagCatsData } = await supabase
       .from('tag_categories')
       .select('name, macro_group');
 
     const diezmoTags = new Set<string>();
     for (const tc of (tagCatsData || [])) {
-      if (tc.macro_group === 'diezmos') {
-        diezmoTags.add(tc.name);
-      }
+      if (tc.macro_group === 'diezmos') diezmoTags.add(tc.name);
     }
-    // Build dynamic OR filter for bank transactions
+
     const diezmoTagsList = Array.from(diezmoTags).filter(t => t !== 'Diezmo');
     const orFilters = ['is_diezmo.eq.true', 'manual_tag.eq.Diezmo', 'auto_tag.eq.Diezmo'];
     if (diezmoTagsList.length > 0) {
@@ -329,7 +392,6 @@ export async function GET(request: import('next/server').NextRequest) {
     if (endDate) allDiezmoQuery = allDiezmoQuery.lte('date', endDate);
     const { data: allDiezmoBankTxs } = await allDiezmoQuery;
 
-    // Separate income (diezmos received) vs expenses (operational costs)
     const diezmoIncome: { month: string; amount: number; concept: string }[] = [];
     const diezmoExpenses: { month: string; amount: number; concept: string; tag: string }[] = [];
     const expensesByTag: Record<string, number> = {};
@@ -347,7 +409,6 @@ export async function GET(request: import('next/server').NextRequest) {
           diezmoIncome.push({ month: monthKey, amount: amt, concept: tx.concept || '' });
           totalDiezmoIncome += amt;
         } else {
-          // Negative diezmo-tagged = expense
           diezmoExpenses.push({ month: monthKey, amount: Math.abs(amt), concept: tx.concept || '', tag: 'Diezmo (gasto)' });
           expensesByTag['Diezmo (gasto)'] = (expensesByTag['Diezmo (gasto)'] || 0) + Math.abs(amt);
           totalDiezmoExpenses += Math.abs(amt);
@@ -355,7 +416,6 @@ export async function GET(request: import('next/server').NextRequest) {
           expensesByMonth[monthKey]['Diezmo (gasto)'] = (expensesByMonth[monthKey]['Diezmo (gasto)'] || 0) + Math.abs(amt);
         }
       } else if (diezmoTags.has(tag)) {
-        // Donativo con importe positivo es ingreso, no gasto
         const isIncomeTag = tag === 'Donativo';
         if (isIncomeTag && amt > 0) {
           diezmoIncome.push({ month: monthKey, amount: amt, concept: tx.concept || '' });
@@ -371,17 +431,23 @@ export async function GET(request: import('next/server').NextRequest) {
       }
     }
 
-    // Monthly totals for chart
-    const incomeByMonth: Record<string, number> = {};
-    for (const d of diezmoIncome) {
-      incomeByMonth[d.month] = (incomeByMonth[d.month] || 0) + d.amount;
-    }
-    const expTotalByMonth: Record<string, number> = {};
-    for (const d of diezmoExpenses) {
-      expTotalByMonth[d.month] = (expTotalByMonth[d.month] || 0) + d.amount;
+    // Stripe commission as expense (distributed by actual month)
+    if (stripeCommission > 0) {
+      expensesByTag['Comisión Stripe'] = stripeCommission;
+      totalDiezmoExpenses += stripeCommission;
+      for (const [feeMonth, feeAmount] of Object.entries(feeByMonth)) {
+        if (!expensesByMonth[feeMonth]) expensesByMonth[feeMonth] = {};
+        expensesByMonth[feeMonth]['Comisión Stripe'] = (expensesByMonth[feeMonth]['Comisión Stripe'] || 0) + feeAmount;
+        diezmoExpenses.push({ month: feeMonth, amount: feeAmount, concept: `Comisión Stripe (${feeMonth})`, tag: 'Comisión Stripe' });
+      }
     }
 
-    // Build monthly chart data
+    // Monthly chart
+    const incomeByMonth: Record<string, number> = {};
+    for (const d of diezmoIncome) incomeByMonth[d.month] = (incomeByMonth[d.month] || 0) + d.amount;
+    const expTotalByMonth: Record<string, number> = {};
+    for (const d of diezmoExpenses) expTotalByMonth[d.month] = (expTotalByMonth[d.month] || 0) + d.amount;
+
     const allMonthKeys = new Set([...Object.keys(incomeByMonth), ...Object.keys(expTotalByMonth)]);
     const monthlyChart = Array.from(allMonthKeys).sort().map(m => ({
       month: m,
@@ -390,7 +456,7 @@ export async function GET(request: import('next/server').NextRequest) {
       net: (incomeByMonth[m] || 0) - (expTotalByMonth[m] || 0),
     }));
 
-    // 11. Build summary
+    // ── 10. Summary ────────────────────────────────────────────────────
     const currentMonth = getMonthKey(new Date());
     const communityStats = communities.map((c: string) => {
       const cmembers = members.filter((m: any) => m.community === c);
@@ -411,34 +477,16 @@ export async function GET(request: import('next/server').NextRequest) {
       return p && (p.source === 'banco' || p.source === 'ambos');
     }).length;
 
-    // Calculate total Stripe diezmo revenue from members' payments
     const totalStripeFromPayments = members.reduce((sum: number, m: any) => {
       return sum + Object.values(m.payments as Record<string, { amount: number; source: string }>)
         .filter(p => p.source === 'stripe' || p.source === 'ambos')
         .reduce((s, p) => s + p.amount, 0);
     }, 0);
 
-    // Add Stripe commission as operational expense
-    if (stripeCommission > 0) {
-      expensesByTag['Comisión Stripe'] = stripeCommission;
-      totalDiezmoExpenses += stripeCommission;
-      // Distribute commission across months proportionally (simplification: put in current range)
-      const commMonthKey = getMonthKey(new Date());
-      if (!expensesByMonth[commMonthKey]) expensesByMonth[commMonthKey] = {};
-      expensesByMonth[commMonthKey]['Comisión Stripe'] = stripeCommission;
-      diezmoExpenses.push({ month: commMonthKey, amount: stripeCommission, concept: 'Comisión Stripe (fees de todas las transacciones)', tag: 'Comisión Stripe' });
-    }
-
-    // Stripe debug info
     const stripeDebug = {
       totalSubsFetched: stripeSubs.length,
       matchedToMembers: matchedSubIds.size,
-      unmatchedSubs: stripeSubs.filter(s => !matchedSubIds.has(s.id)).map(s => ({
-        name: s.customerName,
-        email: s.customerEmail,
-        amount: s.amount,
-        product: s.productName,
-      })),
+      unmatchedSubs: unmatchedStripeSubscribers,
       totalInvoicesFetched: stripeInvoices.length,
       totalChargesFetched: stripeCharges.length,
       totalStripeCollected,
@@ -453,6 +501,10 @@ export async function GET(request: import('next/server').NextRequest) {
       members,
       communities,
       communityStats,
+      // NEW: Unmatched data for reconciliation UI
+      unmatchedStripeSubscribers,
+      unmatchedBankTransfers: unmatchedBankTransfers.sort((a, b) => b.date.localeCompare(a.date)),
+      bankRules,
       summary: {
         totalMensual,
         totalMembers: members.length,
@@ -467,7 +519,6 @@ export async function GET(request: import('next/server').NextRequest) {
         stripeCommission,
         totalStripeTransferred,
       },
-      // Operational expenses section
       operationalExpenses: {
         totalIncome: totalDiezmoIncome,
         totalExpenses: totalDiezmoExpenses,
@@ -477,7 +528,6 @@ export async function GET(request: import('next/server').NextRequest) {
         monthlyChart,
         recentExpenses: diezmoExpenses.sort((a, b) => b.month.localeCompare(a.month)).slice(0, 20),
       },
-      // Brand sales (pagos de invitados en Stripe, no diezmos)
       brandSales: {
         total: totalBrandSales,
         count: brandSales.length,
@@ -496,6 +546,8 @@ export async function POST(request: import('next/server').NextRequest) {
   try {
     const body = await request.json();
 
+    // ── Existing actions ───────────────────────────────────────────────
+
     if (body.action === 'add_member') {
       const id = `m${Date.now()}`;
       const { error } = await supabase.from('diezmos_members').insert({
@@ -511,10 +563,7 @@ export async function POST(request: import('next/server').NextRequest) {
     }
 
     if (body.action === 'delete_member') {
-      const { error } = await supabase
-        .from('diezmos_members')
-        .delete()
-        .eq('id', body.id);
+      const { error } = await supabase.from('diezmos_members').delete().eq('id', body.id);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
@@ -526,11 +575,7 @@ export async function POST(request: import('next/server').NextRequest) {
       if (body.community !== undefined) updates.community = body.community;
       if (body.email !== undefined) updates.email = body.email;
       if (body.isActive !== undefined) updates.is_active = body.isActive;
-
-      const { error } = await supabase
-        .from('diezmos_members')
-        .update(updates)
-        .eq('id', body.id);
+      const { error } = await supabase.from('diezmos_members').update(updates).eq('id', body.id);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
@@ -548,11 +593,8 @@ export async function POST(request: import('next/server').NextRequest) {
     }
 
     if (body.action === 'delete_payment') {
-      const { error } = await supabase
-        .from('diezmos_payments')
-        .delete()
-        .eq('member_id', body.memberId)
-        .eq('month', body.month);
+      const { error } = await supabase.from('diezmos_payments').delete()
+        .eq('member_id', body.memberId).eq('month', body.month);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
@@ -563,6 +605,88 @@ export async function POST(request: import('next/server').NextRequest) {
         name: body.name,
       });
       if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // ── NEW: Stripe linking ────────────────────────────────────────────
+
+    if (body.action === 'link_stripe') {
+      // Link a Stripe subscriber to an existing member
+      const { memberId, customerId, customerEmail, subscriptionId, amount, interval } = body;
+      const { error } = await supabase.from('diezmos_members').update({
+        stripe_customer_id: customerId,
+        stripe_customer_email: customerEmail,
+        stripe_subscription_id: subscriptionId,
+        stripe_amount: amount,
+        stripe_interval: interval,
+        email: customerEmail,
+      }).eq('id', memberId);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'create_from_stripe') {
+      // Create a new member from an unmatched Stripe subscriber
+      const id = `m${Date.now()}`;
+      const { error } = await supabase.from('diezmos_members').insert({
+        id,
+        name: body.name.trim(),
+        nickname: body.nickname?.trim() || null,
+        community: body.community || 'San Pablo',
+        email: body.customerEmail || null,
+        is_active: true,
+        stripe_customer_id: body.customerId || null,
+        stripe_customer_email: body.customerEmail || null,
+        stripe_subscription_id: body.subscriptionId || null,
+        stripe_amount: body.amount || null,
+        stripe_interval: body.interval || null,
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true, id });
+    }
+
+    // ── NEW: Bank rules ────────────────────────────────────────────────
+
+    if (body.action === 'create_bank_rule') {
+      const id = `br-${Date.now()}`;
+      const { error } = await supabase.from('diezmos_bank_rules').insert({
+        id,
+        pattern: body.pattern.trim().toLowerCase(),
+        member_id: body.memberId,
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true, id });
+    }
+
+    if (body.action === 'delete_bank_rule') {
+      const { error } = await supabase.from('diezmos_bank_rules').delete().eq('id', body.id);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // ── NEW: One-time bank link ────────────────────────────────────────
+
+    if (body.action === 'link_bank_tx') {
+      // Manually link a bank transfer to a member (creates payment)
+      const monthKey = body.month || getMonthKey(body.date || new Date());
+      const { error } = await supabase.from('diezmos_payments').upsert({
+        id: `dp-banco-${body.memberId}-${monthKey}`,
+        member_id: body.memberId,
+        month: monthKey,
+        amount: body.amount,
+        source: 'banco',
+      }, { onConflict: 'member_id,month' });
+      if (error) throw error;
+
+      // Optionally create a rule for future auto-matching
+      if (body.createRule && body.pattern) {
+        await supabase.from('diezmos_bank_rules').insert({
+          id: `br-${Date.now()}`,
+          pattern: body.pattern.trim().toLowerCase(),
+          member_id: body.memberId,
+        });
+      }
+
       return NextResponse.json({ success: true });
     }
 
