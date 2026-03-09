@@ -15,6 +15,7 @@ import {
   Tag,
   BookOpen,
   Plane,
+  Box,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,7 @@ const navSections = [
     items: [
       { href: '/diezmos', label: 'Diezmos', icon: Church },
       { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },
+      { href: '/inventario-comunidad', label: 'Inventario Material', icon: Box },
     ],
   },
 ];
