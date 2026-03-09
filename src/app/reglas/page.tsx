@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import { BookOpen, Plus, Trash2, Search, Loader2, ArrowLeft, Edit3, Check, X } from 'lucide-react';
@@ -270,7 +269,7 @@ export default function ReglasPage() {
                             <button onClick={() => setEditingRule(null)} className="p-0.5 text-gray-400 hover:text-gray-600"><X size={12} /></button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                             <button
                               onClick={() => setEditingRule({ keyword: rule.keyword, newCategory: rule.category })}
                               className="p-0.5 text-gray-400 hover:text-violet-500"

@@ -9,7 +9,7 @@ import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
   ChevronLeft, ChevronRight, CreditCard, Landmark, Link2, Unlink,
   TrendingUp, TrendingDown, Wallet, AlertTriangle, ChevronDown, ChevronUp,
-  Users, LayoutGrid, Table2, PieChart, Plus, Minus,
+  Users, LayoutGrid, Table2, PieChart, Plus,
 } from 'lucide-react';
 
 type ViewMode = 'grid' | 'list' | 'summary';
@@ -80,7 +80,8 @@ export default function DiezmosPage() {
   const [bankRules, setBankRules] = useState<any[]>([]);
   const [linkingStripe, setLinkingStripe] = useState<string | null>(null); // subscriptionId being linked
   const [linkingBank, setLinkingBank] = useState<string | null>(null); // bank tx id being linked
-  const [selectedMemberForLink, setSelectedMemberForLink] = useState<string>('');
+  const [selectedMemberForStripeLink, setSelectedMemberForStripeLink] = useState<string>('');
+  const [selectedMemberForBankLink, setSelectedMemberForBankLink] = useState<string>('');
   const [createBankRuleChecked, setCreateBankRuleChecked] = useState(true);
   const [creatingFromStripe, setCreatingFromStripe] = useState<any | null>(null);
   const [newMemberCommunity, setNewMemberCommunity] = useState('San Pablo');
@@ -167,7 +168,7 @@ export default function DiezmosPage() {
       }),
     });
     setLinkingStripe(null);
-    setSelectedMemberForLink('');
+    setSelectedMemberForStripeLink('');
     fetchDiezmos();
   }
 
@@ -203,7 +204,7 @@ export default function DiezmosPage() {
       });
     }
     setLinkingBank(null);
-    setSelectedMemberForLink('');
+    setSelectedMemberForBankLink('');
     setCreateBankRuleChecked(true);
     fetchDiezmos();
   }
@@ -298,7 +299,7 @@ export default function DiezmosPage() {
           </div>
 
           {/* View Tabs - grandes y visuales */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {VIEW_TABS.map(({ key, label, icon: Icon, desc }) => (
               <button
                 key={key}
@@ -373,7 +374,7 @@ export default function DiezmosPage() {
         </div>
 
         {/* Stripe + Banco breakdown compacto */}
-        <div className="flex items-center gap-6 px-4 py-3 bg-gray-50 rounded-xl">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6 px-4 py-3 bg-gray-50 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
               <CreditCard size={16} className="text-blue-600" />
@@ -733,7 +734,7 @@ export default function DiezmosPage() {
                                 <span key={rule.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 group">
                                   <Landmark size={9} />
                                   &quot;{rule.pattern.length > 20 ? rule.pattern.substring(0, 20) + '…' : rule.pattern}&quot;
-                                  <button onClick={() => handleDeleteBankRule(rule.id)} className="opacity-0 group-hover:opacity-100 ml-0.5 text-red-400 hover:text-red-600 transition-all">
+                                  <button onClick={() => handleDeleteBankRule(rule.id)} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ml-0.5 text-red-400 hover:text-red-600 transition-all">
                                     <X size={8} />
                                   </button>
                                 </span>
@@ -827,7 +828,7 @@ export default function DiezmosPage() {
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {linkingStripe === sub.subscriptionId ? (
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                              <select value={selectedMemberForLink} onChange={e => setSelectedMemberForLink(e.target.value)}
+                              <select value={selectedMemberForStripeLink} onChange={e => setSelectedMemberForStripeLink(e.target.value)}
                                 className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="">Seleccionar miembro...</option>
                                 {members.map((m: any) => (
@@ -835,12 +836,12 @@ export default function DiezmosPage() {
                                 ))}
                               </select>
                               <div className="flex gap-1">
-                                <button onClick={() => handleLinkStripe(sub, selectedMemberForLink)}
-                                  disabled={!selectedMemberForLink}
+                                <button onClick={() => handleLinkStripe(sub, selectedMemberForStripeLink)}
+                                  disabled={!selectedMemberForStripeLink}
                                   className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
                                   <Link2 size={12} className="inline mr-1" />Vincular
                                 </button>
-                                <button onClick={() => { setLinkingStripe(null); setSelectedMemberForLink(''); }}
+                                <button onClick={() => { setLinkingStripe(null); setSelectedMemberForStripeLink(''); }}
                                   className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={14} /></button>
                               </div>
                             </div>
@@ -861,7 +862,7 @@ export default function DiezmosPage() {
                             </div>
                           ) : (
                             <div className="flex gap-1">
-                              <button onClick={() => { setLinkingStripe(sub.subscriptionId); setSelectedMemberForLink(''); }}
+                              <button onClick={() => { setLinkingStripe(sub.subscriptionId); setSelectedMemberForStripeLink(''); }}
                                 className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                                 <Link2 size={12} className="inline mr-1" />Vincular
                               </button>
@@ -907,7 +908,7 @@ export default function DiezmosPage() {
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {linkingBank === tx.id ? (
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                              <select value={selectedMemberForLink} onChange={e => setSelectedMemberForLink(e.target.value)}
+                              <select value={selectedMemberForBankLink} onChange={e => setSelectedMemberForBankLink(e.target.value)}
                                 className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
                                 <option value="">Seleccionar miembro...</option>
                                 {members.map((m: any) => (
@@ -920,17 +921,17 @@ export default function DiezmosPage() {
                                 Crear regla
                               </label>
                               <div className="flex gap-1">
-                                <button onClick={() => handleLinkBank(tx.id, selectedMemberForLink, tx.concept, createBankRuleChecked)}
-                                  disabled={!selectedMemberForLink}
+                                <button onClick={() => handleLinkBank(tx.id, selectedMemberForBankLink, tx.concept, createBankRuleChecked)}
+                                  disabled={!selectedMemberForBankLink}
                                   className="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
                                   <Link2 size={12} className="inline mr-1" />Vincular
                                 </button>
-                                <button onClick={() => { setLinkingBank(null); setSelectedMemberForLink(''); }}
+                                <button onClick={() => { setLinkingBank(null); setSelectedMemberForBankLink(''); }}
                                   className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={14} /></button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => { setLinkingBank(tx.id); setSelectedMemberForLink(''); setCreateBankRuleChecked(true); }}
+                            <button onClick={() => { setLinkingBank(tx.id); setSelectedMemberForBankLink(''); setCreateBankRuleChecked(true); }}
                               className="px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
                               <Link2 size={12} className="inline mr-1" />Vincular a miembro
                             </button>

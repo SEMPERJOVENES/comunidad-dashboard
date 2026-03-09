@@ -91,7 +91,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <p className="text-xs text-gray-400">Financial Hub</p>
             </div>
           </div>
-          <button onClick={onClose} className="lg:hidden text-gray-400 hover:text-white">
+          <button onClick={onClose} className="lg:hidden p-2 text-gray-400 hover:text-white rounded-lg">
             <X size={20} />
           </button>
         </div>
@@ -110,7 +110,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       href={item.href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                         isActive
                           ? 'bg-violet-600/20 text-violet-400'
                           : 'text-gray-300 hover:bg-gray-800 hover:text-white'

@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     console.error('Error fetching extracto:', message);
-    return NextResponse.json({ transactions: [], shopifyTransactions: [], tagCategories: [], error: message });
+    return NextResponse.json({ transactions: [], shopifyTransactions: [], tagCategories: [], error: message }, { status: 500 });
   }
 }
 

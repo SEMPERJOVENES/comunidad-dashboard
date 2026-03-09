@@ -8,7 +8,7 @@ import { formatCurrency, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   TrendingUp, TrendingDown, Tag, Loader2, ArrowUpRight, ArrowDownRight,
-  AlertCircle, Calendar, Settings2, Plus, Pencil, Trash2, X, Check, Palette,
+  AlertCircle, Calendar, Settings2, Plus, Pencil, Trash2, X, Check,
 } from 'lucide-react';
 
 interface Category {
@@ -219,14 +219,6 @@ export default function CategoriasPage() {
             body: JSON.stringify({ action: 'update_category', name: oldName, color: editColor, macroGroup: editMacro }),
           });
         } catch {}
-      }
-      if (editName.trim() && editName.trim() !== oldName) {
-        // Also rename
-        await fetch('/api/categorias', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'rename_category', oldName, newName: editName.trim() }),
-        });
       }
       setSaving(false);
       setEditingCat(null);

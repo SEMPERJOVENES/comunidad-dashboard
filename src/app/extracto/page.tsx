@@ -8,7 +8,7 @@ import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
 import { DateRange, BankTransaction } from '@/lib/types';
 import {
   Landmark, Upload, Search, Loader2, BookOpen, AlertCircle, List,
-  Calendar, ShoppingBag, Store,
+  Calendar, ShoppingBag,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 

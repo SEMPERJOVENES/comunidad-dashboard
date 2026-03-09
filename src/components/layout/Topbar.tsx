@@ -22,7 +22,7 @@ export default function Topbar({ onMenuClick, selectedRange, onRangeChange }: To
         <div className="flex items-center gap-3">
           <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="lg:hidden p-2.5 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <Menu size={20} />
           </button>
@@ -39,8 +39,7 @@ export default function Topbar({ onMenuClick, selectedRange, onRangeChange }: To
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <span className="hidden sm:inline">{selectedRange.label}</span>
-              <span className="sm:hidden text-xs">{selectedRange.label}</span>
+              <span className="text-xs sm:text-sm">{selectedRange.label}</span>
               <ChevronDown size={14} />
             </button>
 

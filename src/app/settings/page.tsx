@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
-import { Settings, ShoppingBag, CreditCard, CheckCircle2, Loader2 } from 'lucide-react';
+import { Settings, ShoppingBag, CreditCard, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const ranges = getDateRanges();

@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     console.error('Error fetching ventas:', message);
-    return NextResponse.json({ sales: [], error: message }, { status: 200 });
+    return NextResponse.json({ sales: [], error: message }, { status: 500 });
   }
 }
 

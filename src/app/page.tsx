@@ -205,7 +205,7 @@ export default function DashboardPage() {
 
             {/* === STRIPE KPIs === */}
             {data.stripe && (data.stripe.available > 0 || data.stripe.pending > 0 || data.stripe.volume > 0) && (
-              <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <Card className="!p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <CreditCard size={14} className="text-violet-500" />
@@ -232,7 +232,7 @@ export default function DashboardPage() {
 
             {/* === DESGLOSE DE CAJA === */}
             {data.cajaMacro && (
-              <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <Card className="!p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <Church size={14} className="text-violet-500" />

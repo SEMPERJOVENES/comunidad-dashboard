@@ -8,7 +8,7 @@ import { formatCurrency, formatNumber, getDateRanges } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   TrendingUp, TrendingDown, DollarSign, Percent, ShoppingCart,
-  Store, Landmark, Package, Loader2, ArrowUpRight, ArrowDownRight,
+  Store, Landmark, Package, Loader2,
   BarChart3, Plus, Trash2, Calendar, Truck, User, CreditCard, X, Check,
 } from 'lucide-react';
 
@@ -509,7 +509,7 @@ export default function SemperBrandPage() {
                               <td className="px-4 sm:px-6 py-2 text-sm text-right font-semibold text-red-600">{formatCurrency(c.amount)}</td>
                               <td className="px-2">
                                 <button onClick={() => handleDeleteCost(c.id)}
-                                  className="p-1.5 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  className="p-1.5 text-gray-300 hover:text-red-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                   <Trash2 size={14} />
                                 </button>
                               </td>

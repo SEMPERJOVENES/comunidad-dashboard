@@ -163,7 +163,7 @@ export default function ViajesEventosPage() {
         ) : (
           <>
             {/* Totals KPIs */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <Card className="!p-4 border-l-4 border-l-emerald-500">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={14} className="text-emerald-500" />
