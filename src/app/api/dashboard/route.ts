@@ -87,10 +87,17 @@ export async function GET(request: NextRequest) {
       .order('date', { ascending: false });
 
     const cajaByCategory: Record<string, number> = {};
+    const cajaMacro = { comunidad: 0, brand: 0, otros: 0 };
     for (const tx of (allBankTxs || [])) {
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
       const amt = parseFloat(tx.amount || '0');
       cajaByCategory[tag] = (cajaByCategory[tag] || 0) + amt;
+
+      // Aggregate by macro category
+      const macro = getMacroCategory(tx);
+      if (macro === 'diezmos') cajaMacro.comunidad += amt;
+      else if (macro === 'brand') cajaMacro.brand += amt;
+      else cajaMacro.otros += amt;
     }
 
     // Sort caja by absolute value
@@ -165,6 +172,7 @@ export async function GET(request: NextRequest) {
       },
       // Caja breakdown
       caja: cajaSorted,
+      cajaMacro,
       // Stripe
       stripe: {
         volume: stripeVolume.volume,

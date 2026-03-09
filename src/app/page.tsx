@@ -51,6 +51,7 @@ interface DashboardData {
   financials: { totalIncome: number; totalExpenses: number; profit: number; bankBalance: number };
   macroGroups: { diezmos: MacroGroup; brand: MacroGroup; otros: MacroGroup };
   caja: { tag: string; net: number }[];
+  cajaMacro: { comunidad: number; brand: number; otros: number };
   stripe: { volume: number; available: number; pending: number };
   shopify: { revenue: number; orders: number };
   revenueData: RevenueDataPoint[];
@@ -178,6 +179,39 @@ export default function DashboardPage() {
                 <p className="text-xl sm:text-2xl font-bold text-blue-600">{formatCurrency(data.financials.bankBalance)}</p>
               </Card>
             </div>
+
+            {/* === DESGLOSE DE CAJA === */}
+            {data.cajaMacro && (
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Church size={14} className="text-violet-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Comunidad</p>
+                  </div>
+                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.comunidad >= 0 ? 'text-violet-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.cajaMacro.comunidad)}
+                  </p>
+                </Card>
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Store size={14} className="text-indigo-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Brand</p>
+                  </div>
+                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.brand >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.cajaMacro.brand)}
+                  </p>
+                </Card>
+                <Card className="!p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Package size={14} className="text-amber-500" />
+                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Otros</p>
+                  </div>
+                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.otros >= 0 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.cajaMacro.otros)}
+                  </p>
+                </Card>
+              </div>
+            )}
 
             {/* === MACRO GROUPS: Diezmos, Brand, Otros === */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

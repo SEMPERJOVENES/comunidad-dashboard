@@ -28,21 +28,21 @@ const navSections = [
     ],
   },
   {
-    title: 'Semper Brand',
-    items: [
-      { href: '/semper-brand', label: 'Resultado (P&L)', icon: BarChart3 },
-      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
-      { href: '/products', label: 'Inventario', icon: Package },
-      { href: '/ventas', label: 'Ventas Presenciales', icon: Store },
-    ],
-  },
-  {
     title: 'Finanzas',
     items: [
       { href: '/categorias', label: 'Categorías', icon: Tag },
       { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
       { href: '/reglas', label: 'Reglas Etiquetado', icon: BookOpen },
       { href: '/stripe', label: 'Stripe', icon: CreditCard },
+    ],
+  },
+  {
+    title: 'Semper Brand',
+    items: [
+      { href: '/semper-brand', label: 'Resultado (P&L)', icon: BarChart3 },
+      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
+      { href: '/products', label: 'Inventario', icon: Package },
+      { href: '/ventas', label: 'Ventas Presenciales', icon: Store },
     ],
   },
   {

@@ -209,13 +209,13 @@ export default function ExtractoPage() {
         </div>
 
         {/* Quick Access Tabs */}
-        <div className="flex gap-2 border-b border-gray-200 -mb-2">
+        <div className="bg-white rounded-xl border border-gray-200 px-2 py-1 flex gap-1">
           <button
             onClick={() => { setActiveTab('all'); setFilterCategory('all'); }}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === 'all'
-                ? 'border-violet-600 text-violet-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'bg-violet-50 text-violet-700'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             <List size={15} />
@@ -223,10 +223,10 @@ export default function ExtractoPage() {
           </button>
           <button
             onClick={() => { setActiveTab('sin_clasificar'); setFilterCategory('all'); }}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === 'sin_clasificar'
-                ? 'border-amber-500 text-amber-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'bg-amber-50 text-amber-700'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             <AlertCircle size={15} />
