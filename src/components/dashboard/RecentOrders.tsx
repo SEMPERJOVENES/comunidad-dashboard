@@ -2,7 +2,7 @@
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, getStatusColor, getFulfillmentColor } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { ShopifyOrder } from '@/lib/types';
 
 interface RecentOrdersProps {
@@ -36,7 +36,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
     <Card padding={false}>
       <div className="p-4 sm:p-6 pb-0">
         <CardHeader>
-          <CardTitle>Órdenes Recientes</CardTitle>
+          <CardTitle>Pedidos Recientes</CardTitle>
           <span className="text-xs text-gray-400">{orders.length} últimas</span>
         </CardHeader>
       </div>
@@ -44,7 +44,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray-100">
-              <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Orden</th>
+              <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pedido</th>
               <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Cliente</th>
               <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Fecha</th>
               <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pago</th>
@@ -88,7 +88,7 @@ export default function RecentOrders({ orders }: RecentOrdersProps) {
             {orders.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-sm text-gray-400">
-                  Sin órdenes recientes
+                  Sin pedidos recientes
                 </td>
               </tr>
             )}

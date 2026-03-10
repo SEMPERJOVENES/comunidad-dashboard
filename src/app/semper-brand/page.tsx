@@ -13,9 +13,17 @@ import {
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const YEAR_TABS = [2023, 2024, 2025, 2026];
+const YEAR_TABS: ('all' | number)[] = ['all', 2024, 2025, 2026];
 
-function getMonthFilters(year: number) {
+function getMonthFilters(year: number | 'all') {
+  if (year === 'all') {
+    return [{
+      label: 'Todo',
+      key: 'year',
+      start: new Date(2023, 0, 1),
+      end: new Date(),
+    }];
+  }
   const now = new Date();
   const currentYear = now.getFullYear();
   const maxMonth = year === currentYear ? now.getMonth() : 11;
@@ -38,6 +46,19 @@ function getMonthFilters(year: number) {
   return filters;
 }
 
+interface ShopifyOrder {
+  id: number;
+  name: string;
+  customer: string;
+  email: string;
+  date: string;
+  total: number;
+  financialStatus: string;
+  fulfillmentStatus: string;
+  itemCount: number;
+  items: string;
+}
+
 interface SemperBrandData {
   income: {
     shopify: number;
@@ -52,6 +73,9 @@ interface SemperBrandData {
   expenses: {
     byTag: Record<string, number>;
     total: number;
+    stripeFees: number;
+    stripeGross: number;
+    stripeNet: number;
   };
   profit: number;
   margin: number;
@@ -61,8 +85,10 @@ interface SemperBrandData {
     ventas: number;
     bankIncome: number;
     expenses: number;
+    stripeFees: number;
     orders: number;
     totalIncome: number;
+    totalExpenses: number;
     profit: number;
   }[];
   topProducts: {
@@ -70,6 +96,7 @@ interface SemperBrandData {
     revenue: number;
     units: number;
   }[];
+  orders: ShopifyOrder[];
 }
 
 interface BrandCost {
@@ -101,25 +128,40 @@ function MonthLabel({ month }: { month: string }) {
   return <span>{MONTH_NAMES[parseInt(m) - 1]} {year.slice(2)}</span>;
 }
 
+function StatusBadge({ status, type }: { status: string; type: 'financial' | 'fulfillment' }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    paid: { label: 'Pagado', cls: 'bg-green-100 text-green-700' },
+    refunded: { label: 'Reembolsado', cls: 'bg-red-100 text-red-700' },
+    partially_refunded: { label: 'Reemb. parcial', cls: 'bg-orange-100 text-orange-700' },
+    pending: { label: 'Pendiente', cls: 'bg-yellow-100 text-yellow-700' },
+    fulfilled: { label: 'Completado', cls: 'bg-green-100 text-green-700' },
+    partial: { label: 'Parcial', cls: 'bg-orange-100 text-orange-700' },
+    unfulfilled: { label: 'Pendiente', cls: 'bg-gray-100 text-gray-600' },
+  };
+  const s = map[status] || { label: status || '-', cls: 'bg-gray-100 text-gray-500' };
+  return <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>;
+}
+
 export default function SemperBrandPage() {
   const ranges = getDateRanges();
   const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[8]);
   const [data, setData] = useState<SemperBrandData | null>(null);
   const [costsData, setCostsData] = useState<BrandCostsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(new Date().getFullYear());
   const [monthFilter, setMonthFilter] = useState('year');
   const [showAddCost, setShowAddCost] = useState(false);
   const [costForm, setCostForm] = useState({ date: new Date().toISOString().split('T')[0], type: 'cogs', description: '', amount: '', product: '' });
   const [showCostsList, setShowCostsList] = useState(false);
+  // showOrders eliminado — sección movida a /orders
 
   const monthFilters = useMemo(() => getMonthFilters(selectedYear), [selectedYear]);
 
   const effectiveRange = useMemo(() => {
     const mf = monthFilters.find(f => f.key === monthFilter);
     if (mf) return { start: mf.start, end: mf.end };
-    return { start: selectedRange.startDate, end: selectedRange.endDate };
-  }, [monthFilter, monthFilters, selectedRange]);
+    return { start: new Date(2023, 0, 1), end: new Date() };
+  }, [monthFilter, monthFilters]);
 
   async function fetchAll() {
     setLoading(true);
@@ -166,7 +208,8 @@ export default function SemperBrandPage() {
 
   // Combined P&L
   const totalManualCosts = costsData?.total || 0;
-  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts;
+  const stripeFees = data?.expenses.stripeFees || 0;
+  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees;
   const totalIncome = data?.income.total || 0;
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
@@ -175,7 +218,7 @@ export default function SemperBrandPage() {
     if (!data) return [];
     const items: { label: string; amount: number; icon: any; color: string; bg: string; detail: string }[] = [];
     if (data.income.shopify > 0) {
-      items.push({ label: 'Shopify', amount: data.income.shopify, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50', detail: `${data.income.shopifyOrders} órdenes` });
+      items.push({ label: 'Shopify', amount: data.income.shopify, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50', detail: `${data.income.shopifyOrders} pedidos` });
     }
     if (data.income.ventasPresenciales > 0) {
       items.push({ label: 'Ventas Presenciales', amount: data.income.ventasPresenciales, icon: Store, color: 'text-emerald-600', bg: 'bg-emerald-50', detail: `${data.income.ventasCount} ventas` });
@@ -189,11 +232,13 @@ export default function SemperBrandPage() {
   const expenseBreakdown = useMemo(() => {
     if (!data) return [];
     const items: { tag: string; amount: number }[] = [];
-    // Bank expenses
     Object.entries(data.expenses.byTag).forEach(([tag, amount]) => {
       items.push({ tag, amount });
     });
-    // Manual costs
+    // Stripe fees como categoría de gasto
+    if (data.expenses.stripeFees > 0) {
+      items.push({ tag: '💳 Comisión Stripe', amount: data.expenses.stripeFees });
+    }
     if (costsData) {
       Object.entries(costsData.byType).forEach(([type, amount]) => {
         const ct = COST_TYPES.find(c => c.value === type);
@@ -209,7 +254,7 @@ export default function SemperBrandPage() {
   }, [data]);
 
   return (
-    <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
+    <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange} hideRangeSelector>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -232,7 +277,7 @@ export default function SemperBrandPage() {
             <div className="flex gap-1 flex-nowrap">
               {YEAR_TABS.map((y) => (
                 <button
-                  key={y}
+                  key={String(y)}
                   onClick={() => { setSelectedYear(y); setMonthFilter('year'); }}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors whitespace-nowrap ${
                     selectedYear === y
@@ -240,26 +285,28 @@ export default function SemperBrandPage() {
                       : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  {y}
+                  {y === 'all' ? 'Todo' : y}
                 </button>
               ))}
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 pl-7">
-            {monthFilters.filter(mf => mf.key !== 'year').map((mf) => (
-              <button
-                key={mf.key}
-                onClick={() => setMonthFilter(mf.key)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap ${
-                  monthFilter === mf.key
-                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
-                    : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                {mf.label}
-              </button>
-            ))}
-          </div>
+          {selectedYear !== 'all' && (
+            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 pl-7">
+              {monthFilters.filter(mf => mf.key !== 'year').map((mf) => (
+                <button
+                  key={mf.key}
+                  onClick={() => setMonthFilter(mf.key)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap ${
+                    monthFilter === mf.key
+                      ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {mf.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Add Cost Form */}
@@ -301,8 +348,8 @@ export default function SemperBrandPage() {
           <Card><p className="text-center text-gray-400 py-12">No se pudieron cargar los datos</p></Card>
         ) : (
           <>
-            {/* KPI Cards - P&L Formula: Income - Auto - Manual = Real Profit */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <Card className="!p-4 border-l-4 border-l-emerald-500">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={14} className="text-emerald-500" />
@@ -311,38 +358,25 @@ export default function SemperBrandPage() {
                 <p className="text-xl sm:text-2xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
                 <p className="text-xs text-gray-400 mt-1">{data.income.shopifyOrders + data.income.ventasCount} operaciones</p>
               </Card>
-              <Card className="!p-4 border-l-4 border-l-orange-500">
-                <div className="flex items-center gap-2 mb-1">
-                  <Landmark size={14} className="text-orange-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Auto</p>
-                </div>
-                <p className="text-xl sm:text-2xl font-bold text-orange-600">{formatCurrency(data.expenses.total)}</p>
-                <p className="text-xs text-gray-400 mt-1">Shopify ~36€/mes, Ionos...</p>
-              </Card>
               <Card className="!p-4 border-l-4 border-l-red-500">
                 <div className="flex items-center gap-2 mb-1">
-                  <Package size={14} className="text-red-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Costes Manual</p>
+                  <TrendingDown size={14} className="text-red-500" />
+                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Totales</p>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalManualCosts)}</p>
-                <p className="text-xs text-gray-400 mt-1">Stock, envío, otros</p>
+                <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
+                <div className="text-[10px] text-gray-400 mt-1 space-y-0.5">
+                  {data.expenses.total > 0 && <p>Banco: {formatCurrency(data.expenses.total)}</p>}
+                  {stripeFees > 0 && <p>Comisión Stripe: {formatCurrency(stripeFees)}</p>}
+                  {totalManualCosts > 0 && <p>Manuales: {formatCurrency(totalManualCosts)}</p>}
+                </div>
               </Card>
               <Card className={`!p-4 border-l-4 ${netProfit >= 0 ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={14} className="text-gray-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Beneficio Real</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Beneficio · {margin.toFixed(1)}%</p>
                 </div>
                 <p className={`text-xl sm:text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(netProfit)}
-                </p>
-              </Card>
-              <Card className="!p-4 border-l-4 border-l-indigo-500">
-                <div className="flex items-center gap-2 mb-1">
-                  <Percent size={14} className="text-indigo-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Margen</p>
-                </div>
-                <p className={`text-xl sm:text-2xl font-bold ${margin >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
-                  {margin.toFixed(1)}%
                 </p>
               </Card>
             </div>
@@ -352,8 +386,8 @@ export default function SemperBrandPage() {
               <span className="text-emerald-600 font-semibold whitespace-nowrap">{formatCurrency(totalIncome)}</span>
               <span>−</span>
               <span className="text-orange-600 font-semibold whitespace-nowrap">{formatCurrency(data.expenses.total)}</span>
-              <span>−</span>
-              <span className="text-red-600 font-semibold whitespace-nowrap">{formatCurrency(totalManualCosts)}</span>
+              {stripeFees > 0 && (<><span>−</span><span className="text-purple-600 font-semibold whitespace-nowrap">{formatCurrency(stripeFees)} <span className="font-normal text-gray-400">Stripe</span></span></>)}
+              {totalManualCosts > 0 && (<><span>−</span><span className="text-red-600 font-semibold whitespace-nowrap">{formatCurrency(totalManualCosts)}</span></>)}
               <span>=</span>
               <span className={`font-bold whitespace-nowrap ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(netProfit)}</span>
             </div>
@@ -467,7 +501,6 @@ export default function SemperBrandPage() {
                     </button>
                   </div>
                 </CardHeader>
-                {/* Summary by type */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
                   {COST_TYPES.map(ct => {
                     const amt = costsData.byType[ct.value] || 0;
@@ -483,7 +516,6 @@ export default function SemperBrandPage() {
                     );
                   })}
                 </div>
-                {/* Detail list */}
                 {showCostsList && (
                   <div className="overflow-x-auto -mx-4 sm:-mx-6">
                     <table className="w-full min-w-[500px]">
@@ -523,7 +555,7 @@ export default function SemperBrandPage() {
               </Card>
             )}
 
-            {/* Monthly Breakdown */}
+            {/* Monthly Breakdown - CHART FIXED */}
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -536,32 +568,33 @@ export default function SemperBrandPage() {
 
               {data.monthlyBreakdown.length > 0 && (
                 <div className="mb-6">
-                  <div className="flex items-end gap-1 sm:gap-2 h-40 sm:h-48">
+                  <div className="flex gap-1 sm:gap-2 h-40 sm:h-48">
                     {data.monthlyBreakdown.map((m) => {
                       const monthCosts = costsData?.byMonth[m.month] || 0;
                       const incomeH = (m.totalIncome / maxMonthlyIncome) * 100;
-                      const totalExp = m.expenses + monthCosts;
-                      const expenseH = (totalExp / maxMonthlyIncome) * 100;
+                      const totalExp = m.totalExpenses + monthCosts;
+                      const expenseH = maxMonthlyIncome > 0 ? (totalExp / maxMonthlyIncome) * 100 : 0;
                       return (
-                        <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group relative">
+                        <div key={m.month} className="flex-1 h-full flex flex-col items-center group relative">
                           <div className="absolute bottom-full mb-2 hidden group-hover:block z-10">
                             <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg">
                               <p className="font-medium"><MonthLabel month={m.month} /></p>
                               <p className="text-emerald-300">Ingresos: {formatCurrency(m.totalIncome)}</p>
                               <p className="text-red-300">Gastos banco: {formatCurrency(m.expenses)}</p>
+                              {m.stripeFees > 0 && <p className="text-purple-300">Stripe fees: {formatCurrency(m.stripeFees)}</p>}
                               {monthCosts > 0 && <p className="text-orange-300">Costes manual: {formatCurrency(monthCosts)}</p>}
                               <p className={m.totalIncome - totalExp >= 0 ? 'text-emerald-300' : 'text-red-300'}>
                                 Beneficio: {formatCurrency(m.totalIncome - totalExp)}
                               </p>
                             </div>
                           </div>
-                          <div className="w-full flex gap-0.5 items-end h-full">
+                          <div className="w-full flex gap-0.5 items-end flex-1 min-h-0">
                             <div className="flex-1 bg-emerald-400 rounded-t-sm transition-all hover:bg-emerald-500"
                               style={{ height: `${Math.max(incomeH, 2)}%` }} />
                             <div className="flex-1 bg-red-300 rounded-t-sm transition-all hover:bg-red-400"
                               style={{ height: `${Math.max(expenseH, 2)}%` }} />
                           </div>
-                          <span className="text-[10px] text-gray-400 mt-1"><MonthLabel month={m.month} /></span>
+                          <span className="text-[10px] text-gray-400 mt-1 flex-shrink-0"><MonthLabel month={m.month} /></span>
                         </div>
                       );
                     })}
@@ -573,7 +606,7 @@ export default function SemperBrandPage() {
                 </div>
               )}
 
-              {/* Table */}
+              {/* Monthly Table */}
               <div className="overflow-x-auto -mx-4 sm:-mx-6">
                 <table className="w-full min-w-[700px]">
                   <thead>
@@ -591,7 +624,7 @@ export default function SemperBrandPage() {
                   <tbody>
                     {data.monthlyBreakdown.map((m) => {
                       const monthCosts = costsData?.byMonth[m.month] || 0;
-                      const totalExp = m.expenses + monthCosts;
+                      const totalExp = m.totalExpenses + monthCosts;
                       const profit = m.totalIncome - totalExp;
                       return (
                         <tr key={m.month} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -600,7 +633,7 @@ export default function SemperBrandPage() {
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-gray-600">{m.ventas > 0 ? formatCurrency(m.ventas) : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-gray-600">{m.bankIncome > 0 ? formatCurrency(m.bankIncome) : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right font-semibold text-gray-900">{formatCurrency(m.totalIncome)}</td>
-                          <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-red-500">{m.expenses > 0 ? `-${formatCurrency(m.expenses)}` : '-'}</td>
+                          <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-red-500">{(m.expenses + m.stripeFees) > 0 ? `-${formatCurrency(m.expenses + m.stripeFees)}` : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-orange-500">{monthCosts > 0 ? `-${formatCurrency(monthCosts)}` : '-'}</td>
                           <td className={`px-4 sm:px-6 py-2.5 text-sm text-right font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {formatCurrency(profit)}
@@ -617,7 +650,7 @@ export default function SemperBrandPage() {
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.ventasPresenciales)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.totalBankIncome)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-emerald-600">{formatCurrency(totalIncome)}</td>
-                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total)}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total + stripeFees)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-orange-600">-{formatCurrency(totalManualCosts)}</td>
                         <td className={`px-4 sm:px-6 py-3 text-sm text-right font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                           {formatCurrency(netProfit)}
@@ -666,6 +699,7 @@ export default function SemperBrandPage() {
                 </div>
               </Card>
             )}
+
           </>
         )}
       </div>

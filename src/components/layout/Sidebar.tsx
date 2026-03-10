@@ -41,7 +41,7 @@ const navSections = [
     title: 'Semper Brand',
     items: [
       { href: '/semper-brand', label: 'Resultado (P&L)', icon: BarChart3 },
-      { href: '/orders', label: 'Órdenes', icon: ShoppingCart },
+      { href: '/orders', label: 'Pedidos', icon: ShoppingCart },
       { href: '/products', label: 'Inventario', icon: Package },
       { href: '/ventas', label: 'Ventas Presenciales', icon: Store },
     ],

@@ -24,7 +24,7 @@ export default function OrdersPage() {
           end: selectedRange.endDate.toISOString(),
         });
         const res = await fetch(`/api/shopify/orders?${params}`);
-        if (!res.ok) throw new Error('Error al cargar órdenes');
+        if (!res.ok) throw new Error('Error al cargar pedidos');
         const data = await res.json();
         setOrders(data.orders || []);
       } catch {
@@ -51,13 +51,13 @@ export default function OrdersPage() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Órdenes</h1>
-            <p className="text-sm text-gray-500">{orders.length} órdenes de Shopify</p>
+            <h1 className="text-xl font-bold text-gray-900">Pedidos</h1>
+            <p className="text-sm text-gray-500">{orders.length} pedidos de Shopify</p>
           </div>
           <button
             onClick={() => {
               if (filteredOrders.length === 0) return;
-              const headers = ['Orden', 'Cliente', 'Email', 'Fecha', 'Pago', 'Envío', 'Tags', 'Total'];
+              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Pago', 'Envío', 'Tags', 'Total'];
               const rows = filteredOrders.map(o => [
                 o.name,
                 o.customer ? `${o.customer.first_name} ${o.customer.last_name}` : 'Sin cliente',
@@ -73,7 +73,7 @@ export default function OrdersPage() {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `ordenes-${new Date().toISOString().split('T')[0]}.csv`;
+              a.download = `pedidos-${new Date().toISOString().split('T')[0]}.csv`;
               a.click();
               URL.revokeObjectURL(url);
             }}
@@ -91,7 +91,7 @@ export default function OrdersPage() {
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por orden, cliente o email..."
+                placeholder="Buscar por pedido, cliente o email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
@@ -106,14 +106,14 @@ export default function OrdersPage() {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="animate-spin text-violet-600" size={24} />
-              <span className="ml-2 text-gray-500 text-sm">Cargando órdenes...</span>
+              <span className="ml-2 text-gray-500 text-sm">Cargando pedidos...</span>
             </div>
           ) : (
             <div className="overflow-x-auto -mx-4 sm:-mx-6">
               <table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Orden</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pedido</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Cliente</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Fecha</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pago</th>
@@ -164,7 +164,7 @@ export default function OrdersPage() {
                   {filteredOrders.length === 0 && !loading && (
                     <tr>
                       <td colSpan={7} className="text-center py-8 text-sm text-gray-400">
-                        Sin órdenes para este período
+                        Sin pedidos para este período
                       </td>
                     </tr>
                   )}
