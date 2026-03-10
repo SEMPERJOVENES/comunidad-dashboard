@@ -139,7 +139,8 @@ export async function GET(request: import('next/server').NextRequest) {
         matched.email = sub.customerEmail || matched.email;
         matchedSubIds.add(sub.id);
 
-        // Persist the link in DB
+        // Persist the link in DB + mark as active
+        matched.isActive = true;
         await supabase.from('diezmos_members').update({
           stripe_subscription_id: sub.id,
           stripe_amount: sub.amount,
@@ -147,6 +148,7 @@ export async function GET(request: import('next/server').NextRequest) {
           stripe_customer_id: customerId,
           stripe_customer_email: sub.customerEmail || matched.email,
           email: sub.customerEmail || matched.email,
+          is_active: true,
         }).eq('id', matched.id);
       } else {
         unmatchedStripeSubscribers.push({
@@ -466,7 +468,8 @@ export async function GET(request: import('next/server').NextRequest) {
     });
 
     const totalMensual = members.reduce((s: number, m: any) => s + (m.payments?.[currentMonth]?.amount || 0), 0);
-    const totalActive = members.filter((m: any) => m.isActive).length;
+    // Active = DB is_active OR has active Stripe subscription
+    const totalActive = members.filter((m: any) => m.isActive || m.stripeSubscriptionId).length;
     const totalPaying = members.filter((m: any) => m.payments?.[currentMonth]).length;
     const stripePayingCount = members.filter((m: any) => {
       const p = m.payments?.[currentMonth];
@@ -611,7 +614,7 @@ export async function POST(request: import('next/server').NextRequest) {
     // ── NEW: Stripe linking ────────────────────────────────────────────
 
     if (body.action === 'link_stripe') {
-      // Link a Stripe subscriber to an existing member
+      // Link a Stripe subscriber to an existing member + mark active
       const { memberId, customerId, customerEmail, subscriptionId, amount, interval } = body;
       const { error } = await supabase.from('diezmos_members').update({
         stripe_customer_id: customerId,
@@ -620,6 +623,7 @@ export async function POST(request: import('next/server').NextRequest) {
         stripe_amount: amount,
         stripe_interval: interval,
         email: customerEmail,
+        is_active: true,
       }).eq('id', memberId);
       if (error) throw error;
       return NextResponse.json({ success: true });

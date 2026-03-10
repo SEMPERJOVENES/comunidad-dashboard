@@ -163,8 +163,11 @@ export default function DiezmosPage() {
       body: JSON.stringify({
         action: 'link_stripe',
         memberId,
-        stripeCustomerId: sub.customerId,
-        stripeCustomerEmail: sub.customerEmail,
+        customerId: sub.customerId,
+        customerEmail: sub.customerEmail,
+        subscriptionId: sub.subscriptionId,
+        amount: sub.amount,
+        interval: sub.interval,
       }),
     });
     setLinkingStripe(null);
