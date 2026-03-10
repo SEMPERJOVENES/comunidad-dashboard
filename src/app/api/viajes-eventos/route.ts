@@ -7,12 +7,10 @@ const EVENT_CATEGORIES: Record<string, string[]> = {
   'BAC': ['BAC'],
   'Música': ['Música'],
   'Misa/Tabor': ['Misa/Tabor'],
-  'Donativo': ['Donativo'],
 };
 
 const BRAND_TAGS = ['Brand', 'Shopify', 'Stripe', 'Venta presencial', 'Proveedor', 'Semper CD'];
-const DIEZMO_TAGS = ['Diezmo'];
-const ALL_EVENT_TAGS = Object.values(EVENT_CATEGORIES).flat();
+const DIEZMO_TAGS = ['Diezmo', 'Donativo'];
 
 export async function GET(request: NextRequest) {
   try {
