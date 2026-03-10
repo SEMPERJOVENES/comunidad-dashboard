@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
-import { formatCurrency, getDefaultRange } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
@@ -56,7 +56,12 @@ const TAG_ICONS: Record<string, string> = {
 };
 
 export default function DiezmosPage() {
-  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
+  // Diezmos siempre carga todos los datos (no usa filtro global de fecha)
+  const [dummyRange] = useState<DateRange>({
+    label: 'Todo',
+    startDate: new Date(2023, 0, 1),
+    endDate: new Date(),
+  });
   const [members, setMembers] = useState<any[]>([]);
   const [communities, setCommunities] = useState<string[]>([]);
   const [communityStats, setCommunityStats] = useState<any[]>([]);
@@ -96,14 +101,14 @@ export default function DiezmosPage() {
   const [creatingFromStripe, setCreatingFromStripe] = useState<any | null>(null);
   const [newMemberCommunity, setNewMemberCommunity] = useState('San Pablo');
 
-  useEffect(() => { fetchDiezmos(); }, [selectedRange]);
+  useEffect(() => { fetchDiezmos(); }, []);
 
   async function fetchDiezmos() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        start: selectedRange.startDate.toISOString(),
-        end: selectedRange.endDate.toISOString(),
+        start: dummyRange.startDate.toISOString(),
+        end: dummyRange.endDate.toISOString(),
       });
       const res = await fetch(`/api/diezmos?${params}`);
       const data = await res.json();
@@ -315,7 +320,7 @@ export default function DiezmosPage() {
   }, [members, selectedMonth]);
 
   return (
-    <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
+    <DashboardLayout selectedRange={dummyRange} onRangeChange={() => {}} hideRangeSelector>
       <div className="space-y-5">
         {/* Header + View Selector */}
         <div className="flex flex-col gap-4">
