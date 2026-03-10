@@ -639,6 +639,19 @@ export async function POST(request: import('next/server').NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (body.action === 'unlink_stripe') {
+      // Remove Stripe link from a member
+      const { error } = await supabase.from('diezmos_members').update({
+        stripe_customer_id: null,
+        stripe_customer_email: null,
+        stripe_subscription_id: null,
+        stripe_amount: null,
+        stripe_interval: null,
+      }).eq('id', body.memberId);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
     if (body.action === 'create_from_stripe') {
       // Create a new member from an unmatched Stripe subscriber
       const id = `m${Date.now()}`;
@@ -673,7 +686,7 @@ export async function POST(request: import('next/server').NextRequest) {
     }
 
     if (body.action === 'delete_bank_rule') {
-      const { error } = await supabase.from('diezmos_bank_rules').delete().eq('id', body.id);
+      const { error } = await supabase.from('diezmos_bank_rules').delete().eq('id', body.ruleId || body.id);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }

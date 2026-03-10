@@ -244,6 +244,15 @@ export default function DiezmosPage() {
     fetchDiezmos();
   }
 
+  async function handleUnlinkStripe(memberId: string) {
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'unlink_stripe', memberId }),
+    });
+    fetchDiezmos();
+  }
+
   const allMonths = useMemo(() => getMonthsFrom2023(), []);
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -680,10 +689,13 @@ export default function DiezmosPage() {
                           <td className="px-4 sm:px-6 py-3">
                             <div className="flex flex-wrap gap-1.5">
                               {m.stripeCustomerId && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 group">
                                   <CreditCard size={9} />
                                   {m.stripeCustomerEmail ? m.stripeCustomerEmail.split('@')[0] : 'Stripe'}
                                   {m.stripeSubscriptionId && ` · ${formatCurrency(m.stripeAmount || 0)}/mes`}
+                                  <button onClick={() => handleUnlinkStripe(m.id)} className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 ml-0.5 text-red-400 hover:text-red-600 transition-all">
+                                    <X size={8} />
+                                  </button>
                                 </span>
                               )}
                               {memberBankRules.map((rule: any) => (
