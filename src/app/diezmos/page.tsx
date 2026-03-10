@@ -72,6 +72,7 @@ export default function DiezmosPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingNickname, setEditingNickname] = useState<string | null>(null);
   const [nicknameValue, setNicknameValue] = useState('');
+  const [editingCommunity, setEditingCommunity] = useState<string | null>(null);
   const [showStripeDebug, setShowStripeDebug] = useState(false);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
   // Reconciliation state
@@ -151,6 +152,16 @@ export default function DiezmosPage() {
       body: JSON.stringify({ action: 'update_member', id, nickname: nicknameValue }),
     });
     setEditingNickname(null);
+    fetchDiezmos();
+  }
+
+  async function handleChangeCommunity(id: string, community: string) {
+    await fetch('/api/diezmos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_member', id, community }),
+    });
+    setEditingCommunity(null);
     fetchDiezmos();
   }
 
@@ -589,7 +600,9 @@ export default function DiezmosPage() {
         ) : view === 'summary' ? (
           /* ===================== SUMMARY VIEW ===================== */
           <div className="space-y-4">
-            {communityStats.map((cs: any) => {
+            {communityStats
+              .filter((cs: any) => filterCommunity === 'all' || cs.community === filterCommunity)
+              .map((cs: any) => {
               const nonPaying = members.filter(m => m.community === cs.community && !m.payments?.[currentMonth]);
               const paying = members.filter(m => m.community === cs.community && m.payments?.[currentMonth]);
               const pctPaying = cs.totalMembers > 0 ? Math.round((cs.payingMembers / cs.totalMembers) * 100) : 0;
@@ -718,18 +731,38 @@ export default function DiezmosPage() {
                             </div>
                           </td>
                           <td className="px-4 sm:px-6 py-3">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                              m.community === 'San Pablo' ? 'bg-blue-50 text-blue-700' :
-                              m.community === 'San Ignacio' ? 'bg-green-50 text-green-700' :
-                              'bg-orange-50 text-orange-700'
-                            }`}>{m.community}</span>
+                            {editingCommunity === m.id ? (
+                              <select
+                                defaultValue={m.community}
+                                onChange={e => handleChangeCommunity(m.id, e.target.value)}
+                                onBlur={() => setEditingCommunity(null)}
+                                autoFocus
+                                className="text-xs font-medium px-2 py-1 rounded-lg border border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                              >
+                                {communities.map(c => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                onClick={() => setEditingCommunity(m.id)}
+                                className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer hover:ring-2 hover:ring-violet-300 transition-all ${
+                                  m.community === 'San Pablo' ? 'bg-blue-50 text-blue-700' :
+                                  m.community === 'San Ignacio' ? 'bg-green-50 text-green-700' :
+                                  'bg-orange-50 text-orange-700'
+                                }`}
+                                title="Clic para cambiar comunidad"
+                              >
+                                {m.community}
+                              </button>
+                            )}
                           </td>
                           <td className="px-4 sm:px-6 py-3">
                             <div className="flex flex-wrap gap-1.5">
-                              {m.stripe_customer_id && (
+                              {m.stripeCustomerId && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
                                   <CreditCard size={9} />
-                                  {m.stripe_customer_email ? m.stripe_customer_email.split('@')[0] : 'Stripe'}
+                                  {m.stripeCustomerEmail ? m.stripeCustomerEmail.split('@')[0] : 'Stripe'}
                                   {m.stripeSubscriptionId && ` · ${formatCurrency(m.stripeAmount || 0)}/mes`}
                                 </span>
                               )}
@@ -742,7 +775,7 @@ export default function DiezmosPage() {
                                   </button>
                                 </span>
                               ))}
-                              {!m.stripe_customer_id && memberBankRules.length === 0 && (
+                              {!m.stripeCustomerId && memberBankRules.length === 0 && (
                                 <span className="text-xs text-gray-300">—</span>
                               )}
                             </div>

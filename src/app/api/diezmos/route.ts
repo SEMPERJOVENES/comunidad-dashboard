@@ -295,11 +295,12 @@ export async function GET(request: import('next/server').NextRequest) {
       console.error('Error fetching Stripe balance transactions:', e);
     }
 
-    // ── 7. Bank diezmo transactions ────────────────────────────────────
+    // ── 7. Bank diezmo transactions (exclude Stripe payouts) ──────────
     let bankDiezmosQuery = supabase
       .from('bank_transactions')
       .select('*')
-      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo');
+      .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo')
+      .not('concept', 'ilike', '%stripe%');
     if (startDate) bankDiezmosQuery = bankDiezmosQuery.gte('date', startDate);
     if (endDate) bankDiezmosQuery = bankDiezmosQuery.lte('date', endDate);
     const { data: bankDiezmos } = await bankDiezmosQuery;
@@ -389,7 +390,8 @@ export async function GET(request: import('next/server').NextRequest) {
     let allDiezmoQuery = supabase
       .from('bank_transactions')
       .select('*')
-      .or(orFilters.join(','));
+      .or(orFilters.join(','))
+      .not('concept', 'ilike', '%stripe%');
     if (startDate) allDiezmoQuery = allDiezmoQuery.gte('date', startDate);
     if (endDate) allDiezmoQuery = allDiezmoQuery.lte('date', endDate);
     const { data: allDiezmoBankTxs } = await allDiezmoQuery;
@@ -460,6 +462,15 @@ export async function GET(request: import('next/server').NextRequest) {
 
     // ── 10. Summary ────────────────────────────────────────────────────
     const currentMonth = getMonthKey(new Date());
+    const prevDate = new Date(); prevDate.setMonth(prevDate.getMonth() - 1);
+    const prevMonth = getMonthKey(prevDate);
+
+    // Active = paid this month, last month, or has active Stripe subscription
+    for (const m of members) {
+      const paidRecently = m.payments?.[currentMonth] || m.payments?.[prevMonth] || m.stripeSubscriptionId;
+      m.isActive = !!paidRecently;
+    }
+
     const communityStats = communities.map((c: string) => {
       const cmembers = members.filter((m: any) => m.community === c);
       const paying = cmembers.filter((m: any) => m.payments?.[currentMonth]);
@@ -468,8 +479,7 @@ export async function GET(request: import('next/server').NextRequest) {
     });
 
     const totalMensual = members.reduce((s: number, m: any) => s + (m.payments?.[currentMonth]?.amount || 0), 0);
-    // Active = DB is_active OR has active Stripe subscription
-    const totalActive = members.filter((m: any) => m.isActive || m.stripeSubscriptionId).length;
+    const totalActive = members.filter((m: any) => m.isActive).length;
     const totalPaying = members.filter((m: any) => m.payments?.[currentMonth]).length;
     const stripePayingCount = members.filter((m: any) => {
       const p = m.payments?.[currentMonth];
