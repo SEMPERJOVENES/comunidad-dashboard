@@ -716,11 +716,11 @@ export default function DiezmosPage() {
                       const payment = m.payments?.[currentMonth];
                       const memberBankRules = bankRules.filter((r: any) => r.member_id === m.id);
                       return (
-                        <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!payment ? 'opacity-50' : ''}`}>
+                        <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!m.isActive ? 'opacity-50' : ''}`}>
                           <td className="px-4 sm:px-6 py-3">
                             <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${payment ? 'bg-green-100' : 'bg-gray-100'}`}>
-                                <span className={`text-xs font-bold ${payment ? 'text-green-600' : 'text-gray-400'}`}>
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${m.isActive ? 'bg-green-100' : 'bg-gray-100'}`}>
+                                <span className={`text-xs font-bold ${m.isActive ? 'text-green-600' : 'text-gray-400'}`}>
                                   {displayName(m).split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
                                 </span>
                               </div>
@@ -1064,17 +1064,16 @@ export default function DiezmosPage() {
                           ))}
                         </tr>
                         {mems.map((m: any) => {
-                          const hasCurrent = !!m.payments?.[currentMonth];
                           return (
-                            <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50/50 group ${!hasCurrent ? 'opacity-40' : ''}`}>
+                            <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50/50 group ${!m.isActive ? 'opacity-40' : ''}`}>
                               <td className="px-3 py-1.5 sticky left-0 bg-white z-10 group-hover:bg-gray-50/50">
                                 <div className="flex items-center gap-2">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${hasCurrent ? 'bg-green-100' : 'bg-gray-50'}`}>
-                                    <span className={`text-[9px] font-bold ${hasCurrent ? 'text-green-600' : 'text-gray-400'}`}>
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${m.isActive ? 'bg-green-100' : 'bg-gray-50'}`}>
+                                    <span className={`text-[9px] font-bold ${m.isActive ? 'text-green-600' : 'text-gray-400'}`}>
                                       {displayName(m).substring(0, 2).toUpperCase()}
                                     </span>
                                   </div>
-                                  <span className={`text-xs truncate max-w-[100px] ${hasCurrent ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                                  <span className={`text-xs truncate max-w-[100px] ${m.isActive ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
                                     {displayName(m)}
                                   </span>
                                   {m.stripeSubscriptionId && <CreditCard size={9} className="text-blue-400 flex-shrink-0" />}
