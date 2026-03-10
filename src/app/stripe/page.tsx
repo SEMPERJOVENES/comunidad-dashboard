@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
+import { formatCurrency, formatDate, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import { CreditCard, TrendingUp, ArrowUpRight, Loader2, CheckCircle } from 'lucide-react';
 
@@ -29,8 +29,7 @@ interface StripeData {
 }
 
 export default function StripePage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<StripeData | null>(null);

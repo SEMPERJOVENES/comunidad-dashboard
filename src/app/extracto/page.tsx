@@ -4,33 +4,26 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
+import { formatCurrency, formatDate, getDefaultRange } from '@/lib/utils';
 import { DateRange, BankTransaction } from '@/lib/types';
 import {
   Landmark, Upload, Search, Loader2, BookOpen, AlertCircle, List,
-  Calendar, ShoppingBag,
+  Calendar, TrendingUp, TrendingDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-
-interface ExtendedTransaction extends BankTransaction {
-  source?: 'bank' | 'shopify';
-}
 
 const YEAR_TABS = [2023, 2024, 2025, 2026];
 
 export default function ExtractoPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
-  const [transactions, setTransactions] = useState<ExtendedTransaction[]>([]);
-  const [shopifyTransactions, setShopifyTransactions] = useState<ExtendedTransaction[]>([]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
+  const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'sin_clasificar' | 'shopify'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'sin_clasificar'>('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [showShopify, setShowShopify] = useState(true);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -40,21 +33,15 @@ export default function ExtractoPage() {
   async function fetchTransactions() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        year: String(selectedYear),
-        shopify: showShopify ? '1' : '0',
-      });
+      const params = new URLSearchParams({ year: String(selectedYear) });
       const res = await fetch(`/api/extracto?${params}`);
       const data = await res.json();
-      setTransactions((data.transactions || []).map((t: any) => ({ ...t, source: t.source || 'bank' })));
-      setShopifyTransactions((data.shopifyTransactions || []).map((t: any) => ({ ...t, source: 'shopify' })));
+      setTransactions(data.transactions || []);
 
-      // Build tag options from tag_categories
       const cats = (data.tagCategories || []).map((tc: any) => tc.name as string);
       setTagOptions(cats.sort());
     } catch {
       setTransactions([]);
-      setShopifyTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -69,7 +56,7 @@ export default function ExtractoPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setTransactions(txs => txs.map(t => t.id === id ? { ...data.transaction, source: 'bank' } : t));
+        setTransactions(txs => txs.map(t => t.id === id ? data.transaction : t));
         setEditingId(null);
       }
     } catch {}
@@ -148,18 +135,8 @@ export default function ExtractoPage() {
     else alert(`Error: ${data.error}`);
   }
 
-  // Merge bank + shopify for display
-  const allTransactions = useMemo(() => {
-    if (activeTab === 'shopify') return shopifyTransactions;
-    const combined = [...transactions];
-    if (activeTab === 'all' && showShopify) {
-      combined.push(...shopifyTransactions);
-    }
-    return combined.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [transactions, shopifyTransactions, activeTab, showShopify]);
-
   const filtered = useMemo(() => {
-    return allTransactions.filter(tx => {
+    return transactions.filter(tx => {
       const tag = tx.manualTag || tx.autoTag || '';
       if (activeTab === 'sin_clasificar' && tag) return false;
       if (filterCategory !== 'all') {
@@ -174,13 +151,12 @@ export default function ExtractoPage() {
       }
       return true;
     });
-  }, [allTransactions, activeTab, filterCategory, searchTerm]);
+  }, [transactions, activeTab, filterCategory, searchTerm]);
 
-  const bankOnly = transactions;
-  const ingresos = bankOnly.filter(tx => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0);
-  const gastos = bankOnly.filter(tx => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0);
-  const sinClasificar = bankOnly.filter(tx => !tx.autoTag && !tx.manualTag).length;
-  const shopifyTotal = shopifyTransactions.reduce((s, tx) => s + tx.amount, 0);
+  const ingresos = transactions.filter(tx => tx.amount > 0).reduce((s, tx) => s + tx.amount, 0);
+  const gastos = transactions.filter(tx => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0);
+  const sinClasificar = transactions.filter(tx => !tx.autoTag && !tx.manualTag).length;
+  const balance = ingresos - gastos;
 
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
@@ -232,21 +208,29 @@ export default function ExtractoPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <Card className="!p-4">
-            <p className="text-xs text-gray-500 font-medium">Ingresos Banco</p>
+            <div className="flex items-center gap-2">
+              <TrendingUp size={14} className="text-green-500" />
+              <p className="text-xs text-gray-500 font-medium">Ingresos</p>
+            </div>
             <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{formatCurrency(ingresos)}</p>
           </Card>
           <Card className="!p-4">
-            <p className="text-xs text-gray-500 font-medium">Gastos Banco</p>
+            <div className="flex items-center gap-2">
+              <TrendingDown size={14} className="text-red-500" />
+              <p className="text-xs text-gray-500 font-medium">Gastos</p>
+            </div>
             <p className="text-lg sm:text-xl font-bold text-red-600 mt-1">{formatCurrency(gastos)}</p>
           </Card>
           <Card className="!p-4">
-            <p className="text-xs text-gray-500 font-medium">Ventas Shopify</p>
-            <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{formatCurrency(shopifyTotal)}</p>
-            <span className="text-xs text-gray-400">{shopifyTransactions.length} órdenes</span>
+            <p className="text-xs text-gray-500 font-medium">Balance neto</p>
+            <p className={`text-lg sm:text-xl font-bold mt-1 ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(balance)}
+            </p>
           </Card>
           <Card className="!p-4">
-            <p className="text-xs text-gray-500 font-medium">Sin Clasificar</p>
+            <p className="text-xs text-gray-500 font-medium">Sin clasificar</p>
             <p className="text-lg sm:text-xl font-bold text-amber-600 mt-1">{sinClasificar}</p>
+            <span className="text-xs text-gray-400">{transactions.length} movimientos</span>
           </Card>
         </div>
 
@@ -262,6 +246,9 @@ export default function ExtractoPage() {
           >
             <List size={15} />
             Todos
+            <span className="ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full bg-gray-100 text-gray-600">
+              {transactions.length}
+            </span>
           </button>
           <button
             onClick={() => { setActiveTab('sin_clasificar'); setFilterCategory('all'); }}
@@ -276,22 +263,6 @@ export default function ExtractoPage() {
             {sinClasificar > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-700">
                 {sinClasificar}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setActiveTab('shopify'); setFilterCategory('all'); }}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === 'shopify'
-                ? 'bg-green-50 text-green-700'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <ShoppingBag size={15} />
-            Shopify
-            {shopifyTransactions.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full bg-green-100 text-green-700">
-                {shopifyTransactions.length}
               </span>
             )}
           </button>
@@ -336,31 +307,23 @@ export default function ExtractoPage() {
                   {filtered.map((tx) => {
                     const tag = tx.manualTag || tx.autoTag;
                     const isEditing = editingId === tx.id;
-                    const isShopify = tx.source === 'shopify';
                     return (
-                      <tr key={tx.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${isShopify ? 'bg-green-50/30' : ''}`}>
+                      <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="px-4 sm:px-6 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(tx.date)}</td>
                         <td className="px-4 sm:px-6 py-3">
-                          <div className="flex items-center gap-2">
-                            {isShopify && (
-                              <ShoppingBag size={14} className="text-green-500 flex-shrink-0" />
-                            )}
-                            <div>
-                              <p className="text-sm text-gray-900 break-words whitespace-normal">{tx.concept}</p>
-                              {tx.memberName && <p className="text-xs text-gray-400">{tx.memberName}</p>}
-                            </div>
+                          <div>
+                            <p className="text-sm text-gray-900 break-words whitespace-normal">{tx.concept}</p>
+                            {tx.memberName && <p className="text-xs text-gray-400">{tx.memberName}</p>}
                           </div>
                         </td>
                         <td className={`px-4 sm:px-6 py-3 text-right text-sm font-semibold whitespace-nowrap ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
                         </td>
                         <td className="px-4 sm:px-6 py-3 text-right text-sm text-gray-500 whitespace-nowrap">
-                          {isShopify ? '-' : formatCurrency(tx.balance)}
+                          {formatCurrency(tx.balance)}
                         </td>
                         <td className="px-4 sm:px-6 py-3 text-center">
-                          {isShopify ? (
-                            <Badge variant="purple">🛒 {tag || 'Brand'}</Badge>
-                          ) : isEditing ? (
+                          {isEditing ? (
                             <select
                               autoFocus
                               defaultValue={tag || ''}
@@ -398,7 +361,7 @@ export default function ExtractoPage() {
                   {filtered.length === 0 && !loading && (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-sm text-gray-400">
-                        {transactions.length === 0 && shopifyTransactions.length === 0
+                        {transactions.length === 0
                           ? `Sin datos para ${selectedYear}. Importa un extracto bancario para comenzar.`
                           : 'Sin resultados para este filtro'}
                       </td>
@@ -408,7 +371,7 @@ export default function ExtractoPage() {
               </table>
               {filtered.length > 0 && (
                 <div className="px-4 sm:px-6 py-3 border-t border-gray-100 bg-gray-50/50 text-xs text-gray-500">
-                  Mostrando {filtered.length} de {allTransactions.length} movimientos ({transactions.length} banco + {shopifyTransactions.length} Shopify)
+                  Mostrando {filtered.length} de {transactions.length} movimientos bancarios
                 </div>
               )}
             </div>

@@ -40,26 +40,6 @@ export function getDateRanges(): DateRange[] {
       endDate: endOfDay(subDays(now, 1)),
     },
     {
-      label: 'Últimos 7 días',
-      startDate: startOfDay(subDays(now, 7)),
-      endDate: endOfDay(now),
-    },
-    {
-      label: 'Últimos 30 días',
-      startDate: startOfDay(subDays(now, 30)),
-      endDate: endOfDay(now),
-    },
-    {
-      label: 'Últimos 60 días',
-      startDate: startOfDay(subDays(now, 60)),
-      endDate: endOfDay(now),
-    },
-    {
-      label: 'Últimos 90 días',
-      startDate: startOfDay(subDays(now, 90)),
-      endDate: endOfDay(now),
-    },
-    {
       label: 'Este mes',
       startDate: startOfMonth(now),
       endDate: endOfDay(now),
@@ -70,11 +50,32 @@ export function getDateRanges(): DateRange[] {
       endDate: endOfMonth(subMonths(now, 1)),
     },
     {
+      label: 'Últimos 3 meses',
+      startDate: startOfDay(subMonths(now, 3)),
+      endDate: endOfDay(now),
+    },
+    {
+      label: 'Últimos 6 meses',
+      startDate: startOfDay(subMonths(now, 6)),
+      endDate: endOfDay(now),
+    },
+    {
+      label: 'Este año',
+      startDate: new Date(now.getFullYear(), 0, 1),
+      endDate: endOfDay(now),
+    },
+    {
       label: 'Desde siempre',
       startDate: new Date(2020, 0, 1),
       endDate: endOfDay(now),
     },
   ];
+}
+
+// Helper para obtener un rango por defecto por nombre (evitar índices hardcodeados)
+export function getDefaultRange(label: string = 'Últimos 3 meses'): DateRange {
+  const ranges = getDateRanges();
+  return ranges.find(r => r.label === label) || ranges[4]; // fallback: últimos 3 meses
 }
 
 export function cn(...classes: (string | undefined | null | false)[]): string {

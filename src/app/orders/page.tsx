@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, getDateRanges } from '@/lib/utils';
+import { formatCurrency, formatDate, getDefaultRange } from '@/lib/utils';
 import { DateRange, ShopifyOrder } from '@/lib/types';
 import { Search, Filter, Download, Loader2 } from 'lucide-react';
 
 export default function OrdersPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[8]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Desde siempre'));
   const [searchTerm, setSearchTerm] = useState('');
   const [orders, setOrders] = useState<ShopifyOrder[]>([]);
   const [loading, setLoading] = useState(true);

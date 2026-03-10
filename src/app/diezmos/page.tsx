@@ -3,12 +3,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
-import { formatCurrency, getDateRanges } from '@/lib/utils';
+import { formatCurrency, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
   ChevronLeft, ChevronRight, CreditCard, Landmark, Link2, Unlink,
-  TrendingUp, TrendingDown, Wallet, AlertTriangle, ChevronDown, ChevronUp,
+  TrendingUp, ChevronDown, ChevronUp, Calendar,
   Users, LayoutGrid, Table2, PieChart, Plus,
 } from 'lucide-react';
 
@@ -38,6 +38,14 @@ function formatMonth(key: string) {
   return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
 }
 
+function formatMonthFull(key: string) {
+  const [y, m] = key.split('-');
+  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  return `${months[parseInt(m) - 1]} ${y}`;
+}
+
+const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
 const TAG_ICONS: Record<string, string> = {
   'Música': '🎵',
   'Misa/Tabor': '⛪',
@@ -48,14 +56,11 @@ const TAG_ICONS: Record<string, string> = {
 };
 
 export default function DiezmosPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [members, setMembers] = useState<any[]>([]);
   const [communities, setCommunities] = useState<string[]>([]);
   const [communityStats, setCommunityStats] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
-  const [opExpenses, setOpExpenses] = useState<any>(null);
-  const [stripeDebug, setStripeDebug] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,8 +78,12 @@ export default function DiezmosPage() {
   const [editingNickname, setEditingNickname] = useState<string | null>(null);
   const [nicknameValue, setNicknameValue] = useState('');
   const [editingCommunity, setEditingCommunity] = useState<string | null>(null);
-  const [showStripeDebug, setShowStripeDebug] = useState(false);
-  const [showExpenseDetail, setShowExpenseDetail] = useState(false);
+  // Month selector for summary/list views (default: previous month)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  });
   // Reconciliation state
   const [unmatchedStripe, setUnmatchedStripe] = useState<any[]>([]);
   const [unmatchedBank, setUnmatchedBank] = useState<any[]>([]);
@@ -102,8 +111,6 @@ export default function DiezmosPage() {
       setCommunities(data.communities || []);
       setCommunityStats(data.communityStats || []);
       setSummary(data.summary || null);
-      setOpExpenses(data.operationalExpenses || null);
-      setStripeDebug(data.stripeDebug || null);
       setUnmatchedStripe(data.unmatchedStripeSubscribers || []);
       setUnmatchedBank(data.unmatchedBankTransfers || []);
       setBankRules(data.bankRules || []);
@@ -256,12 +263,12 @@ export default function DiezmosPage() {
 
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const aPays = a.payments?.[currentMonth] ? 1 : 0;
-      const bPays = b.payments?.[currentMonth] ? 1 : 0;
+      const aPays = a.payments?.[selectedMonth] ? 1 : 0;
+      const bPays = b.payments?.[selectedMonth] ? 1 : 0;
       if (aPays !== bPays) return bPays - aPays;
       return (a.name || '').localeCompare(b.name || '');
     });
-  }, [filtered, currentMonth]);
+  }, [filtered, selectedMonth]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -282,14 +289,30 @@ export default function DiezmosPage() {
     return groups;
   }, [sortedFiltered, communities, currentMonth]);
 
+  // Años disponibles para el selector de mes
+  const availableYears = useMemo(() => {
+    const startYear = 2023;
+    const endYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let y = startYear; y <= endYear; y++) years.push(y);
+    return years;
+  }, []);
+
+  const selectedYear = parseInt(selectedMonth.split('-')[0]);
+
   function displayName(m: any) {
     return m.nickname || m.name;
   }
 
-  // Participation rate
-  const participationRate = summary?.totalMembers > 0
-    ? Math.round((summary.totalPaying / summary.totalMembers) * 100)
-    : 0;
+  // KPIs calculados para el mes seleccionado
+  const kpiData = useMemo(() => {
+    const payingMembers = members.filter(m => m.payments?.[selectedMonth]);
+    const totalForMonth = payingMembers.reduce((s: number, m: any) => s + (m.payments?.[selectedMonth]?.amount || 0), 0);
+    const fromStripe = payingMembers.filter(m => m.payments?.[selectedMonth]?.source === 'stripe').length;
+    const fromBanco = payingMembers.filter(m => m.payments?.[selectedMonth]?.source === 'banco').length;
+    const rate = members.length > 0 ? Math.round((payingMembers.length / members.length) * 100) : 0;
+    return { totalForMonth, fromStripe, fromBanco, payingCount: payingMembers.length, totalMembers: members.length, rate };
+  }, [members, selectedMonth]);
 
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
@@ -338,214 +361,46 @@ export default function DiezmosPage() {
           </div>
         </div>
 
-        {/* KPIs - Diseño más limpio */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* KPIs — reflejan mes seleccionado en summary/list, o datos globales en grid */}
+        <div className="grid grid-cols-2 gap-3">
           <Card className="!p-4 border-l-4 border-l-green-500">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
                 <TrendingUp size={14} className="text-green-600" />
               </div>
-              <p className="text-xs text-gray-500 font-medium">Ingresos Diezmo</p>
+              <p className="text-xs text-gray-500 font-medium">Ingresos · {view === 'grid' ? 'Período' : formatMonth(selectedMonth)}</p>
             </div>
-            <p className="text-xl font-bold text-green-600">{formatCurrency(opExpenses?.totalIncome || 0)}</p>
-          </Card>
-          <Card className="!p-4 border-l-4 border-l-red-500">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-                <TrendingDown size={14} className="text-red-600" />
-              </div>
-              <p className="text-xs text-gray-500 font-medium">Gastos Operativos</p>
-            </div>
-            <p className="text-xl font-bold text-red-600">{formatCurrency(opExpenses?.totalExpenses || 0)}</p>
-          </Card>
-          <Card className="!p-4 border-l-4 border-l-violet-500">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
-                <Wallet size={14} className="text-violet-600" />
-              </div>
-              <p className="text-xs text-gray-500 font-medium">Balance Neto</p>
-            </div>
-            <p className={`text-xl font-bold ${(opExpenses?.net || 0) >= 0 ? 'text-violet-600' : 'text-red-600'}`}>
-              {formatCurrency(opExpenses?.net || 0)}
+            <p className="text-xl font-bold text-green-600">
+              {view === 'grid' ? formatCurrency(summary?.totalMensual || 0) : formatCurrency(kpiData.totalForMonth)}
             </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] text-blue-500 font-medium">
+                {view === 'grid' ? (summary?.fromStripe || 0) : kpiData.fromStripe} Stripe
+              </span>
+              <span className="text-gray-300">·</span>
+              <span className="text-[10px] text-amber-500 font-medium">
+                {view === 'grid' ? (summary?.fromBanco || 0) : kpiData.fromBanco} Banco
+              </span>
+            </div>
           </Card>
           <Card className="!p-4 border-l-4 border-l-blue-500">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Users size={14} className="text-blue-600" />
               </div>
-              <p className="text-xs text-gray-500 font-medium">Participación</p>
+              <p className="text-xs text-gray-500 font-medium">Participación · {view === 'grid' ? 'Período' : formatMonth(selectedMonth)}</p>
             </div>
             <div className="flex items-end gap-2">
-              <p className="text-xl font-bold text-blue-600">{participationRate}%</p>
-              <p className="text-xs text-gray-400 mb-0.5">{summary?.totalPaying || 0}/{summary?.totalMembers || 0}</p>
+              <p className="text-xl font-bold text-blue-600">{view === 'grid' ? (summary?.totalMembers > 0 ? Math.round((summary.totalPaying / summary.totalMembers) * 100) : 0) : kpiData.rate}%</p>
+              <p className="text-xs text-gray-400 mb-0.5">
+                {view === 'grid' ? `${summary?.totalPaying || 0}/${summary?.totalMembers || 0}` : `${kpiData.payingCount}/${kpiData.totalMembers}`}
+              </p>
             </div>
-            {/* Mini progress bar */}
             <div className="h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${participationRate}%` }} />
+              <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${view === 'grid' ? (summary?.totalMembers > 0 ? Math.round((summary.totalPaying / summary.totalMembers) * 100) : 0) : kpiData.rate}%` }} />
             </div>
           </Card>
         </div>
-
-        {/* Stripe + Banco breakdown compacto */}
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6 px-4 py-3 bg-gray-50 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-              <CreditCard size={16} className="text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Stripe</p>
-              <p className="text-sm font-bold text-blue-600">{formatCurrency(summary?.totalStripeCollected || 0)}</p>
-            </div>
-          </div>
-          <div className="w-px h-10 bg-gray-200" />
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Landmark size={16} className="text-amber-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Banco</p>
-              <p className="text-sm font-bold text-amber-600">{formatCurrency(summary?.totalMensual || 0)}</p>
-            </div>
-          </div>
-          <div className="w-px h-10 bg-gray-200" />
-          <div>
-            <p className="text-xs text-gray-500">Este mes</p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-blue-500 font-medium">{summary?.fromStripe || 0} Stripe</span>
-              <span className="text-gray-300">·</span>
-              <span className="text-xs text-amber-500 font-medium">{summary?.fromBanco || 0} Banco</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Gastos Operativos Breakdown */}
-        {opExpenses && opExpenses.byTag && opExpenses.byTag.length > 0 && (
-          <Card>
-            <button onClick={() => setShowExpenseDetail(!showExpenseDetail)}
-              className="w-full flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
-                  <TrendingDown size={16} className="text-red-600" />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">Gastos Operativos</h3>
-              </div>
-              {showExpenseDetail ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-            </button>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
-              {opExpenses.byTag.map((t: any) => (
-                <div key={t.tag} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl">
-                  <span className="text-lg">{TAG_ICONS[t.tag] || '💰'}</span>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-gray-500 truncate">{t.tag}</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(t.amount)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {showExpenseDetail && opExpenses.monthlyChart && (
-              <div className="mt-4 space-y-3">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase">Evolución Mensual</h4>
-                <div className="space-y-2">
-                  {opExpenses.monthlyChart.map((m: any) => {
-                    const maxVal = Math.max(...opExpenses.monthlyChart.map((x: any) => Math.max(x.income, x.expenses)));
-                    return (
-                      <div key={m.month} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500 font-medium w-16">{formatMonth(m.month)}</span>
-                        <div className="flex-1 flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <div className="h-3 bg-green-400 rounded-full transition-all" style={{ width: `${maxVal > 0 ? (m.income / maxVal) * 100 : 0}%` }} />
-                            <span className="text-[10px] text-green-600 font-medium whitespace-nowrap">{formatCurrency(m.income)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="h-3 bg-red-400 rounded-full transition-all" style={{ width: `${maxVal > 0 ? (m.expenses / maxVal) * 100 : 0}%` }} />
-                            <span className="text-[10px] text-red-600 font-medium whitespace-nowrap">{formatCurrency(m.expenses)}</span>
-                          </div>
-                        </div>
-                        <span className={`text-xs font-bold w-16 text-right ${m.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {m.net >= 0 ? '+' : ''}{formatCurrency(m.net)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {opExpenses.recentExpenses && opExpenses.recentExpenses.length > 0 && (
-                  <div className="mt-3">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Últimos Gastos</h4>
-                    <div className="overflow-x-auto -mx-4 sm:-mx-6">
-                      <table className="w-full min-w-[400px]">
-                        <thead>
-                          <tr className="border-b border-gray-100">
-                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Mes</th>
-                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Categoría</th>
-                            <th className="text-left text-[10px] font-medium text-gray-500 px-4 py-2">Concepto</th>
-                            <th className="text-right text-[10px] font-medium text-gray-500 px-4 py-2">Importe</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {opExpenses.recentExpenses.map((e: any, i: number) => (
-                            <tr key={i} className="border-b border-gray-50">
-                              <td className="px-4 py-1.5 text-xs text-gray-600">{formatMonth(e.month)}</td>
-                              <td className="px-4 py-1.5 text-xs">
-                                <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700">{TAG_ICONS[e.tag] || ''} {e.tag}</span>
-                              </td>
-                              <td className="px-4 py-1.5 text-xs text-gray-600 max-w-[200px] truncate">{e.concept}</td>
-                              <td className="px-4 py-1.5 text-xs text-right font-medium text-red-600">{formatCurrency(e.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Stripe Debug (collapsible) */}
-        {stripeDebug && (
-          <button onClick={() => setShowStripeDebug(!showStripeDebug)}
-            className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-            <AlertTriangle size={12} />
-            <span>Debug Stripe: {stripeDebug.totalSubsFetched} subs, {stripeDebug.matchedToMembers} vinculadas</span>
-            {showStripeDebug ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-        )}
-        {showStripeDebug && stripeDebug && (
-          <Card className="bg-yellow-50 border-yellow-200">
-            <h3 className="text-sm font-bold text-yellow-800 mb-2">Debug Stripe</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div>
-                <p className="font-semibold text-yellow-700 mb-1">Suscripciones NO vinculadas ({stripeDebug.unmatchedSubs?.length || 0}):</p>
-                {stripeDebug.unmatchedSubs?.length > 0 ? (
-                  <ul className="space-y-1">
-                    {stripeDebug.unmatchedSubs.map((s: any, i: number) => (
-                      <li key={i} className="p-1.5 bg-white rounded border border-yellow-200">
-                        <span className="font-medium">{s.name}</span> · {s.email} · {formatCurrency(s.amount)} · {s.product || 'Sin producto'}
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-yellow-600">Todas vinculadas</p>}
-              </div>
-              <div>
-                <p className="font-semibold text-yellow-700 mb-1">Muestra de Facturas ({stripeDebug.totalInvoicesFetched}):</p>
-                {stripeDebug.invoicesSample?.length > 0 ? (
-                  <ul className="space-y-1">
-                    {stripeDebug.invoicesSample.map((i: any, idx: number) => (
-                      <li key={idx} className="p-1.5 bg-white rounded border border-yellow-200">
-                        <span className="font-medium">{i.name}</span> · {formatCurrency(i.amount)} · {i.period ? formatMonth(i.period.substring(0, 7)) : 'N/A'}
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-yellow-600">Sin facturas recientes</p>}
-              </div>
-            </div>
-          </Card>
-        )}
 
         {/* Add member form */}
         {showAddForm && (
@@ -591,6 +446,53 @@ export default function DiezmosPage() {
           </div>
         </div>
 
+        {/* Month Selector — solo para summary y list */}
+        {(view === 'summary' || view === 'list') && (
+          <Card className="!p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar size={14} className="text-violet-500" />
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mes seleccionado:</span>
+              <span className="text-sm font-bold text-violet-700">{formatMonthFull(selectedMonth)}</span>
+            </div>
+            {/* Year tabs */}
+            <div className="flex gap-1 mb-2">
+              {availableYears.map(y => (
+                <button key={y}
+                  onClick={() => setSelectedMonth(`${y}-${selectedMonth.split('-')[1]}`)}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                    selectedYear === y
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {y}
+                </button>
+              ))}
+            </div>
+            {/* Month grid */}
+            <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+              {MONTH_NAMES_SHORT.map((name, i) => {
+                const monthKey = `${selectedYear}-${String(i + 1).padStart(2, '0')}`;
+                const isSelected = monthKey === selectedMonth;
+                const isFuture = monthKey > currentMonth;
+                return (
+                  <button key={i}
+                    onClick={() => !isFuture && setSelectedMonth(monthKey)}
+                    disabled={isFuture}
+                    className={`py-1.5 text-xs font-medium rounded-lg transition-all ${
+                      isSelected
+                        ? 'bg-violet-600 text-white shadow-sm ring-2 ring-violet-300'
+                        : isFuture
+                          ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                          : 'bg-gray-50 text-gray-600 hover:bg-violet-50 hover:text-violet-600'
+                    }`}>
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* Content */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -603,9 +505,12 @@ export default function DiezmosPage() {
             {communityStats
               .filter((cs: any) => filterCommunity === 'all' || cs.community === filterCommunity)
               .map((cs: any) => {
-              const nonPaying = members.filter(m => m.community === cs.community && !m.payments?.[currentMonth]);
-              const paying = members.filter(m => m.community === cs.community && m.payments?.[currentMonth]);
-              const pctPaying = cs.totalMembers > 0 ? Math.round((cs.payingMembers / cs.totalMembers) * 100) : 0;
+              const nonPaying = members.filter(m => m.community === cs.community && !m.payments?.[selectedMonth]);
+              const paying = members.filter(m => m.community === cs.community && m.payments?.[selectedMonth]);
+              const payingCount = paying.length;
+              const totalMembers = members.filter(m => m.community === cs.community).length;
+              const pctPaying = totalMembers > 0 ? Math.round((payingCount / totalMembers) * 100) : 0;
+              const monthlyTotal = paying.reduce((s: number, m: any) => s + (m.payments?.[selectedMonth]?.amount || 0), 0);
               return (
                 <Card key={cs.community} className="!p-5">
                   <div className="flex items-center justify-between mb-4">
@@ -621,12 +526,12 @@ export default function DiezmosPage() {
                       </div>
                       <div>
                         <h3 className="text-base font-bold text-gray-900">{cs.community}</h3>
-                        <p className="text-xs text-gray-400">{cs.totalMembers} miembros</p>
+                        <p className="text-xs text-gray-400">{totalMembers} miembros</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-violet-600">{formatCurrency(cs.monthlyTotal)}</p>
-                      <p className="text-xs text-gray-400">este mes</p>
+                      <p className="text-2xl font-bold text-violet-600">{formatCurrency(monthlyTotal)}</p>
+                      <p className="text-xs text-gray-400">{formatMonth(selectedMonth)}</p>
                     </div>
                   </div>
 
@@ -652,7 +557,7 @@ export default function DiezmosPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {paying.map((m: any) => (
                             <span key={m.id} className="text-[11px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
-                              {displayName(m)} · {formatCurrency(m.payments[currentMonth]?.amount || 0)}
+                              {displayName(m)} · {formatCurrency(m.payments[selectedMonth]?.amount || 0)}
                             </span>
                           ))}
                         </div>
@@ -678,23 +583,33 @@ export default function DiezmosPage() {
             })}
 
             {/* Total Card */}
-            <Card className="bg-gradient-to-r from-violet-500 to-violet-600 text-white !p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-violet-200">Total Comunidad — Este Mes</p>
-                  <p className="text-3xl font-bold mt-1">{formatCurrency(summary?.totalMensual || 0)}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-xs text-violet-200 flex items-center gap-1">
-                      <CreditCard size={12} /> Stripe: {formatCurrency(summary?.totalStripeCollected || 0)}
-                    </span>
+            {(() => {
+              const allPaying = members.filter(m => m.payments?.[selectedMonth]);
+              const totalForMonth = allPaying.reduce((s: number, m: any) => s + (m.payments?.[selectedMonth]?.amount || 0), 0);
+              const pctMonth = members.length > 0 ? Math.round((allPaying.length / members.length) * 100) : 0;
+              return (
+                <Card className="bg-gradient-to-r from-violet-500 to-violet-600 text-white !p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-violet-200">Total — {formatMonthFull(selectedMonth)}</p>
+                      <p className="text-3xl font-bold mt-1">{formatCurrency(totalForMonth)}</p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs text-violet-200 flex items-center gap-1">
+                          <CreditCard size={12} /> {allPaying.filter(m => m.payments?.[selectedMonth]?.source === 'stripe').length} Stripe
+                        </span>
+                        <span className="text-xs text-violet-200 flex items-center gap-1">
+                          <Landmark size={12} /> {allPaying.filter(m => m.payments?.[selectedMonth]?.source === 'banco').length} Banco
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-4xl font-bold">{pctMonth}%</p>
+                      <p className="text-xs text-violet-200">{allPaying.length} de {members.length} dando</p>
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-4xl font-bold">{participationRate}%</p>
-                  <p className="text-xs text-violet-200">{summary?.totalPaying || 0} de {summary?.totalMembers || 0} dando</p>
-                </div>
-              </div>
-            </Card>
+                </Card>
+              );
+            })()}
           </div>
         ) : view === 'list' ? (
           /* ===================== LIST VIEW ===================== */
@@ -707,13 +622,13 @@ export default function DiezmosPage() {
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Miembro</th>
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Comunidad</th>
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Vinculación</th>
-                      <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Este Mes</th>
+                      <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">{formatMonth(selectedMonth)}</th>
                       <th className="text-center text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3 w-24">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedFiltered.map(m => {
-                      const payment = m.payments?.[currentMonth];
+                      const payment = m.payments?.[selectedMonth];
                       const memberBankRules = bankRules.filter((r: any) => r.member_id === m.id);
                       return (
                         <tr key={m.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!m.isActive ? 'opacity-50' : ''}`}>

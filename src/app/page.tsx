@@ -8,7 +8,7 @@ import RevenueChart from '@/components/dashboard/RevenueChart';
 import TopProducts from '@/components/dashboard/TopProducts';
 import RecentOrders from '@/components/dashboard/RecentOrders';
 import { DateRange, RevenueDataPoint, TopProduct, ShopifyOrder } from '@/lib/types';
-import { getDateRanges, formatCurrency } from '@/lib/utils';
+import { getDefaultRange, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
@@ -73,8 +73,7 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);

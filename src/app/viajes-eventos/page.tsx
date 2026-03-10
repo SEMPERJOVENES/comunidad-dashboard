@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, getDateRanges } from '@/lib/utils';
+import { formatCurrency, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Loader2, Plane, TrendingUp, TrendingDown, Calendar,
@@ -67,8 +67,7 @@ interface CategoryData {
 }
 
 export default function ViajesEventosPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [totals, setTotals] = useState({ income: 0, expenses: 0, net: 0 });

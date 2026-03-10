@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, getDateRanges } from '@/lib/utils';
+import { formatCurrency, getDefaultRange } from '@/lib/utils';
 import { DateRange, ShopifyProduct } from '@/lib/types';
 import {
   Search, Package, Loader2, Minus, Plus, Check, X,
@@ -23,14 +23,13 @@ type CostMap = Record<string, CostData>;
 type CategoryFilter = 'all' | 'inventario' | 'inmovilizado';
 
 export default function InventarioPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [costMap, setCostMap] = useState<CostMap>({});
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [adjustment, setAdjustment] = useState(0);
+  const [targetStock, setTargetStock] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Costes inline editing
@@ -69,6 +68,8 @@ export default function InventarioPage() {
   }, [fetchProducts]);
 
   async function handleAdjustInventory(product: ShopifyProduct) {
+    const totalInventory = product.variants?.reduce((sum, v) => sum + (v.inventory_quantity || 0), 0) || 0;
+    const adjustment = targetStock - totalInventory;
     if (adjustment === 0) { setEditingId(null); return; }
     setSaving(true);
     setSaveMsg(null);
@@ -87,14 +88,14 @@ export default function InventarioPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al ajustar inventario');
-      setSaveMsg({ type: 'success', text: `Stock de "${product.title}" actualizado (${adjustment > 0 ? '+' : ''}${adjustment})` });
+      setSaveMsg({ type: 'success', text: `Stock de "${product.title}" → ${targetStock} (${adjustment > 0 ? '+' : ''}${adjustment})` });
       await fetchProducts(true);
     } catch (err: any) {
       setSaveMsg({ type: 'error', text: err.message || 'Error al ajustar inventario en Shopify' });
     } finally {
       setSaving(false);
       setEditingId(null);
-      setAdjustment(0);
+      setTargetStock(0);
       setTimeout(() => setSaveMsg(null), 5000);
     }
   }
@@ -386,18 +387,22 @@ export default function InventarioPage() {
                         <td className="px-3 py-3">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => setAdjustment(a => a - 1)} className="p-1 rounded hover:bg-gray-200">
+                              <button onClick={() => setTargetStock(t => Math.max(0, t - 1))} className="p-1 rounded hover:bg-gray-200">
                                 <Minus size={14} />
                               </button>
-                              <span className="text-sm font-bold w-14 text-center">
-                                {totalInventory + adjustment}
-                                {adjustment !== 0 && (
-                                  <span className={`text-[10px] ml-0.5 ${adjustment > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    ({adjustment > 0 ? '+' : ''}{adjustment})
-                                  </span>
-                                )}
-                              </span>
-                              <button onClick={() => setAdjustment(a => a + 1)} className="p-1 rounded hover:bg-gray-200">
+                              <input
+                                type="number"
+                                min="0"
+                                value={targetStock}
+                                onChange={(e) => setTargetStock(Math.max(0, parseInt(e.target.value) || 0))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleAdjustInventory(product);
+                                  if (e.key === 'Escape') { setEditingId(null); setTargetStock(0); }
+                                }}
+                                className="w-16 text-center text-sm font-bold border border-gray-300 rounded-md py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                autoFocus
+                              />
+                              <button onClick={() => setTargetStock(t => t + 1)} className="p-1 rounded hover:bg-gray-200">
                                 <Plus size={14} />
                               </button>
                               <button
@@ -408,15 +413,20 @@ export default function InventarioPage() {
                                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                               </button>
                               <button
-                                onClick={() => { setEditingId(null); setAdjustment(0); }}
+                                onClick={() => { setEditingId(null); setTargetStock(0); }}
                                 className="p-1 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
                               >
                                 <X size={14} />
                               </button>
+                              {targetStock !== totalInventory && (
+                                <span className={`text-[10px] font-medium ${targetStock > totalInventory ? 'text-green-600' : 'text-red-600'}`}>
+                                  {targetStock > totalInventory ? '+' : ''}{targetStock - totalInventory}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <button
-                              onClick={() => { setEditingId(product.id); setAdjustment(0); }}
+                              onClick={() => { setEditingId(product.id); setTargetStock(totalInventory); }}
                               className={`block mx-auto text-sm font-semibold px-3 py-1 rounded-lg hover:ring-2 hover:ring-violet-300 transition-all ${
                                 totalInventory <= 0 ? 'text-red-600 bg-red-50' :
                                 totalInventory <= 5 ? 'text-amber-600 bg-amber-50' :

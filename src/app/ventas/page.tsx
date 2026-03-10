@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, formatDateTime, getDateRanges } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime, getDefaultRange } from '@/lib/utils';
 import { DateRange, PresentialSale, ShopifyProduct } from '@/lib/types';
 import { Store, Plus, Loader2, Minus, Trash2, Check, Package, X, User, StickyNote } from 'lucide-react';
 
 export default function VentasPresencialesPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [sales, setSales] = useState<PresentialSale[]>([]);
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);

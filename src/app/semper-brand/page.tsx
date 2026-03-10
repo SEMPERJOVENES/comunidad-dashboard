@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatNumber, getDateRanges } from '@/lib/utils';
+import { formatCurrency, formatNumber, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   TrendingUp, TrendingDown, DollarSign, Percent, ShoppingCart,
@@ -162,8 +162,7 @@ function StatusBadge({ status, type }: { status: string; type: 'financial' | 'fu
 }
 
 export default function SemperBrandPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[8]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Desde siempre'));
   const [data, setData] = useState<SemperBrandData | null>(null);
   const [costsData, setCostsData] = useState<BrandCostsData | null>(null);
   const [loading, setLoading] = useState(true);

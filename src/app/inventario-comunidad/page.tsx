@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, getDateRanges } from '@/lib/utils';
+import { formatCurrency, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   Box, Plus, Trash2, Search, Loader2, Edit3, Check, X, Settings,
@@ -39,8 +39,7 @@ interface InventoryItem {
 }
 
 export default function InventarioComunidadPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [manualItems, setManualItems] = useState<InventoryItem[]>([]);
   const [bankItems, setBankItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -16,11 +16,27 @@ export async function GET(request: NextRequest) {
       status: 'any',
     });
 
-    // MÉTODO BRUTO: todos los pedidos cuentan como ingreso, devoluciones como gasto
+    // MÉTODO BRUTO: todos los pedidos cuentan como ingreso, devoluciones REALES como gasto
     const shopifyGross = orders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
     const paidOrders = orders.filter((o: any) => o.financial_status !== 'refunded');
     const refundedOrders = orders.filter((o: any) => o.financial_status === 'refunded' || o.financial_status === 'partially_refunded');
-    const shopifyRefundAmount = refundedOrders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
+
+    // Calcular importe REAL de devoluciones (no el total del pedido)
+    function getActualRefundAmount(order: any): number {
+      let total = 0;
+      for (const refund of (order.refunds || [])) {
+        for (const li of (refund.refund_line_items || [])) {
+          total += parseFloat(li.subtotal || '0');
+          total += parseFloat(li.total_tax || '0');
+        }
+        // Ajustes adicionales (envío devuelto, etc.)
+        for (const adj of (refund.order_adjustments || [])) {
+          total += Math.abs(parseFloat(adj.amount || '0'));
+        }
+      }
+      return total;
+    }
+    const shopifyRefundAmount = orders.reduce((sum: number, o: any) => sum + getActualRefundAmount(o), 0);
 
     // 2. Ventas presenciales (todas son Semper Brand)
     const { data: ventas } = await supabase
@@ -86,7 +102,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3b. Stripe fees (comisiones de pasarela de pago)
+    // 3b. Stripe fees — SOLO cargos de Brand (excluir suscripciones de diezmos)
     const startTimestamp = Math.floor(new Date(start).getTime() / 1000);
     const endTimestamp = Math.floor(new Date(end).getTime() / 1000);
 
@@ -97,6 +113,13 @@ export async function GET(request: NextRequest) {
     const stripeMonthlyFees = new Map<string, number>();
     const stripeChargeDetails: Array<{ date: string; description: string; amount: number; fee: number }> = [];
 
+    // Helper: detectar si una transacción es de suscripción/diezmo (NO de Brand)
+    function isSubscriptionTx(description: string | null): boolean {
+      if (!description) return false;
+      const lower = description.toLowerCase();
+      return lower.includes('subscription') || lower.includes('invoice') || lower.includes('suscripci');
+    }
+
     try {
       const stripeTxs = await getAllBalanceTransactions({
         created: { gte: startTimestamp, lte: endTimestamp },
@@ -104,6 +127,9 @@ export async function GET(request: NextRequest) {
 
       for (const tx of stripeTxs) {
         if (tx.type === 'charge' || tx.type === 'payment') {
+          // Excluir cargos de suscripciones (son diezmos, no Brand)
+          if (isSubscriptionTx(tx.description)) continue;
+
           stripeFees += tx.fee;
           stripeGross += tx.amount > 0 ? tx.amount : 0;
           stripeNet += tx.net > 0 ? tx.net : 0;
@@ -119,7 +145,9 @@ export async function GET(request: NextRequest) {
             fee: tx.fee,
           });
         } else if (tx.type === 'refund') {
-          // Las devoluciones de Stripe devuelven la comisión (fee suele ser 0 o negativo)
+          // Excluir reembolsos de suscripciones también
+          if (isSubscriptionTx(tx.description)) continue;
+
           stripeRefundFees += tx.fee;
           const month = new Date(tx.created).toISOString().substring(0, 7);
           stripeMonthlyFees.set(month, (stripeMonthlyFees.get(month) || 0) + tx.fee);
@@ -129,8 +157,8 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching Stripe fees:', err);
     }
 
-    // Comisiones netas de Stripe (cargos - reembolsadas)
-    const netStripeFees = stripeFees + stripeRefundFees; // refundFees suele ser <= 0
+    // Comisiones netas de Stripe de Brand (sin suscripciones)
+    const netStripeFees = stripeFees + stripeRefundFees;
 
     // 4. Desglose mensual — método bruto (todos los pedidos)
     const monthlyMap = new Map<string, { shopify: number; shopifyRefunds: number; ventas: number; bankIncome: number; expenses: number; stripeFees: number; orders: number }>();
@@ -141,8 +169,10 @@ export async function GET(request: NextRequest) {
       const amount = parseFloat(o.total_price || '0');
       existing.shopify += amount;
       existing.orders += 1;
-      if (o.financial_status === 'refunded' || o.financial_status === 'partially_refunded') {
-        existing.shopifyRefunds += amount;
+      // Usar importe REAL de devolución, no el total del pedido
+      const refundAmt = getActualRefundAmount(o);
+      if (refundAmt > 0) {
+        existing.shopifyRefunds += refundAmt;
       }
       monthlyMap.set(month, existing);
     }
@@ -210,6 +240,7 @@ export async function GET(request: NextRequest) {
       email: o.customer?.email || o.email || '',
       date: o.created_at,
       total: parseFloat(o.total_price || '0'),
+      refundAmount: getActualRefundAmount(o),
       financialStatus: o.financial_status || '',
       fulfillmentStatus: o.fulfillment_status || '',
       itemCount: (o.line_items || []).reduce((s: number, li: any) => s + (li.quantity || 1), 0),

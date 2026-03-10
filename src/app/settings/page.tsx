@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { getDateRanges } from '@/lib/utils';
+import { getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import { Settings, ShoppingBag, CreditCard, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [shopifyOk, setShopifyOk] = useState<boolean | null>(null);
   const [stripeOk, setStripeOk] = useState<boolean | null>(null);
 

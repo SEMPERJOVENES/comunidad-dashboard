@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { DateRange } from '@/lib/types';
-import { getDateRanges, formatCurrency } from '@/lib/utils';
+import { getDefaultRange, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Users,
   CreditCard, Landmark, ChevronDown, ChevronRight, Calendar,
@@ -90,8 +90,7 @@ interface ViajesEventosData {
 }
 
 export default function ComunidadPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ComunidadData | null>(null);

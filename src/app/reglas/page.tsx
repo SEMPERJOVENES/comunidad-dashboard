@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
-import { getDateRanges } from '@/lib/utils';
+import { getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import { BookOpen, Plus, Trash2, Search, Loader2, ArrowLeft, Edit3, Check, X } from 'lucide-react';
 import Link from 'next/link';
@@ -22,8 +22,7 @@ interface Rule {
 }
 
 export default function ReglasPage() {
-  const ranges = getDateRanges();
-  const [selectedRange, setSelectedRange] = useState<DateRange>(ranges[3]);
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [rules, setRules] = useState<Rule[]>([]);
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
