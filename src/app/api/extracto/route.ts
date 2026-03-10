@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
             concept: `Shopify #${o.order_number || o.name || o.id} — ${items || 'Orden'}`,
             amount: parseFloat(o.total_price || '0'),
             balance: 0,
-            autoTag: 'Shopify',
+            autoTag: 'Brand',
             manualTag: null,
             isDiezmo: false,
             memberName: customerName,

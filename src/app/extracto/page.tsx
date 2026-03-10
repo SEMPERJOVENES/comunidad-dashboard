@@ -359,7 +359,7 @@ export default function ExtractoPage() {
                         </td>
                         <td className="px-4 sm:px-6 py-3 text-center">
                           {isShopify ? (
-                            <Badge variant="success">Shopify</Badge>
+                            <Badge variant="purple">🛒 {tag || 'Brand'}</Badge>
                           ) : isEditing ? (
                             <select
                               autoFocus
