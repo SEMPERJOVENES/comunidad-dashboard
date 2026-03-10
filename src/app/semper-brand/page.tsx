@@ -10,6 +10,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Percent, ShoppingCart,
   Store, Landmark, Package, Loader2,
   BarChart3, Plus, Trash2, Calendar, Truck, User, CreditCard, X, Check,
+  ChevronDown, ChevronUp, RotateCcw,
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -59,11 +60,20 @@ interface ShopifyOrder {
   items: string;
 }
 
+interface TransactionDetail {
+  date: string;
+  description: string;
+  amount: number;
+  paymentMethod?: string;
+  fee?: number;
+  concept?: string;
+}
+
 interface SemperBrandData {
   income: {
     shopify: number;
     shopifyOrders: number;
-    shopifyRefunds: number;
+    shopifyPaidOrders: number;
     ventasPresenciales: number;
     ventasCount: number;
     bankIncome: Record<string, number>;
@@ -76,12 +86,15 @@ interface SemperBrandData {
     stripeFees: number;
     stripeGross: number;
     stripeNet: number;
+    shopifyRefunds: number;
+    shopifyRefundCount: number;
   };
   profit: number;
   margin: number;
   monthlyBreakdown: {
     month: string;
     shopify: number;
+    shopifyRefunds: number;
     ventas: number;
     bankIncome: number;
     expenses: number;
@@ -97,6 +110,12 @@ interface SemperBrandData {
     units: number;
   }[];
   orders: ShopifyOrder[];
+  transactions: {
+    ventas: TransactionDetail[];
+    bankIncome: Record<string, TransactionDetail[]>;
+    bankExpense: Record<string, TransactionDetail[]>;
+    stripeCharges: TransactionDetail[];
+  };
 }
 
 interface BrandCost {
@@ -153,7 +172,8 @@ export default function SemperBrandPage() {
   const [showAddCost, setShowAddCost] = useState(false);
   const [costForm, setCostForm] = useState({ date: new Date().toISOString().split('T')[0], type: 'cogs', description: '', amount: '', product: '' });
   const [showCostsList, setShowCostsList] = useState(false);
-  // showOrders eliminado — sección movida a /orders
+  const [expandedIncome, setExpandedIncome] = useState<string | null>(null);
+  const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
 
   const monthFilters = useMemo(() => getMonthFilters(selectedYear), [selectedYear]);
 
@@ -206,43 +226,54 @@ export default function SemperBrandPage() {
     fetchAll();
   }
 
-  // Combined P&L
+  // Combined P&L — método bruto
   const totalManualCosts = costsData?.total || 0;
   const stripeFees = data?.expenses.stripeFees || 0;
-  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees;
+  const shopifyRefunds = data?.expenses.shopifyRefunds || 0;
+  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees + shopifyRefunds;
   const totalIncome = data?.income.total || 0;
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
 
   const incomeBreakdown = useMemo(() => {
     if (!data) return [];
-    const items: { label: string; amount: number; icon: any; color: string; bg: string; detail: string }[] = [];
+    const items: { key: string; label: string; amount: number; icon: any; color: string; bg: string; detail: string; transactions: TransactionDetail[] }[] = [];
     if (data.income.shopify > 0) {
-      items.push({ label: 'Shopify', amount: data.income.shopify, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50', detail: `${data.income.shopifyOrders} pedidos` });
+      const shopifyTxs = data.orders.map(o => ({ date: o.date, description: `${o.name} — ${o.customer}`, amount: o.total }));
+      items.push({ key: 'shopify', label: 'Shopify', amount: data.income.shopify, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50', detail: `${data.income.shopifyOrders} pedidos`, transactions: shopifyTxs });
     }
     if (data.income.ventasPresenciales > 0) {
-      items.push({ label: 'Ventas Presenciales', amount: data.income.ventasPresenciales, icon: Store, color: 'text-emerald-600', bg: 'bg-emerald-50', detail: `${data.income.ventasCount} ventas` });
+      items.push({ key: 'ventas', label: 'Ventas Presenciales', amount: data.income.ventasPresenciales, icon: Store, color: 'text-emerald-600', bg: 'bg-emerald-50', detail: `${data.income.ventasCount} ventas`, transactions: data.transactions.ventas });
     }
     Object.entries(data.income.bankIncome).forEach(([tag, amount]) => {
-      items.push({ label: tag, amount, icon: Landmark, color: 'text-blue-600', bg: 'bg-blue-50', detail: 'Banco' });
+      const txs = (data.transactions.bankIncome[tag] || []).map(t => ({ date: t.date, description: t.concept || t.description, amount: t.amount }));
+      items.push({ key: `bank-${tag}`, label: tag, amount, icon: Landmark, color: 'text-blue-600', bg: 'bg-blue-50', detail: `${txs.length} movimientos`, transactions: txs });
     });
     return items.sort((a, b) => b.amount - a.amount);
   }, [data]);
 
   const expenseBreakdown = useMemo(() => {
     if (!data) return [];
-    const items: { tag: string; amount: number }[] = [];
+    const items: { key: string; tag: string; amount: number; transactions: TransactionDetail[] }[] = [];
+    // Devoluciones Shopify como gasto
+    if (data.expenses.shopifyRefunds > 0) {
+      const refundTxs = data.orders.filter(o => o.financialStatus === 'refunded' || o.financialStatus === 'partially_refunded')
+        .map(o => ({ date: o.date, description: `${o.name} — ${o.customer}`, amount: o.total }));
+      items.push({ key: 'shopify-refunds', tag: '↩️ Devoluciones Shopify', amount: data.expenses.shopifyRefunds, transactions: refundTxs });
+    }
     Object.entries(data.expenses.byTag).forEach(([tag, amount]) => {
-      items.push({ tag, amount });
+      const txs = (data.transactions.bankExpense[tag] || []).map(t => ({ date: t.date, description: t.concept || t.description, amount: t.amount }));
+      items.push({ key: `bank-${tag}`, tag, amount, transactions: txs });
     });
     // Stripe fees como categoría de gasto
     if (data.expenses.stripeFees > 0) {
-      items.push({ tag: '💳 Comisión Stripe', amount: data.expenses.stripeFees });
+      items.push({ key: 'stripe-fees', tag: '💳 Comisión Stripe', amount: data.expenses.stripeFees, transactions: data.transactions.stripeCharges.map(t => ({ date: t.date, description: t.description, amount: t.fee || 0 })) });
     }
     if (costsData) {
       Object.entries(costsData.byType).forEach(([type, amount]) => {
         const ct = COST_TYPES.find(c => c.value === type);
-        items.push({ tag: `📦 ${ct?.label || type}`, amount });
+        const txs = costsData.costs.filter(c => c.type === type).map(c => ({ date: c.date, description: c.description, amount: c.amount }));
+        items.push({ key: `manual-${type}`, tag: `📦 ${ct?.label || type}`, amount, transactions: txs });
       });
     }
     return items.sort((a, b) => b.amount - a.amount);
@@ -365,6 +396,7 @@ export default function SemperBrandPage() {
                 </div>
                 <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
                 <div className="text-[10px] text-gray-400 mt-1 space-y-0.5">
+                  {shopifyRefunds > 0 && <p>↩️ Devoluciones: {formatCurrency(shopifyRefunds)}</p>}
                   {data.expenses.total > 0 && <p>Banco: {formatCurrency(data.expenses.total)}</p>}
                   {stripeFees > 0 && <p>Comisión Stripe: {formatCurrency(stripeFees)}</p>}
                   {totalManualCosts > 0 && <p>Manuales: {formatCurrency(totalManualCosts)}</p>}
@@ -384,6 +416,7 @@ export default function SemperBrandPage() {
             {/* P&L Formula visual */}
             <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg py-2 px-4 overflow-x-auto">
               <span className="text-emerald-600 font-semibold whitespace-nowrap">{formatCurrency(totalIncome)}</span>
+              {shopifyRefunds > 0 && (<><span>−</span><span className="text-rose-500 font-semibold whitespace-nowrap">{formatCurrency(shopifyRefunds)} <span className="font-normal text-gray-400">devol.</span></span></>)}
               <span>−</span>
               <span className="text-orange-600 font-semibold whitespace-nowrap">{formatCurrency(data.expenses.total)}</span>
               {stripeFees > 0 && (<><span>−</span><span className="text-purple-600 font-semibold whitespace-nowrap">{formatCurrency(stripeFees)} <span className="font-normal text-gray-400">Stripe</span></span></>)}
@@ -406,39 +439,53 @@ export default function SemperBrandPage() {
                   <Badge variant="success">{formatCurrency(totalIncome)}</Badge>
                 </CardHeader>
                 <div className="space-y-3">
-                  {incomeBreakdown.map((item, i) => {
+                  {incomeBreakdown.map((item) => {
                     const pct = totalIncome > 0 ? (item.amount / totalIncome) * 100 : 0;
+                    const isExpanded = expandedIncome === item.key;
                     return (
-                      <div key={i}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-md ${item.bg} flex items-center justify-center`}>
-                              <item.icon size={14} className={item.color} />
+                      <div key={item.key}>
+                        <button
+                          onClick={() => setExpandedIncome(isExpanded ? null : item.key)}
+                          className="w-full text-left group"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-7 h-7 rounded-md ${item.bg} flex items-center justify-center`}>
+                                <item.icon size={14} className={item.color} />
+                              </div>
+                              <div>
+                                <span className="text-sm font-medium text-gray-800">{item.label}</span>
+                                <span className="text-xs text-gray-400 ml-2">{item.detail}</span>
+                              </div>
+                              {isExpanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />}
                             </div>
-                            <div>
-                              <span className="text-sm font-medium text-gray-800">{item.label}</span>
-                              <span className="text-xs text-gray-400 ml-2">{item.detail}</span>
+                            <div className="text-right">
+                              <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.amount)}</span>
+                              <span className="text-xs text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.amount)}</span>
-                            <span className="text-xs text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
                           </div>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                        </div>
+                        </button>
+                        {isExpanded && item.transactions.length > 0 && (
+                          <div className="mt-2 ml-9 space-y-0.5 max-h-60 overflow-y-auto">
+                            {item.transactions.map((tx, j) => (
+                              <div key={j} className="flex items-center justify-between py-1.5 px-3 rounded-md hover:bg-gray-50 text-xs">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-gray-400 flex-shrink-0">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                                  <span className="text-gray-700 truncate">{tx.description}</span>
+                                </div>
+                                <span className="text-gray-900 font-medium flex-shrink-0 ml-2">{formatCurrency(tx.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                   {incomeBreakdown.length === 0 && (
                     <p className="text-sm text-gray-400 text-center py-4">Sin ingresos en este período</p>
-                  )}
-                  {data.income.shopifyRefunds > 0 && (
-                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Devoluciones Shopify</span>
-                      <span className="text-red-500 font-medium">-{formatCurrency(data.income.shopifyRefunds)}</span>
-                    </div>
                   )}
                 </div>
               </Card>
@@ -458,21 +505,41 @@ export default function SemperBrandPage() {
                   {expenseBreakdown.map((item, i) => {
                     const pct = totalExpenses > 0 ? (item.amount / totalExpenses) * 100 : 0;
                     const colors = ['bg-red-400', 'bg-orange-400', 'bg-amber-400', 'bg-rose-400', 'bg-pink-400', 'bg-fuchsia-400', 'bg-purple-400', 'bg-indigo-400'];
+                    const isExpanded = expandedExpense === item.key;
                     return (
-                      <div key={i}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2.5 h-2.5 rounded-full ${colors[i % colors.length]}`} />
-                            <span className="text-sm font-medium text-gray-800">{item.tag}</span>
+                      <div key={item.key}>
+                        <button
+                          onClick={() => setExpandedExpense(isExpanded ? null : item.key)}
+                          className="w-full text-left group"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2.5 h-2.5 rounded-full ${colors[i % colors.length]}`} />
+                              <span className="text-sm font-medium text-gray-800">{item.tag}</span>
+                              {isExpanded ? <ChevronUp size={12} className="text-gray-400" /> : <ChevronDown size={12} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.amount)}</span>
+                              <span className="text-xs text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.amount)}</span>
-                            <span className="text-xs text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full ${colors[i % colors.length]} rounded-full transition-all`} style={{ width: `${pct}%` }} />
                           </div>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full ${colors[i % colors.length]} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-                        </div>
+                        </button>
+                        {isExpanded && item.transactions.length > 0 && (
+                          <div className="mt-2 ml-5 space-y-0.5 max-h-60 overflow-y-auto">
+                            {item.transactions.map((tx, j) => (
+                              <div key={j} className="flex items-center justify-between py-1.5 px-3 rounded-md hover:bg-gray-50 text-xs">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-gray-400 flex-shrink-0">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                                  <span className="text-gray-700 truncate">{tx.description}</span>
+                                </div>
+                                <span className="text-red-600 font-medium flex-shrink-0 ml-2">-{formatCurrency(tx.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -580,6 +647,7 @@ export default function SemperBrandPage() {
                             <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg">
                               <p className="font-medium"><MonthLabel month={m.month} /></p>
                               <p className="text-emerald-300">Ingresos: {formatCurrency(m.totalIncome)}</p>
+                              {m.shopifyRefunds > 0 && <p className="text-rose-300">Devoluciones: {formatCurrency(m.shopifyRefunds)}</p>}
                               <p className="text-red-300">Gastos banco: {formatCurrency(m.expenses)}</p>
                               {m.stripeFees > 0 && <p className="text-purple-300">Stripe fees: {formatCurrency(m.stripeFees)}</p>}
                               {monthCosts > 0 && <p className="text-orange-300">Costes manual: {formatCurrency(monthCosts)}</p>}
@@ -650,7 +718,7 @@ export default function SemperBrandPage() {
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.ventasPresenciales)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.totalBankIncome)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-emerald-600">{formatCurrency(totalIncome)}</td>
-                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total + stripeFees)}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total + stripeFees + shopifyRefunds)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-orange-600">-{formatCurrency(totalManualCosts)}</td>
                         <td className={`px-4 sm:px-6 py-3 text-sm text-right font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                           {formatCurrency(netProfit)}
