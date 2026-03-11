@@ -343,6 +343,38 @@ export default function SemperBrandPage() {
               <span className={`font-bold whitespace-nowrap ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(netProfit)}</span>
             </div>
 
+            {/* Flujo de Comisiones Stripe */}
+            {data.expenses.stripeGross > 0 && (
+              <div className="bg-gradient-to-r from-purple-50 to-white rounded-xl border border-purple-100 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard size={14} className="text-purple-500" />
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Flujo de Ventas Online (Stripe)</p>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-4 flex-wrap text-sm">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 uppercase">Cobrado (bruto)</p>
+                    <p className="text-base sm:text-lg font-bold text-gray-900">{formatCurrency(data.expenses.stripeGross)}</p>
+                  </div>
+                  <div className="text-gray-300 text-lg">→</div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-red-400 uppercase">Comisión Stripe</p>
+                    <p className="text-base sm:text-lg font-bold text-red-500">-{formatCurrency(stripeFees)}</p>
+                  </div>
+                  <div className="text-gray-300 text-lg">→</div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-emerald-500 uppercase">Payout (neto)</p>
+                    <p className="text-base sm:text-lg font-bold text-emerald-600">{formatCurrency(data.expenses.stripeNet)}</p>
+                  </div>
+                  <div className="ml-auto text-right">
+                    <p className="text-[10px] text-gray-400 uppercase">% Comisión</p>
+                    <p className="text-base sm:text-lg font-bold text-purple-600">
+                      {(data.expenses.stripeGross > 0 ? (stripeFees / data.expenses.stripeGross) * 100 : 0).toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Income & Expenses Side by Side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               {/* Desglose Ingresos */}
@@ -594,7 +626,7 @@ export default function SemperBrandPage() {
 
               {/* Monthly Table */}
               <div className="overflow-x-auto -mx-4 sm:-mx-6">
-                <table className="w-full min-w-[700px]">
+                <table className="w-full min-w-[800px]">
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Mes</th>
@@ -603,6 +635,7 @@ export default function SemperBrandPage() {
                       <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Banco</th>
                       <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Ingresos</th>
                       <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Gastos</th>
+                      <th className="text-right text-xs font-medium text-purple-500 px-4 sm:px-6 py-2">Comisión</th>
                       <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Costes</th>
                       <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-2">Beneficio</th>
                     </tr>
@@ -619,7 +652,8 @@ export default function SemperBrandPage() {
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-gray-600">{m.ventas > 0 ? formatCurrency(m.ventas) : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-gray-600">{m.bankIncome > 0 ? formatCurrency(m.bankIncome) : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right font-semibold text-gray-900">{formatCurrency(m.totalIncome)}</td>
-                          <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-red-500">{(m.expenses + m.stripeFees) > 0 ? `-${formatCurrency(m.expenses + m.stripeFees)}` : '-'}</td>
+                          <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-red-500">{(m.expenses + m.shopifyRefunds) > 0 ? `-${formatCurrency(m.expenses + m.shopifyRefunds)}` : '-'}</td>
+                          <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-purple-500">{m.stripeFees > 0 ? `-${formatCurrency(m.stripeFees)}` : '-'}</td>
                           <td className="px-4 sm:px-6 py-2.5 text-sm text-right text-orange-500">{monthCosts > 0 ? `-${formatCurrency(monthCosts)}` : '-'}</td>
                           <td className={`px-4 sm:px-6 py-2.5 text-sm text-right font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {formatCurrency(profit)}
@@ -636,7 +670,8 @@ export default function SemperBrandPage() {
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.ventasPresenciales)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold">{formatCurrency(data.income.totalBankIncome)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-emerald-600">{formatCurrency(totalIncome)}</td>
-                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total + stripeFees + shopifyRefunds)}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-red-600">-{formatCurrency(data.expenses.total + shopifyRefunds)}</td>
+                        <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-purple-600">-{formatCurrency(stripeFees)}</td>
                         <td className="px-4 sm:px-6 py-3 text-sm text-right font-bold text-orange-600">-{formatCurrency(totalManualCosts)}</td>
                         <td className={`px-4 sm:px-6 py-3 text-sm text-right font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                           {formatCurrency(netProfit)}
