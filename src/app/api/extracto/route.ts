@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getOrders } from '@/lib/shopify';
 
 // Load tagging rules from Supabase
 async function loadTaggingRules(): Promise<{ keyword: string; category: string }[]> {
@@ -54,14 +53,20 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
-    const includeShopify = searchParams.get('shopify') === '1';
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
 
     let query = supabase
       .from('bank_transactions')
       .select('*')
       .order('date', { ascending: false });
 
-    if (year) {
+    // Priorizar start/end sobre year
+    if (start && end) {
+      const startDate = new Date(start).toISOString().split('T')[0];
+      const endDate = new Date(end).toISOString().split('T')[0];
+      query = query.gte('date', startDate).lte('date', endDate);
+    } else if (year) {
       query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`);
     }
 
@@ -87,43 +92,8 @@ export async function GET(request: NextRequest) {
       source: 'bank' as const,
     }));
 
-    // Fetch Shopify orders if requested
-    let shopifyTransactions: any[] = [];
-    if (includeShopify && year) {
-      try {
-        const orders = await getOrders({
-          created_at_min: `${year}-01-01T00:00:00Z`,
-          created_at_max: `${year}-12-31T23:59:59Z`,
-          status: 'any',
-          limit: 250,
-        });
-        shopifyTransactions = orders.map((o: any) => {
-          const items = (o.line_items || []).map((i: any) => i.title).join(', ');
-          const customerName = o.customer
-            ? `${o.customer.first_name || ''} ${o.customer.last_name || ''}`.trim()
-            : null;
-          return {
-            id: `shopify_${o.id}`,
-            date: o.created_at?.split('T')[0] || '',
-            valueDate: o.created_at?.split('T')[0] || '',
-            concept: `Shopify #${o.order_number || o.name || o.id} — ${items || 'Orden'}`,
-            amount: parseFloat(o.total_price || '0'),
-            balance: 0,
-            autoTag: 'Brand',
-            manualTag: null,
-            isDiezmo: false,
-            memberName: customerName,
-            source: 'shopify' as const,
-          };
-        });
-      } catch (err) {
-        console.error('Error fetching Shopify orders:', err);
-      }
-    }
-
     return NextResponse.json({
       transactions,
-      shopifyTransactions,
       tagCategories: (tagCategories || []).map((tc: any) => ({
         id: tc.id,
         name: tc.name,
@@ -134,7 +104,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     console.error('Error fetching extracto:', message);
-    return NextResponse.json({ transactions: [], shopifyTransactions: [], tagCategories: [], error: message }, { status: 500 });
+    return NextResponse.json({ transactions: [], tagCategories: [], error: message }, { status: 500 });
   }
 }
 
@@ -172,7 +142,8 @@ export async function POST(request: NextRequest) {
 
       const rules = await loadTaggingRules();
 
-      const rows = transactions.map((tx: any, idx: number) => {
+      // Preparar las transacciones parseadas
+      const parsed = transactions.map((tx: any) => {
         const concept = tx.concept || tx.Concepto || tx.CONCEPTO || '';
         const rawAmount = tx.amount || tx.Importe || tx.IMPORTE || '0';
         const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/\./g, '').replace(',', '.')) || 0;
@@ -188,15 +159,54 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const { tag, memberName, isDiezmo } = autoTagTransaction(concept, rules);
+        return { concept, amount, balance, date: parsedDate || new Date().toISOString().split('T')[0] };
+      });
 
+      // === DEDUPLICACIÓN INTELIGENTE ===
+      // Buscar transacciones existentes en el rango de fechas de las nuevas
+      const dates = parsed.map((p: any) => p.date).filter(Boolean);
+      const minDate = dates.sort()[0];
+      const maxDate = dates.sort().reverse()[0];
+
+      const { data: existing } = await supabase
+        .from('bank_transactions')
+        .select('date, amount, balance, concept')
+        .gte('date', minDate)
+        .lte('date', maxDate);
+
+      // Crear set de fingerprints existentes: "fecha|importe|saldo"
+      const existingFingerprints = new Set(
+        (existing || []).map((ex: any) => {
+          const amt = parseFloat(ex.amount);
+          const bal = parseFloat(ex.balance || 0);
+          return `${ex.date}|${amt.toFixed(2)}|${bal.toFixed(2)}`;
+        })
+      );
+
+      // Filtrar solo las nuevas (que no existen)
+      const newTxs = parsed.filter((tx: any) => {
+        const fp = `${tx.date}|${tx.amount.toFixed(2)}|${tx.balance.toFixed(2)}`;
+        return !existingFingerprints.has(fp);
+      });
+
+      if (newTxs.length === 0) {
+        return NextResponse.json({
+          imported: 0,
+          skipped: parsed.length,
+          message: `Todas las ${parsed.length} transacciones ya existen en la base de datos`,
+          transactions: [],
+        });
+      }
+
+      const rows = newTxs.map((tx: any, idx: number) => {
+        const { tag, memberName, isDiezmo } = autoTagTransaction(tx.concept, rules);
         return {
           id: `bt-${Date.now()}-${idx}`,
-          date: parsedDate || new Date().toISOString().split('T')[0],
-          value_date: parsedDate,
-          concept,
-          amount,
-          balance,
+          date: tx.date,
+          value_date: tx.date,
+          concept: tx.concept,
+          amount: tx.amount,
+          balance: tx.balance,
           auto_tag: tag,
           manual_tag: null,
           is_diezmo: isDiezmo,
@@ -213,6 +223,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         imported: rows.length,
+        skipped: parsed.length - newTxs.length,
         transactions: (data || rows).map((row: any) => ({
           id: row.id, date: row.date, valueDate: row.value_date,
           concept: row.concept, amount: parseFloat(row.amount),

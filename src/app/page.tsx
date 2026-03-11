@@ -12,35 +12,8 @@ import { getDefaultRange, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
-  Calendar, CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight,
+  CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
-
-const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const YEAR_TABS = [2023, 2024, 2025, 2026];
-
-function getMonthFilters(year: number) {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const maxMonth = year === currentYear ? now.getMonth() : 11;
-  const filters: { label: string; key: string; start: Date; end: Date }[] = [];
-  filters.push({
-    label: `${year}`,
-    key: 'year',
-    start: new Date(year, 0, 1),
-    end: new Date(year, 11, 31, 23, 59, 59),
-  });
-  for (let m = 0; m <= maxMonth; m++) {
-    const lastDay = new Date(year, m + 1, 0);
-    filters.push({
-      label: MONTH_NAMES[m],
-      key: `m-${m}`,
-      start: new Date(year, m, 1),
-      end: new Date(year, m, lastDay.getDate(), 23, 59, 59),
-    });
-  }
-  return filters;
-}
 
 interface TagTransaction { date: string; description: string; amount: number }
 
@@ -79,6 +52,9 @@ const MACRO_CONFIG = {
   otros: { label: 'Otros', icon: Package, color: 'amber', bg: 'bg-amber-50', iconBg: 'bg-amber-100', iconColor: 'text-amber-600', border: 'border-amber-200', ring: 'ring-amber-500', barBg: 'bg-amber-100', barFill: 'bg-amber-500' },
 };
 
+const MNAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MSHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
 export default function DashboardPage() {
   const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
@@ -88,23 +64,18 @@ export default function DashboardPage() {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [expandedCajaTag, setExpandedCajaTag] = useState<string | null>(null);
   const [showAllCaja, setShowAllCaja] = useState(false);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [monthFilter, setMonthFilter] = useState('year');
 
-  const monthFilters = useMemo(() => getMonthFilters(selectedYear), [selectedYear]);
-
-  const effectiveRange = useMemo(() => {
-    const mf = monthFilters.find(f => f.key === monthFilter);
-    if (mf) return { start: mf.start, end: mf.end };
-    return { start: selectedRange.startDate, end: selectedRange.endDate };
-  }, [monthFilter, monthFilters, selectedRange]);
-
-  // Current period label
   const periodLabel = useMemo(() => {
-    if (monthFilter === 'year') return `Año ${selectedYear}`;
-    const mIdx = parseInt(monthFilter.replace('m-', ''));
-    return `${MONTH_NAMES_FULL[mIdx]} ${selectedYear}`;
-  }, [monthFilter, selectedYear]);
+    const s = selectedRange.startDate;
+    const e = selectedRange.endDate;
+    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+      return `${MNAMES[s.getMonth()]} ${s.getFullYear()}`;
+    }
+    if (s.getFullYear() === e.getFullYear()) {
+      return `${MSHORT[s.getMonth()]} – ${MSHORT[e.getMonth()]} ${s.getFullYear()}`;
+    }
+    return `${MSHORT[s.getMonth()]} ${s.getFullYear()} – ${MSHORT[e.getMonth()]} ${e.getFullYear()}`;
+  }, [selectedRange]);
 
   useEffect(() => {
     async function fetchData() {
@@ -112,8 +83,8 @@ export default function DashboardPage() {
       setError(null);
       try {
         const params = new URLSearchParams({
-          start: effectiveRange.start.toISOString(),
-          end: effectiveRange.end.toISOString(),
+          start: selectedRange.startDate.toISOString(),
+          end: selectedRange.endDate.toISOString(),
         });
         const res = await fetch(`/api/dashboard?${params}`);
         if (!res.ok) throw new Error('Error al cargar datos');
@@ -125,23 +96,20 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [effectiveRange]);
+  }, [selectedRange]);
 
-  // Computed analysis data
   const analysis = useMemo(() => {
     if (!data) return null;
     const { diezmos, brand, otros } = data.macroGroups;
     const totalIncome = diezmos.income + brand.income + otros.income;
     const totalExpenses = diezmos.expenses + brand.expenses + otros.expenses;
-    const totalAbsFlow = Math.abs(diezmos.net) + Math.abs(brand.net) + Math.abs(otros.net);
     return {
       totalIncome,
       totalExpenses,
-      totalAbsFlow,
       areas: [
-        { key: 'diezmos' as const, ...diezmos, pctIncome: totalIncome > 0 ? (diezmos.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (diezmos.expenses / totalExpenses) * 100 : 0 },
-        { key: 'brand' as const, ...brand, pctIncome: totalIncome > 0 ? (brand.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (brand.expenses / totalExpenses) * 100 : 0 },
-        { key: 'otros' as const, ...otros, pctIncome: totalIncome > 0 ? (otros.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (otros.expenses / totalExpenses) * 100 : 0 },
+        { key: 'diezmos' as const, ...diezmos, pctIncome: totalIncome > 0 ? (diezmos.income / totalIncome) * 100 : 0 },
+        { key: 'brand' as const, ...brand, pctIncome: totalIncome > 0 ? (brand.income / totalIncome) * 100 : 0 },
+        { key: 'otros' as const, ...otros, pctIncome: totalIncome > 0 ? (otros.income / totalIncome) * 100 : 0 },
       ],
     };
   }, [data]);
@@ -154,43 +122,6 @@ export default function DashboardPage() {
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-6">
-        {/* ══════ PERIOD SELECTOR ══════ */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-            <Calendar size={16} className="text-gray-400 flex-shrink-0" />
-            <div className="flex gap-1 flex-nowrap">
-              {YEAR_TABS.map((y) => (
-                <button
-                  key={y}
-                  onClick={() => { setSelectedYear(y); setMonthFilter('year'); }}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors whitespace-nowrap ${
-                    selectedYear === y
-                      ? 'bg-violet-600 text-white shadow-sm'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {y}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 pl-7">
-            {monthFilters.filter(mf => mf.key !== 'year').map((mf) => (
-              <button
-                key={mf.key}
-                onClick={() => setMonthFilter(mf.key)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap ${
-                  monthFilter === mf.key
-                    ? 'bg-violet-100 text-violet-700 border border-violet-200'
-                    : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                {mf.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-violet-600" size={32} />
@@ -215,10 +146,8 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500">{periodLabel}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${data.financials.profit >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                      {data.financials.profit >= 0 ? '+' : ''}{formatCurrency(data.financials.profit)}
-                    </div>
+                  <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${data.financials.profit >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    {data.financials.profit >= 0 ? '+' : ''}{formatCurrency(data.financials.profit)}
                   </div>
                 </div>
               </div>
@@ -257,7 +186,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Distribución visual de ingresos por área */}
+              {/* Distribución visual */}
               <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Distribución de ingresos</p>
                 <div className="h-3 rounded-full overflow-hidden flex bg-gray-200">
@@ -265,12 +194,7 @@ export default function DashboardPage() {
                     const cfg = MACRO_CONFIG[a.key];
                     if (a.pctIncome < 1) return null;
                     return (
-                      <div
-                        key={a.key}
-                        className={`${cfg.barFill} transition-all duration-500`}
-                        style={{ width: `${a.pctIncome}%` }}
-                        title={`${cfg.label}: ${a.pctIncome.toFixed(1)}%`}
-                      />
+                      <div key={a.key} className={`${cfg.barFill} transition-all duration-500`} style={{ width: `${a.pctIncome}%` }} title={`${cfg.label}: ${a.pctIncome.toFixed(1)}%`} />
                     );
                   })}
                 </div>
@@ -337,7 +261,6 @@ export default function DashboardPage() {
                 <PieChart size={16} className="text-gray-400" />
                 <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">P&L por Área</h3>
               </div>
-
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {(['diezmos', 'brand', 'otros'] as const).map(key => {
                   const group = data.macroGroups[key];
@@ -345,14 +268,9 @@ export default function DashboardPage() {
                   const Icon = cfg.icon;
                   const isExpanded = expandedGroup === key;
                   const maxIncome = Math.max(group.income, group.expenses, 1);
-
                   return (
                     <div key={key} className={`bg-white rounded-2xl border ${isExpanded ? cfg.border : 'border-gray-200'} overflow-hidden transition-all shadow-sm`}>
-                      {/* Header con resultado neto prominente */}
-                      <button
-                        onClick={() => toggleGroup(key)}
-                        className={`w-full text-left p-4 sm:p-5 transition-colors ${isExpanded ? cfg.bg : 'hover:bg-gray-50'}`}
-                      >
+                      <button onClick={() => toggleGroup(key)} className={`w-full text-left p-4 sm:p-5 transition-colors ${isExpanded ? cfg.bg : 'hover:bg-gray-50'}`}>
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 ${cfg.iconBg} rounded-xl flex items-center justify-center`}>
@@ -367,33 +285,23 @@ export default function DashboardPage() {
                           </div>
                           {isExpanded ? <ChevronDown size={16} className="text-gray-400 mt-1" /> : <ChevronRight size={16} className="text-gray-400 mt-1" />}
                         </div>
-
-                        {/* Income / Expense bars */}
                         <div className="mt-3 space-y-1.5">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">Ingreso</span>
                             <div className={`flex-1 h-2 rounded-full ${cfg.barBg} overflow-hidden`}>
-                              <div
-                                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                                style={{ width: `${(group.income / maxIncome) * 100}%` }}
-                              />
+                              <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${(group.income / maxIncome) * 100}%` }} />
                             </div>
                             <span className="text-xs font-semibold text-emerald-600 w-16 text-right flex-shrink-0">{formatCurrency(group.income)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">Gasto</span>
                             <div className={`flex-1 h-2 rounded-full ${cfg.barBg} overflow-hidden`}>
-                              <div
-                                className="h-full rounded-full bg-red-400 transition-all duration-500"
-                                style={{ width: `${(group.expenses / maxIncome) * 100}%` }}
-                              />
+                              <div className="h-full rounded-full bg-red-400 transition-all duration-500" style={{ width: `${(group.expenses / maxIncome) * 100}%` }} />
                             </div>
                             <span className="text-xs font-semibold text-red-500 w-16 text-right flex-shrink-0">{formatCurrency(group.expenses)}</span>
                           </div>
                         </div>
                       </button>
-
-                      {/* Tag breakdown expandido */}
                       {isExpanded && group.tags.length > 0 && (
                         <div className="px-4 sm:px-5 pb-4 space-y-1 border-t border-gray-100">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-3 pb-1">Desglose por categoría</p>
@@ -402,10 +310,8 @@ export default function DashboardPage() {
                             const isTagExpanded = expandedTag === tagKey;
                             return (
                               <div key={t.tag}>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
-                                  className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-gray-50 rounded-lg px-2 -mx-1 transition-colors"
-                                >
+                                <button onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
+                                  className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-gray-50 rounded-lg px-2 -mx-1 transition-colors">
                                   <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
                                     <span className="text-gray-700 font-medium">{t.tag}</span>
@@ -444,7 +350,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* ══════ CAJA: Desglose del saldo bancario ══════ */}
+            {/* ══════ CAJA ══════ */}
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -478,10 +384,7 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${item.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
-                            style={{ width: `${Math.max(pct, 3)}%` }}
-                          />
+                          <div className={`h-full rounded-full transition-all ${item.net >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`} style={{ width: `${Math.max(pct, 3)}%` }} />
                         </div>
                       </button>
                       {isExpanded && item.transactions && item.transactions.length > 0 && (
@@ -497,9 +400,7 @@ export default function DashboardPage() {
                               </span>
                             </div>
                           ))}
-                          {item.count > 20 && (
-                            <p className="text-[10px] text-gray-400 pt-1">Mostrando 20 de {item.count} movimientos</p>
-                          )}
+                          {item.count > 20 && <p className="text-[10px] text-gray-400 pt-1">Mostrando 20 de {item.count} movimientos</p>}
                         </div>
                       )}
                     </div>
@@ -507,8 +408,7 @@ export default function DashboardPage() {
                 })}
               </div>
               {data.caja.length > 8 && (
-                <button onClick={() => setShowAllCaja(!showAllCaja)}
-                  className="mt-3 text-xs text-violet-600 hover:text-violet-800 font-medium">
+                <button onClick={() => setShowAllCaja(!showAllCaja)} className="mt-3 text-xs text-violet-600 hover:text-violet-800 font-medium">
                   {showAllCaja ? 'Ver menos' : `Ver todas (${data.caja.length})`}
                 </button>
               )}
@@ -519,7 +419,6 @@ export default function DashboardPage() {
               <RevenueChart data={data.revenueData} />
               <TopProducts products={data.topProducts} />
             </div>
-
             <RecentOrders orders={data.recentOrders} />
           </>
         ) : null}
