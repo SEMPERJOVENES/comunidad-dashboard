@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
       // Solo incluir transacciones cuyo tag pertenezca al grupo "brand"
       if (!brandTags.has(tag)) continue;
 
-      const detail = { date: tx.date, concept: tx.concept || tx.description || '', amount: Math.abs(amount) };
+      const detail = { date: tx.date, concept: tx.concept || '', amount: Math.abs(amount) };
 
       if (amount > 0) {
         incomeByTag[tag] = (incomeByTag[tag] || 0) + amount;

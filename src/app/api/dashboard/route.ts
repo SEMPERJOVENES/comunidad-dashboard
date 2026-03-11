@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       }
       macroGroups[macro].tags[tag].transactions.push({
         date: tx.date,
-        description: tx.concept || tx.description || '',
+        description: tx.concept || '',
         amount: amt,
       });
     }
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     // === CAJA: Balance breakdown by category from ALL bank transactions ===
     // Get ALL transactions for "caja" (not date-filtered) — con paginación
     const allBankTxs = await fetchAllBankTxs({
-      select: 'amount, manual_tag, auto_tag, is_diezmo, date, concept, description',
+      select: 'amount, manual_tag, auto_tag, is_diezmo, date, concept',
       order: ['date', { ascending: false }],
     });
 
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       cajaByCategory[tag].count += 1;
       cajaByCategory[tag].transactions.push({
         date: tx.date,
-        description: tx.concept || tx.description || '',
+        description: tx.concept || '',
         amount: amt,
       });
 
