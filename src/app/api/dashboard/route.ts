@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrders, getStockValuation } from '@/lib/shopify';
+import { getAllOrders, getStockValuation } from '@/lib/shopify';
 import { getPaymentVolume, getBalance } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all data in parallel
     const [orders, stripeVolume, stripeBalance, bankTxsResult, tagCatsResult, stockData] = await Promise.all([
-      getOrders({ created_at_min: start, created_at_max: end, status: 'any', limit: 250 }),
+      getAllOrders({ created_at_min: start, created_at_max: end, status: 'any' }),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
       getBalance().catch(() => ({ available: 0, pending: 0, currency: 'eur' })),
       supabase

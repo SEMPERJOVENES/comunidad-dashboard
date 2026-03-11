@@ -21,7 +21,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Revenue</CardTitle>
+        <CardTitle>Ingresos</CardTitle>
       </CardHeader>
       <div className="h-64 sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
@@ -46,7 +46,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
               tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
             />
             <Tooltip
-              formatter={(value) => [formatCurrency(value as number), 'Revenue']}
+              formatter={(value) => [formatCurrency(value as number), 'Ingresos']}
               contentStyle={{
                 borderRadius: '8px',
                 border: '1px solid #e5e7eb',

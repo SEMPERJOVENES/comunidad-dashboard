@@ -1,30 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'brand-costs.json');
-
-interface BrandCost {
-  id: string;
-  date: string;
-  type: 'cogs' | 'shipping' | 'influencer' | 'shopify_fee' | 'other';
-  description: string;
-  amount: number;
-  product?: string;
-}
-
-function loadCosts(): BrandCost[] {
-  if (!existsSync(DATA_FILE)) return [];
-  try {
-    return JSON.parse(readFileSync(DATA_FILE, 'utf-8'));
-  } catch {
-    return [];
-  }
-}
-
-function saveCosts(costs: BrandCost[]) {
-  writeFileSync(DATA_FILE, JSON.stringify(costs, null, 2), 'utf-8');
-}
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,28 +7,44 @@ export async function GET(request: NextRequest) {
     const start = searchParams.get('start');
     const end = searchParams.get('end');
 
-    let costs = loadCosts();
+    let query = supabase
+      .from('brand_costs')
+      .select('*')
+      .order('date', { ascending: false });
 
-    if (start) costs = costs.filter(c => c.date >= start.split('T')[0]);
-    if (end) costs = costs.filter(c => c.date <= end.split('T')[0]);
+    if (start) {
+      const startDate = start.split('T')[0];
+      query = query.gte('date', startDate);
+    }
+    if (end) {
+      const endDate = end.split('T')[0];
+      query = query.lte('date', endDate);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const costs = data || [];
 
     // Aggregate by type
     const byType: Record<string, number> = {};
     let total = 0;
     for (const c of costs) {
-      byType[c.type] = (byType[c.type] || 0) + c.amount;
-      total += c.amount;
+      const amt = parseFloat(c.amount) || 0;
+      byType[c.type] = (byType[c.type] || 0) + amt;
+      total += amt;
     }
 
     // Monthly aggregate
     const byMonth: Record<string, number> = {};
     for (const c of costs) {
       const month = c.date.substring(0, 7);
-      byMonth[month] = (byMonth[month] || 0) + c.amount;
+      const amt = parseFloat(c.amount) || 0;
+      byMonth[month] = (byMonth[month] || 0) + amt;
     }
 
     return NextResponse.json({
-      costs: costs.sort((a, b) => b.date.localeCompare(a.date)),
+      costs,
       byType,
       byMonth,
       total,
@@ -68,23 +59,38 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     if (body.action === 'add') {
-      const costs = loadCosts();
-      const newCost: BrandCost = {
+      const newCost = {
         id: `bc-${Date.now()}`,
         date: body.date || new Date().toISOString().split('T')[0],
         type: body.type || 'other',
         description: body.description || '',
         amount: parseFloat(body.amount) || 0,
-        product: body.product || undefined,
+        product: body.product || null,
       };
-      costs.push(newCost);
-      saveCosts(costs);
-      return NextResponse.json({ success: true, cost: newCost });
+
+      const { data, error } = await supabase
+        .from('brand_costs')
+        .insert(newCost)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return NextResponse.json({ success: true, cost: data });
     }
 
     if (body.action === 'delete') {
-      const costs = loadCosts().filter(c => c.id !== body.id);
-      saveCosts(costs);
+      if (!body.id) {
+        return NextResponse.json({ error: 'id es obligatorio' }, { status: 400 });
+      }
+
+      const { error } = await supabase
+        .from('brand_costs')
+        .delete()
+        .eq('id', body.id);
+
+      if (error) throw error;
+
       return NextResponse.json({ success: true });
     }
 
