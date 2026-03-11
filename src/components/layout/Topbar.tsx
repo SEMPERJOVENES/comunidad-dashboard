@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, Bell } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { DateRange } from '@/lib/types';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 
@@ -28,7 +28,7 @@ export default function Topbar({ onMenuClick, selectedRange, onRangeChange, hide
           </h2>
         </div>
 
-        {/* Right: Date selector + notifications */}
+        {/* Right: Date selector */}
         <div className="flex items-center gap-3">
           {!hideRangeSelector && (
             <DateRangePicker
@@ -36,12 +36,6 @@ export default function Topbar({ onMenuClick, selectedRange, onRangeChange, hide
               onRangeChange={onRangeChange}
             />
           )}
-
-          {/* Notifications */}
-          <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-            <Bell size={18} />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
         </div>
       </div>
     </header>
