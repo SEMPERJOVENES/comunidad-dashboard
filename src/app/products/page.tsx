@@ -69,21 +69,21 @@ export default function InventarioPage() {
 
   async function handleAdjustInventory(product: ShopifyProduct) {
     const totalInventory = product.variants?.reduce((sum, v) => sum + (v.inventory_quantity || 0), 0) || 0;
+    if (targetStock === totalInventory) { setEditingId(null); return; }
     const adjustment = targetStock - totalInventory;
-    if (adjustment === 0) { setEditingId(null); return; }
     setSaving(true);
     setSaveMsg(null);
     try {
-      const variantId = product.variants?.[0]?.id;
-      if (!variantId) throw new Error('Variante no encontrada');
+      const variant = product.variants?.[0];
+      if (!variant) throw new Error('Variante no encontrada');
+      if (!variant.inventory_item_id) throw new Error('Sin inventory_item_id');
       const res = await fetch('/api/shopify/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'adjust_inventory',
-          productId: product.id,
-          variantId,
-          adjustment,
+          action: 'set_inventory',
+          inventoryItemId: variant.inventory_item_id,
+          targetStock,
         }),
       });
       const data = await res.json();

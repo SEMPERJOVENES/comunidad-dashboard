@@ -66,6 +66,7 @@ export interface ShopifyVariant {
   title: string;
   price: string;
   inventory_quantity: number;
+  inventory_item_id: number;
   sku: string;
 }
 

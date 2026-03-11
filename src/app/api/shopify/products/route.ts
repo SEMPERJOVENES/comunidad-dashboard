@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProducts, adjustInventory, getLocations, getInventoryLevels } from '@/lib/shopify';
+import { getProducts, setInventory, getLocations, getInventoryLevels } from '@/lib/shopify';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,44 +17,33 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (body.action === 'adjust_inventory') {
-      // Get location ID — try locations API, fallback to inventory_levels
+    if (body.action === 'set_inventory') {
+      const { inventoryItemId, targetStock } = body;
+      if (!inventoryItemId || targetStock === undefined) {
+        return NextResponse.json({ error: 'Faltan inventoryItemId o targetStock' }, { status: 400 });
+      }
+
+      // Obtener location_id
       let locationId: number | null = null;
       try {
         const locations = await getLocations();
-        if (locations && locations.length > 0) locationId = locations[0].id;
+        if (locations?.length > 0) locationId = locations[0].id;
       } catch {
-        // read_locations scope no disponible — obtener del inventario
+        // read_locations scope no disponible
       }
 
       if (!locationId) {
-        // Fallback: sacar location_id del primer inventory_level que encontremos
-        const products = await getProducts({ limit: 1 });
-        const firstVariant = products?.[0]?.variants?.[0];
-        if (firstVariant?.inventory_item_id) {
-          const levels = await getInventoryLevels([firstVariant.inventory_item_id]);
-          if (levels?.length > 0) locationId = levels[0].location_id;
-        }
+        // Fallback: sacar location_id del inventory_level del propio item
+        const levels = await getInventoryLevels([inventoryItemId]);
+        if (levels?.length > 0) locationId = levels[0].location_id;
       }
 
       if (!locationId) {
-        return NextResponse.json({ error: 'No se pudo obtener la ubicación. Añade el scope read_locations en tu Custom App de Shopify.' }, { status: 400 });
+        return NextResponse.json({ error: 'No se pudo obtener la ubicación. Revisa el scope read_locations en Shopify.' }, { status: 400 });
       }
 
-      // Get inventory_item_id from variant
-      const products = await getProducts({ limit: 250 });
-      const product = products.find((p: any) => p.id === body.productId);
-      if (!product) {
-        return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
-      }
-      const variant = product.variants?.find((v: any) => v.id === body.variantId);
-      if (!variant) {
-        return NextResponse.json({ error: 'Variante no encontrada' }, { status: 404 });
-      }
-
-      const inventoryItemId = variant.inventory_item_id;
-      const result = await adjustInventory(inventoryItemId, locationId, body.adjustment);
-
+      // Set directo — sin leer stock actual, sin race conditions
+      const result = await setInventory(inventoryItemId, locationId, Math.max(0, targetStock));
       return NextResponse.json({ success: true, inventory_level: result });
     }
 
