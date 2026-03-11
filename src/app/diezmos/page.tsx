@@ -8,7 +8,7 @@ import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
   ChevronLeft, ChevronRight, CreditCard, Landmark, Link2, Unlink,
-  TrendingUp, ChevronDown, ChevronUp, Calendar,
+  TrendingUp, ChevronDown, ChevronUp,
   Users, LayoutGrid, Table2, PieChart, Plus,
 } from 'lucide-react';
 
@@ -43,8 +43,6 @@ function formatMonthFull(key: string) {
   const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   return `${months[parseInt(m) - 1]} ${y}`;
 }
-
-const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 const TAG_ICONS: Record<string, string> = {
   'Música': '🎵',
@@ -303,17 +301,6 @@ export default function DiezmosPage() {
     return groups;
   }, [sortedFiltered, communities, currentMonth]);
 
-  // Años disponibles para el selector de mes
-  const availableYears = useMemo(() => {
-    const startYear = 2023;
-    const endYear = new Date().getFullYear();
-    const years: number[] = [];
-    for (let y = startYear; y <= endYear; y++) years.push(y);
-    return years;
-  }, []);
-
-  const selectedYear = parseInt(selectedMonth.split('-')[0]);
-
   function displayName(m: any) {
     return m.nickname || m.name;
   }
@@ -460,51 +447,30 @@ export default function DiezmosPage() {
           </div>
         </div>
 
-        {/* Month Selector — solo para summary y list */}
+        {/* Compact month selector — solo para summary y list */}
         {(view === 'summary' || view === 'list') && (
-          <Card className="!p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Calendar size={14} className="text-violet-500" />
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mes seleccionado:</span>
-              <span className="text-sm font-bold text-violet-700">{formatMonthFull(selectedMonth)}</span>
-            </div>
-            {/* Year tabs */}
-            <div className="flex gap-1 mb-2">
-              {availableYears.map(y => (
-                <button key={y}
-                  onClick={() => setSelectedMonth(`${y}-${selectedMonth.split('-')[1]}`)}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                    selectedYear === y
-                      ? 'bg-violet-600 text-white'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}>
-                  {y}
-                </button>
-              ))}
-            </div>
-            {/* Month grid */}
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-              {MONTH_NAMES_SHORT.map((name, i) => {
-                const monthKey = `${selectedYear}-${String(i + 1).padStart(2, '0')}`;
-                const isSelected = monthKey === selectedMonth;
-                const isFuture = monthKey > currentMonth;
-                return (
-                  <button key={i}
-                    onClick={() => !isFuture && setSelectedMonth(monthKey)}
-                    disabled={isFuture}
-                    className={`py-1.5 text-xs font-medium rounded-lg transition-all ${
-                      isSelected
-                        ? 'bg-violet-600 text-white shadow-sm ring-2 ring-violet-300'
-                        : isFuture
-                          ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                          : 'bg-gray-50 text-gray-600 hover:bg-violet-50 hover:text-violet-600'
-                    }`}>
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                const [y, m] = selectedMonth.split('-').map(Number);
+                const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+                if (prev >= '2023-01') setSelectedMonth(prev);
+              }}
+              className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors">
+              <ChevronLeft size={16} className="text-gray-500" />
+            </button>
+            <span className="text-sm font-semibold text-gray-700 min-w-[120px] text-center">{formatMonthFull(selectedMonth)}</span>
+            <button
+              onClick={() => {
+                const [y, m] = selectedMonth.split('-').map(Number);
+                const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+                if (next <= currentMonth) setSelectedMonth(next);
+              }}
+              disabled={selectedMonth >= currentMonth}
+              className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+              <ChevronRight size={16} className="text-gray-500" />
+            </button>
+          </div>
         )}
 
         {/* Content */}
