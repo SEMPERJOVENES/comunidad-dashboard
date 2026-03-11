@@ -330,7 +330,7 @@ export default function DashboardPage() {
                                       <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
                                         <div className="flex items-center gap-2 min-w-0 flex-1">
                                           <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                          <span className="truncate">{tx.description || '—'}</span>
+                                          <span className="truncate" title={tx.description || ''}>{tx.description || '—'}</span>
                                         </div>
                                         <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                                           {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
@@ -393,7 +393,7 @@ export default function DashboardPage() {
                             <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                <span className="truncate">{tx.description || '—'}</span>
+                                <span className="truncate" title={tx.description || ''}>{tx.description || '—'}</span>
                               </div>
                               <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                                 {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
