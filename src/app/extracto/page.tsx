@@ -43,8 +43,14 @@ export default function ExtractoPage() {
       const data = await res.json();
       setTransactions(data.transactions || []);
 
-      const cats = (data.tagCategories || []).map((tc: any) => tc.name as string);
-      setTagOptions(cats.sort());
+      // Extraer etiquetas únicas de las transacciones reales
+      const txs: BankTransaction[] = data.transactions || [];
+      const uniqueTags = new Set<string>();
+      txs.forEach(tx => {
+        const tag = tx.manualTag || tx.autoTag;
+        if (tag) uniqueTags.add(tag);
+      });
+      setTagOptions(Array.from(uniqueTags).sort());
     } catch {
       setTransactions([]);
     } finally {
@@ -61,7 +67,17 @@ export default function ExtractoPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setTransactions(txs => txs.map(t => t.id === id ? data.transaction : t));
+        setTransactions(prev => {
+          const updated = prev.map(t => t.id === id ? data.transaction : t);
+          // Recalcular etiquetas únicas
+          const uniqueTags = new Set<string>();
+          updated.forEach(tx => {
+            const t = tx.manualTag || tx.autoTag;
+            if (t) uniqueTags.add(t);
+          });
+          setTagOptions(Array.from(uniqueTags).sort());
+          return updated;
+        });
         setEditingId(null);
       }
     } catch {}
@@ -374,7 +390,7 @@ export default function ExtractoPage() {
           </div>
           <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500">
-            <option value="all">Todas las categorías</option>
+            <option value="all">Todas las etiquetas</option>
             <option value="sin_clasificar">Sin clasificar</option>
             {tagOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
