@@ -229,60 +229,11 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* === DESGLOSE DE CAJA === */}
-            {data.cajaMacro && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Church size={14} className="text-violet-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Comunidad</p>
-                  </div>
-                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.comunidad >= 0 ? 'text-violet-600' : 'text-red-600'}`}>
-                    {formatCurrency(data.cajaMacro.comunidad)}
-                  </p>
-                </Card>
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Store size={14} className="text-indigo-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Brand</p>
-                  </div>
-                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.brand >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
-                    {formatCurrency(data.cajaMacro.brand)}
-                  </p>
-                  {data.shopify.stockValue > 0 && (
-                    <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-500">Stock Valor</span>
-                        <span className="font-semibold text-indigo-600">{formatCurrency(data.shopify.stockValue)}</span>
-                      </div>
-                      {data.shopify.stockCost > 0 && (
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-gray-500">Stock Coste</span>
-                          <span className="font-semibold text-gray-700">{formatCurrency(data.shopify.stockCost)}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-gray-500">Unidades</span>
-                        <span className="font-medium text-gray-600">{data.shopify.totalUnits.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Package size={14} className="text-amber-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Caja Otros</p>
-                  </div>
-                  <p className={`text-lg sm:text-xl font-bold ${data.cajaMacro.otros >= 0 ? 'text-amber-600' : 'text-red-600'}`}>
-                    {formatCurrency(data.cajaMacro.otros)}
-                  </p>
-                </Card>
-              </div>
-            )}
+            {/* Cajas eliminadas por pedido del usuario */}
 
             {/* === MACRO GROUPS: Diezmos, Brand, Otros === */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Diezmos */}
+              {/* Comunidad */}
               <Card className="!p-0 overflow-hidden">
                 <button onClick={() => toggleGroup('diezmos')}
                   className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
@@ -291,7 +242,7 @@ export default function DashboardPage() {
                       <Church size={20} className="text-violet-600" />
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">Diezmos</p>
+                      <p className="text-sm font-bold text-gray-900">Comunidad</p>
                       <p className={`text-lg font-bold ${data.macroGroups.diezmos.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {formatCurrency(data.macroGroups.diezmos.net)}
                       </p>
