@@ -12,10 +12,11 @@ import { getDefaultRange, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
-  Calendar, CreditCard,
+  Calendar, CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const YEAR_TABS = [2023, 2024, 2025, 2026];
 
 function getMonthFilters(year: number) {
@@ -72,6 +73,12 @@ const TAG_COLORS: Record<string, string> = {
   'Semper CD': 'bg-purple-500', 'Proveedor': 'bg-zinc-500', 'Alquiler': 'bg-stone-500',
 };
 
+const MACRO_CONFIG = {
+  diezmos: { label: 'Comunidad', icon: Church, color: 'violet', bg: 'bg-violet-50', iconBg: 'bg-violet-100', iconColor: 'text-violet-600', border: 'border-violet-200', ring: 'ring-violet-500', barBg: 'bg-violet-100', barFill: 'bg-violet-500' },
+  brand: { label: 'Semper Brand', icon: Store, color: 'indigo', bg: 'bg-indigo-50', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600', border: 'border-indigo-200', ring: 'ring-indigo-500', barBg: 'bg-indigo-100', barFill: 'bg-indigo-500' },
+  otros: { label: 'Otros', icon: Package, color: 'amber', bg: 'bg-amber-50', iconBg: 'bg-amber-100', iconColor: 'text-amber-600', border: 'border-amber-200', ring: 'ring-amber-500', barBg: 'bg-amber-100', barFill: 'bg-amber-500' },
+};
+
 export default function DashboardPage() {
   const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
   const [loading, setLoading] = useState(true);
@@ -91,6 +98,13 @@ export default function DashboardPage() {
     if (mf) return { start: mf.start, end: mf.end };
     return { start: selectedRange.startDate, end: selectedRange.endDate };
   }, [monthFilter, monthFilters, selectedRange]);
+
+  // Current period label
+  const periodLabel = useMemo(() => {
+    if (monthFilter === 'year') return `Año ${selectedYear}`;
+    const mIdx = parseInt(monthFilter.replace('m-', ''));
+    return `${MONTH_NAMES_FULL[mIdx]} ${selectedYear}`;
+  }, [monthFilter, selectedYear]);
 
   useEffect(() => {
     async function fetchData() {
@@ -113,14 +127,34 @@ export default function DashboardPage() {
     fetchData();
   }, [effectiveRange]);
 
+  // Computed analysis data
+  const analysis = useMemo(() => {
+    if (!data) return null;
+    const { diezmos, brand, otros } = data.macroGroups;
+    const totalIncome = diezmos.income + brand.income + otros.income;
+    const totalExpenses = diezmos.expenses + brand.expenses + otros.expenses;
+    const totalAbsFlow = Math.abs(diezmos.net) + Math.abs(brand.net) + Math.abs(otros.net);
+    return {
+      totalIncome,
+      totalExpenses,
+      totalAbsFlow,
+      areas: [
+        { key: 'diezmos' as const, ...diezmos, pctIncome: totalIncome > 0 ? (diezmos.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (diezmos.expenses / totalExpenses) * 100 : 0 },
+        { key: 'brand' as const, ...brand, pctIncome: totalIncome > 0 ? (brand.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (brand.expenses / totalExpenses) * 100 : 0 },
+        { key: 'otros' as const, ...otros, pctIncome: totalIncome > 0 ? (otros.income / totalIncome) * 100 : 0, pctExpense: totalExpenses > 0 ? (otros.expenses / totalExpenses) * 100 : 0 },
+      ],
+    };
+  }, [data]);
+
   function toggleGroup(g: string) {
     setExpandedGroup(expandedGroup === g ? null : g);
+    setExpandedTag(null);
   }
 
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-6">
-        {/* Year + Month Filter Tabs */}
+        {/* ══════ PERIOD SELECTOR ══════ */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             <Calendar size={16} className="text-gray-400 flex-shrink-0" />
@@ -160,263 +194,257 @@ export default function DashboardPage() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-violet-600" size={32} />
-            <span className="ml-3 text-gray-500">Cargando datos...</span>
+            <span className="ml-3 text-gray-500">Cargando informe...</span>
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
             <p className="text-red-700 font-medium">Error: {error}</p>
           </div>
-        ) : data ? (
+        ) : data && analysis ? (
           <>
-            {/* === KPI CARDS: Ingresos, Gastos, Beneficio, Saldo Banco === */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <Card className="!p-4 border-l-4 border-l-emerald-500">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp size={14} className="text-emerald-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Ingresos Totales</p>
+            {/* ══════ RESUMEN GENERAL ══════ */}
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
+                      <BarChart3 size={18} className="text-violet-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900">Informe Económico</h2>
+                      <p className="text-xs text-gray-500">{periodLabel}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${data.financials.profit >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {data.financials.profit >= 0 ? '+' : ''}{formatCurrency(data.financials.profit)}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-emerald-600">{formatCurrency(data.financials.totalIncome)}</p>
-              </Card>
-              <Card className="!p-4 border-l-4 border-l-red-500">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingDown size={14} className="text-red-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Totales</p>
+              </div>
+
+              {/* KPIs compactos */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-gray-100">
+                <div className="px-4 py-3 sm:px-5 sm:py-4">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <ArrowUpRight size={12} className="text-emerald-500" />
+                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Ingresos</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-emerald-600">{formatCurrency(data.financials.totalIncome)}</p>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(data.financials.totalExpenses)}</p>
-              </Card>
-              <Card className={`!p-4 border-l-4 ${data.financials.profit >= 0 ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Wallet size={14} className="text-gray-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Beneficio</p>
+                <div className="px-4 py-3 sm:px-5 sm:py-4">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <ArrowDownRight size={12} className="text-red-500" />
+                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Gastos</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-red-600">{formatCurrency(data.financials.totalExpenses)}</p>
                 </div>
-                <p className={`text-xl sm:text-2xl font-bold ${data.financials.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatCurrency(data.financials.profit)}
-                </p>
-              </Card>
-              <Card className="!p-4 border-l-4 border-l-blue-500">
-                <div className="flex items-center gap-2 mb-1">
-                  <Landmark size={14} className="text-blue-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Saldo Banco</p>
+                <div className="px-4 py-3 sm:px-5 sm:py-4">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <Wallet size={12} className="text-gray-400" />
+                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Beneficio</p>
+                  </div>
+                  <p className={`text-lg sm:text-xl font-bold ${data.financials.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(data.financials.profit)}
+                  </p>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-blue-600">{formatCurrency(data.financials.bankBalance)}</p>
-              </Card>
+                <div className="px-4 py-3 sm:px-5 sm:py-4">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <Landmark size={12} className="text-blue-500" />
+                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Saldo Banco</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-blue-600">{formatCurrency(data.financials.bankBalance)}</p>
+                </div>
+              </div>
+
+              {/* Distribución visual de ingresos por área */}
+              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Distribución de ingresos</p>
+                <div className="h-3 rounded-full overflow-hidden flex bg-gray-200">
+                  {analysis.areas.map(a => {
+                    const cfg = MACRO_CONFIG[a.key];
+                    if (a.pctIncome < 1) return null;
+                    return (
+                      <div
+                        key={a.key}
+                        className={`${cfg.barFill} transition-all duration-500`}
+                        style={{ width: `${a.pctIncome}%` }}
+                        title={`${cfg.label}: ${a.pctIncome.toFixed(1)}%`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                  {analysis.areas.map(a => {
+                    const cfg = MACRO_CONFIG[a.key];
+                    return (
+                      <div key={a.key} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                        <div className={`w-2 h-2 rounded-full ${cfg.barFill}`} />
+                        <span className="font-medium">{cfg.label}</span>
+                        <span className="text-gray-400">{a.pctIncome.toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* === STRIPE KPIs === */}
-            {data.stripe && (data.stripe.available > 0 || data.stripe.pending > 0 || data.stripe.volume > 0) && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard size={14} className="text-violet-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Stripe Disponible</p>
+            {/* ══════ STRIPE + STOCK ══════ */}
+            {(data.stripe.available > 0 || data.stripe.pending > 0 || data.shopify.stockValue > 0) && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {data.stripe.available > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <CreditCard size={11} className="text-violet-500" />
+                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stripe Disp.</p>
+                    </div>
+                    <p className="text-base font-bold text-violet-600">{formatCurrency(data.stripe.available)}</p>
                   </div>
-                  <p className="text-lg sm:text-xl font-bold text-violet-600">{formatCurrency(data.stripe.available)}</p>
-                </Card>
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard size={14} className="text-amber-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Stripe Pendiente</p>
+                )}
+                {data.stripe.pending > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <CreditCard size={11} className="text-amber-500" />
+                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stripe Pend.</p>
+                    </div>
+                    <p className="text-base font-bold text-amber-600">{formatCurrency(data.stripe.pending)}</p>
                   </div>
-                  <p className="text-lg sm:text-xl font-bold text-amber-600">{formatCurrency(data.stripe.pending)}</p>
-                </Card>
-                <Card className="!p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard size={14} className="text-blue-500" />
-                    <p className="text-xs font-medium text-gray-500 uppercase">Volumen Stripe</p>
+                )}
+                {data.shopify.stockValue > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Package size={11} className="text-indigo-500" />
+                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stock Valor</p>
+                    </div>
+                    <p className="text-base font-bold text-indigo-600">{formatCurrency(data.shopify.stockValue)}</p>
                   </div>
-                  <p className="text-lg sm:text-xl font-bold text-blue-600">{formatCurrency(data.stripe.volume)}</p>
-                </Card>
+                )}
+                {data.shopify.stockCost > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Package size={11} className="text-gray-400" />
+                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stock Coste</p>
+                    </div>
+                    <p className="text-base font-bold text-gray-600">{formatCurrency(data.shopify.stockCost)}</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Cajas eliminadas por pedido del usuario */}
+            {/* ══════ P&L POR ÁREA ══════ */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <PieChart size={16} className="text-gray-400" />
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">P&L por Área</h3>
+              </div>
 
-            {/* === MACRO GROUPS: Diezmos, Brand, Otros === */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Comunidad */}
-              <Card className="!p-0 overflow-hidden">
-                <button onClick={() => toggleGroup('diezmos')}
-                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center">
-                      <Church size={20} className="text-violet-600" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">Comunidad</p>
-                      <p className={`text-lg font-bold ${data.macroGroups.diezmos.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(data.macroGroups.diezmos.net)}
-                      </p>
-                    </div>
-                  </div>
-                  {expandedGroup === 'diezmos' ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                </button>
-                <div className="px-4 pb-2 flex gap-4 text-xs border-t border-gray-50 pt-2">
-                  <span className="text-emerald-600">▲ {formatCurrency(data.macroGroups.diezmos.income)}</span>
-                  <span className="text-red-500">▼ {formatCurrency(data.macroGroups.diezmos.expenses)}</span>
-                </div>
-                {expandedGroup === 'diezmos' && data.macroGroups.diezmos.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1">
-                    {data.macroGroups.diezmos.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag}>
-                        <button onClick={() => setExpandedTag(expandedTag === `d-${t.tag}` ? null : `d-${t.tag}`)}
-                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {(['diezmos', 'brand', 'otros'] as const).map(key => {
+                  const group = data.macroGroups[key];
+                  const cfg = MACRO_CONFIG[key];
+                  const Icon = cfg.icon;
+                  const isExpanded = expandedGroup === key;
+                  const maxIncome = Math.max(group.income, group.expenses, 1);
+
+                  return (
+                    <div key={key} className={`bg-white rounded-2xl border ${isExpanded ? cfg.border : 'border-gray-200'} overflow-hidden transition-all shadow-sm`}>
+                      {/* Header con resultado neto prominente */}
+                      <button
+                        onClick={() => toggleGroup(key)}
+                        className={`w-full text-left p-4 sm:p-5 transition-colors ${isExpanded ? cfg.bg : 'hover:bg-gray-50'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 ${cfg.iconBg} rounded-xl flex items-center justify-center`}>
+                              <Icon size={20} className={cfg.iconColor} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">{cfg.label}</p>
+                              <p className={`text-xl font-bold ${group.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {group.net >= 0 ? '+' : ''}{formatCurrency(group.net)}
+                              </p>
+                            </div>
+                          </div>
+                          {isExpanded ? <ChevronDown size={16} className="text-gray-400 mt-1" /> : <ChevronRight size={16} className="text-gray-400 mt-1" />}
+                        </div>
+
+                        {/* Income / Expense bars */}
+                        <div className="mt-3 space-y-1.5">
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                            <span className="text-gray-700">{t.tag}</span>
-                            <span className="text-gray-400">({t.transactions.length})</span>
+                            <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">Ingreso</span>
+                            <div className={`flex-1 h-2 rounded-full ${cfg.barBg} overflow-hidden`}>
+                              <div
+                                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                                style={{ width: `${(group.income / maxIncome) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold text-emerald-600 w-16 text-right flex-shrink-0">{formatCurrency(group.income)}</span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
-                            {expandedTag === `d-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 w-12 flex-shrink-0">Gasto</span>
+                            <div className={`flex-1 h-2 rounded-full ${cfg.barBg} overflow-hidden`}>
+                              <div
+                                className="h-full rounded-full bg-red-400 transition-all duration-500"
+                                style={{ width: `${(group.expenses / maxIncome) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold text-red-500 w-16 text-right flex-shrink-0">{formatCurrency(group.expenses)}</span>
                           </div>
-                        </button>
-                        {expandedTag === `d-${t.tag}` && t.transactions.length > 0 && (
-                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
-                            {t.transactions.map((tx, i) => (
-                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                  <span className="truncate">{tx.description || '—'}</span>
-                                </div>
-                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
+                        </div>
+                      </button>
 
-              {/* Brand */}
-              <Card className="!p-0 overflow-hidden">
-                <button onClick={() => toggleGroup('brand')}
-                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                      <Store size={20} className="text-indigo-600" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">Semper Brand</p>
-                      <p className={`text-lg font-bold ${data.macroGroups.brand.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(data.macroGroups.brand.net)}
-                      </p>
-                    </div>
-                  </div>
-                  {expandedGroup === 'brand' ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                </button>
-                <div className="px-4 pb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs border-t border-gray-50 pt-2">
-                  <span className="text-emerald-600">▲ {formatCurrency(data.macroGroups.brand.income)}</span>
-                  <span className="text-red-500">▼ {formatCurrency(data.macroGroups.brand.expenses)}</span>
-                  {data.shopify.stockValue > 0 && (
-                    <>
-                      <span className="text-indigo-600" title="Stock a precio de venta">📦 Valor: {formatCurrency(data.shopify.stockValue)}</span>
-                      {data.shopify.stockCost > 0 && (
-                        <span className="text-gray-500" title="Stock a precio de coste">Coste: {formatCurrency(data.shopify.stockCost)}</span>
+                      {/* Tag breakdown expandido */}
+                      {isExpanded && group.tags.length > 0 && (
+                        <div className="px-4 sm:px-5 pb-4 space-y-1 border-t border-gray-100">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-3 pb-1">Desglose por categoría</p>
+                          {group.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => {
+                            const tagKey = `${key[0]}-${t.tag}`;
+                            const isTagExpanded = expandedTag === tagKey;
+                            return (
+                              <div key={t.tag}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
+                                  className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-gray-50 rounded-lg px-2 -mx-1 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                                    <span className="text-gray-700 font-medium">{t.tag}</span>
+                                    <span className="text-gray-400 text-[10px]">({t.transactions.length})</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`font-semibold ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                      {t.net >= 0 ? '+' : ''}{formatCurrency(t.net)}
+                                    </span>
+                                    {isTagExpanded ? <ChevronDown size={10} className="text-gray-400" /> : <ChevronRight size={10} className="text-gray-400" />}
+                                  </div>
+                                </button>
+                                {isTagExpanded && t.transactions.length > 0 && (
+                                  <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                                    {t.transactions.map((tx, i) => (
+                                      <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                          <span className="truncate">{tx.description || '—'}</span>
+                                        </div>
+                                        <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                    </>
-                  )}
-                </div>
-                {expandedGroup === 'brand' && data.macroGroups.brand.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1">
-                    {data.macroGroups.brand.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag}>
-                        <button onClick={() => setExpandedTag(expandedTag === `b-${t.tag}` ? null : `b-${t.tag}`)}
-                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                            <span className="text-gray-700">{t.tag}</span>
-                            <span className="text-gray-400">({t.transactions.length})</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
-                            {expandedTag === `b-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
-                          </div>
-                        </button>
-                        {expandedTag === `b-${t.tag}` && t.transactions.length > 0 && (
-                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
-                            {t.transactions.map((tx, i) => (
-                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                  <span className="truncate">{tx.description || '—'}</span>
-                                </div>
-                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-
-              {/* Otros */}
-              <Card className="!p-0 overflow-hidden">
-                <button onClick={() => toggleGroup('otros')}
-                  className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                      <Package size={20} className="text-amber-600" />
                     </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">Otros</p>
-                      <p className={`text-lg font-bold ${data.macroGroups.otros.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(data.macroGroups.otros.net)}
-                      </p>
-                    </div>
-                  </div>
-                  {expandedGroup === 'otros' ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
-                </button>
-                <div className="px-4 pb-2 flex gap-4 text-xs border-t border-gray-50 pt-2">
-                  <span className="text-emerald-600">▲ {formatCurrency(data.macroGroups.otros.income)}</span>
-                  <span className="text-red-500">▼ {formatCurrency(data.macroGroups.otros.expenses)}</span>
-                </div>
-                {expandedGroup === 'otros' && data.macroGroups.otros.tags.length > 0 && (
-                  <div className="px-4 pb-4 space-y-1">
-                    {data.macroGroups.otros.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => (
-                      <div key={t.tag}>
-                        <button onClick={() => setExpandedTag(expandedTag === `o-${t.tag}` ? null : `o-${t.tag}`)}
-                          className="w-full flex items-center justify-between text-xs py-1 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                            <span className="text-gray-700">{t.tag}</span>
-                            <span className="text-gray-400">({t.transactions.length})</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className={`font-medium ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(t.net)}</span>
-                            {expandedTag === `o-${t.tag}` ? <ChevronDown size={12} className="text-gray-400" /> : <ChevronRight size={12} className="text-gray-400" />}
-                          </div>
-                        </button>
-                        {expandedTag === `o-${t.tag}` && t.transactions.length > 0 && (
-                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
-                            {t.transactions.map((tx, i) => (
-                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                  <span className="truncate">{tx.description || '—'}</span>
-                                </div>
-                                <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* === CAJA: Desglose del saldo bancario por categoría === */}
+            {/* ══════ CAJA: Desglose del saldo bancario ══════ */}
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -486,7 +514,7 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Charts */}
+            {/* ══════ CHARTS ══════ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <RevenueChart data={data.revenueData} />
               <TopProducts products={data.topProducts} />
