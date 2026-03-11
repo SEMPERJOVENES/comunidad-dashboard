@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// Helper: paginar Supabase para no perder datos por el límite de 1000 filas
+async function fetchAllRows(buildQuery: () => any) {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,23 +26,23 @@ export async function GET(request: NextRequest) {
     const startDate = start.split('T')[0];
     const endDate = end.split('T')[0];
 
-    // Fetch tag_categories and bank_transactions in parallel
-    const [{ data: bankTxs, error }, { data: tagCategories }] = await Promise.all([
-      supabase
-        .from('bank_transactions')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: false }),
+    // Fetch tag_categories and bank_transactions (con paginación) en paralelo
+    const [txs, tagCatsResult] = await Promise.all([
+      fetchAllRows(() =>
+        supabase
+          .from('bank_transactions')
+          .select('*')
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: false })
+      ),
       supabase
         .from('tag_categories')
         .select('*')
         .order('name'),
     ]);
 
-    if (error) throw error;
-
-    const txs = bankTxs || [];
+    const tagCategories = tagCatsResult.data;
 
     // Agrupar por categoría (tag)
     const categoriesMap: Record<string, {

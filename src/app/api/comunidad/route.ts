@@ -30,28 +30,35 @@ export async function GET(request: NextRequest) {
 
     const allTagNames = Array.from(diezmoTags.keys());
 
-    // 2. Build query for bank transactions with diezmos tags
-    let query = supabase
-      .from('bank_transactions')
-      .select('*')
-      .order('date', { ascending: false });
-
+    // 2. Fetch bank transactions con paginación (evitar límite 1000 filas)
+    let dateGte: string | undefined;
+    let dateLte: string | undefined;
     if (start && end) {
-      const startDate = new Date(start).toISOString().split('T')[0];
-      const endDate = new Date(end).toISOString().split('T')[0];
-      query = query.gte('date', startDate).lte('date', endDate);
+      dateGte = new Date(start).toISOString().split('T')[0];
+      dateLte = new Date(end).toISOString().split('T')[0];
     }
 
-    // Filter by diezmos tags (manual_tag or auto_tag)
     const orFilters = [
       'is_diezmo.eq.true',
       `manual_tag.in.(${allTagNames.join(',')})`,
       `auto_tag.in.(${allTagNames.join(',')})`,
-    ];
-    query = query.or(orFilters.join(','));
+    ].join(',');
 
-    const { data: bankTxs, error } = await query;
-    if (error) throw error;
+    const PAGE = 1000;
+    const bankTxs: any[] = [];
+    let from = 0;
+    while (true) {
+      let q = supabase.from('bank_transactions').select('*').order('date', { ascending: false }).or(orFilters);
+      if (dateGte) q = q.gte('date', dateGte);
+      if (dateLte) q = q.lte('date', dateLte);
+      q = q.range(from, from + PAGE - 1);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      bankTxs.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
 
     // 3. Process transactions
     let totalIncome = 0;
@@ -64,7 +71,7 @@ export async function GET(request: NextRequest) {
       byTag[tag] = { income: 0, expenses: 0, transactions: [] };
     }
 
-    for (const tx of (bankTxs || [])) {
+    for (const tx of bankTxs) {
       const amt = parseFloat(tx.amount || '0');
       const tag = tx.manual_tag || tx.auto_tag || (tx.is_diezmo ? 'Diezmo' : '');
       if (!tag || !diezmoTags.has(tag)) continue;

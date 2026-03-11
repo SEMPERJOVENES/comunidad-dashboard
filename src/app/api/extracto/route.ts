@@ -49,6 +49,22 @@ function autoTagTransaction(concept: string, rules: { keyword: string; category:
   return { tag, memberName, isDiezmo };
 }
 
+// Helper: paginar Supabase para no perder datos por el límite de 1000 filas
+async function fetchAllRows(baseQuery: () => ReturnType<ReturnType<typeof supabase.from>['select']>) {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await baseQuery().range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -56,29 +72,31 @@ export async function GET(request: NextRequest) {
     const start = searchParams.get('start');
     const end = searchParams.get('end');
 
-    let query = supabase
-      .from('bank_transactions')
-      .select('*')
-      .order('date', { ascending: false });
+    let dateGte: string | undefined;
+    let dateLte: string | undefined;
 
-    // Priorizar start/end sobre year
     if (start && end) {
-      const startDate = new Date(start).toISOString().split('T')[0];
-      const endDate = new Date(end).toISOString().split('T')[0];
-      query = query.gte('date', startDate).lte('date', endDate);
+      dateGte = new Date(start).toISOString().split('T')[0];
+      dateLte = new Date(end).toISOString().split('T')[0];
     } else if (year) {
-      query = query.gte('date', `${year}-01-01`).lte('date', `${year}-12-31`);
+      dateGte = `${year}-01-01`;
+      dateLte = `${year}-12-31`;
     }
 
-    // Fetch bank transactions and tag_categories in parallel
-    const [{ data, error }, { data: tagCategories }] = await Promise.all([
-      query,
+    // Fetch bank transactions (con paginación) y tag_categories en paralelo
+    const [data, tagCatsResult] = await Promise.all([
+      fetchAllRows(() => {
+        let q = supabase.from('bank_transactions').select('*').order('date', { ascending: false });
+        if (dateGte) q = q.gte('date', dateGte);
+        if (dateLte) q = q.lte('date', dateLte);
+        return q;
+      }),
       supabase.from('tag_categories').select('*').order('name'),
     ]);
 
-    if (error) throw error;
+    const tagCategories = tagCatsResult.data;
 
-    const transactions = (data || []).map((row: any) => ({
+    const transactions = data.map((row: any) => ({
       id: row.id,
       date: row.date,
       valueDate: row.value_date,

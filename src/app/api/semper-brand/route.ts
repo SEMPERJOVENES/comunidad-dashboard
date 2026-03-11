@@ -51,12 +51,27 @@ export async function GET(request: NextRequest) {
     const startDate = start.split('T')[0];
     const endDate = end.split('T')[0];
 
-    const [{ data: bankTxs }, { data: tagCats }] = await Promise.all([
-      supabase
-        .from('bank_transactions')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate),
+    // Paginar bank_transactions para no perder datos con >1000 filas
+    async function fetchAllBankRows() {
+      const PAGE = 1000;
+      const all: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('bank_transactions').select('*')
+          .gte('date', startDate).lte('date', endDate)
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
+
+    const [bankTxs, { data: tagCats }] = await Promise.all([
+      fetchAllBankRows(),
       supabase
         .from('tag_categories')
         .select('name, macro_group'),
@@ -80,7 +95,7 @@ export async function GET(request: NextRequest) {
     const bankIncomeDetail: Record<string, Array<{ date: string; concept: string; amount: number }>> = {};
     const bankExpenseDetail: Record<string, Array<{ date: string; concept: string; amount: number }>> = {};
 
-    for (const tx of (bankTxs || [])) {
+    for (const tx of bankTxs) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
 
@@ -184,7 +199,7 @@ export async function GET(request: NextRequest) {
       monthlyMap.set(month, existing);
     }
 
-    for (const tx of (bankTxs || [])) {
+    for (const tx of bankTxs) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       if (!brandTags.has(tag)) continue;
       const month = new Date(tx.date).toISOString().substring(0, 7);

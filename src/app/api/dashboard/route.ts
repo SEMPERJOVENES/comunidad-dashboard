@@ -5,6 +5,27 @@ import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+// Helper: paginar Supabase para no perder datos por el límite de 1000 filas
+async function fetchAllBankTxs(query: { gte?: [string, string]; lte?: [string, string]; select?: string; order?: [string, { ascending: boolean }] }) {
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from('bank_transactions').select(query.select || '*');
+    if (query.gte) q = q.gte(query.gte[0], query.gte[1]);
+    if (query.lte) q = q.lte(query.lte[0], query.lte[1]);
+    if (query.order) q = q.order(query.order[0], query.order[1]);
+    q = q.range(from, from + PAGE - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -16,24 +37,21 @@ export async function GET(request: NextRequest) {
     const startDate = new Date(start).toISOString().split('T')[0];
     const endDate = new Date(end).toISOString().split('T')[0];
 
-    // Fetch all data in parallel
-    const [orders, stripeVolume, stripeBalance, bankTxsResult, tagCatsResult, stockData] = await Promise.all([
+    // Fetch all data in parallel (bank txs con paginación para no perder datos)
+    const [orders, stripeVolume, stripeBalance, bankTxs, tagCatsResult, stockData] = await Promise.all([
       getAllOrders({ created_at_min: start, created_at_max: end, status: 'any' }),
       getPaymentVolume({ created: { gte: startTs, lte: endTs } }).catch(() => ({ volume: 0, count: 0, refunded: 0, disputed: 0, currency: 'eur' })),
       getBalance().catch(() => ({ available: 0, pending: 0, currency: 'eur' })),
-      supabase
-        .from('bank_transactions')
-        .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: false }),
+      fetchAllBankTxs({
+        gte: ['date', startDate],
+        lte: ['date', endDate],
+        order: ['date', { ascending: false }],
+      }),
       supabase
         .from('tag_categories')
         .select('name, macro_group'),
       getStockValuation().catch(() => ({ stockValue: 0, stockCost: 0, totalUnits: 0, productCount: 0 })),
     ]);
-
-    const bankTxs = bankTxsResult.data || [];
 
     // === GLOBAL FINANCIALS from bank transactions ===
     const totalBankIncome = bankTxs.filter((tx: any) => parseFloat(tx.amount) > 0).reduce((s: number, tx: any) => s + parseFloat(tx.amount), 0);
@@ -96,15 +114,15 @@ export async function GET(request: NextRequest) {
     }
 
     // === CAJA: Balance breakdown by category from ALL bank transactions ===
-    // Get ALL transactions for "caja" (not date-filtered)
-    const { data: allBankTxs } = await supabase
-      .from('bank_transactions')
-      .select('amount, manual_tag, auto_tag, is_diezmo, date, concept, description')
-      .order('date', { ascending: false });
+    // Get ALL transactions for "caja" (not date-filtered) — con paginación
+    const allBankTxs = await fetchAllBankTxs({
+      select: 'amount, manual_tag, auto_tag, is_diezmo, date, concept, description',
+      order: ['date', { ascending: false }],
+    });
 
     const cajaByCategory: Record<string, { net: number; count: number; transactions: TagTx[] }> = {};
     const cajaMacro = { comunidad: 0, brand: 0, otros: 0 };
-    for (const tx of (allBankTxs || [])) {
+    for (const tx of allBankTxs) {
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
       const amt = parseFloat(tx.amount || '0');
       if (!cajaByCategory[tag]) {
