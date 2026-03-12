@@ -9,6 +9,7 @@ import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Users,
   CreditCard, Landmark, ChevronDown, ChevronRight,
   AlertCircle, UserPlus, Plane, Music, BookOpen, Tent, HandHeart,
+  Pencil, Trash2, Plus, X, Check, Cake,
 } from 'lucide-react';
 
 const TAG_COLORS: Record<string, string> = {
@@ -72,6 +73,55 @@ export default function ComunidadPage() {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [showUnmatched, setShowUnmatched] = useState(false);
+
+  // Miembros
+  interface Member { id: string; nombre: string; apellido: string; fecha_nacimiento: string }
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', fecha_nacimiento: '' });
+  const [addForm, setAddForm] = useState({ nombre: '', apellido: '', fecha_nacimiento: '' });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+
+  async function fetchMembers() {
+    setMembersLoading(true);
+    try {
+      const res = await fetch('/api/community-members');
+      const json = await res.json();
+      setMembers(json.members || []);
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchMembers(); }, []);
+
+  async function handleMemberAction(action: string, payload: object) {
+    await fetch('/api/community-members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    });
+    await fetchMembers();
+  }
+
+  function startEdit(m: Member) {
+    setEditingId(m.id);
+    setEditForm({ nombre: m.nombre, apellido: m.apellido, fecha_nacimiento: m.fecha_nacimiento });
+  }
+
+  function formatBirthday(date: string) {
+    const [, month, day] = date.split('-');
+    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return `${parseInt(day)} ${months[parseInt(month) - 1]}`;
+  }
+
+  const currentMonth = new Date().getMonth() + 1;
+  const filteredMembers = members.filter(m => {
+    const q = memberSearch.toLowerCase();
+    return m.nombre.toLowerCase().includes(q) || m.apellido.toLowerCase().includes(q);
+  });
 
   useEffect(() => {
     async function fetchData() {
@@ -511,6 +561,186 @@ export default function ComunidadPage() {
                 )}
               </section>
             )}
+            {/* ═══════════════════════════════════════════════════════ */}
+            {/*  SECCIÓN 3: MIEMBROS                                  */}
+            {/* ═══════════════════════════════════════════════════════ */}
+            <section className="mt-10">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 bg-violet-100 rounded-lg flex items-center justify-center">
+                  <Users size={16} className="text-violet-600" />
+                </div>
+                <h2 className="text-lg font-bold text-gray-900">Miembros</h2>
+                <div className="flex-1 h-px bg-violet-200 ml-2" />
+                <span className="text-xs text-gray-400">{members.length} miembros</span>
+              </div>
+
+              <Card className="!p-4">
+                {/* Barra superior: buscador + añadir */}
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o apellido..."
+                    value={memberSearch}
+                    onChange={e => setMemberSearch(e.target.value)}
+                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  />
+                  <button
+                    onClick={() => { setShowAddForm(true); setAddForm({ nombre: '', apellido: '', fecha_nacimiento: '' }); }}
+                    className="flex items-center gap-2 px-3 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap"
+                  >
+                    <Plus size={14} /> Añadir miembro
+                  </button>
+                </div>
+
+                {/* Formulario de añadir */}
+                {showAddForm && (
+                  <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-xl">
+                    <p className="text-xs font-semibold text-violet-700 mb-2">Nuevo miembro</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre"
+                        value={addForm.nombre}
+                        onChange={e => setAddForm(f => ({ ...f, nombre: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Apellido"
+                        value={addForm.apellido}
+                        onChange={e => setAddForm(f => ({ ...f, apellido: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      />
+                      <input
+                        type="date"
+                        value={addForm.fecha_nacimiento}
+                        onChange={e => setAddForm(f => ({ ...f, fecha_nacimiento: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={async () => {
+                          if (!addForm.nombre || !addForm.apellido || !addForm.fecha_nacimiento) return;
+                          await handleMemberAction('add', addForm);
+                          setShowAddForm(false);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
+                      >
+                        <Check size={12} /> Guardar
+                      </button>
+                      <button
+                        onClick={() => setShowAddForm(false)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50"
+                      >
+                        <X size={12} /> Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabla */}
+                {membersLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="animate-spin text-violet-400" size={20} />
+                  </div>
+                ) : filteredMembers.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">
+                    {memberSearch ? 'Sin resultados' : 'No hay miembros registrados'}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Nombre</th>
+                          <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Apellido</th>
+                          <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Cumpleaños</th>
+                          <th className="w-16" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredMembers.map(m => {
+                          const isEditing = editingId === m.id;
+                          const bMonth = parseInt(m.fecha_nacimiento.split('-')[1]);
+                          const isBirthMonth = bMonth === currentMonth;
+                          return (
+                            <tr key={m.id} className={`border-b border-gray-50 ${isBirthMonth ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
+                              {isEditing ? (
+                                <>
+                                  <td className="py-1.5 pr-2">
+                                    <input
+                                      type="text"
+                                      value={editForm.nombre}
+                                      onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))}
+                                      className="w-full text-sm border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 pr-2">
+                                    <input
+                                      type="text"
+                                      value={editForm.apellido}
+                                      onChange={e => setEditForm(f => ({ ...f, apellido: e.target.value }))}
+                                      className="w-full text-sm border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                    />
+                                  </td>
+                                  <td className="py-1.5 pr-2">
+                                    <input
+                                      type="date"
+                                      value={editForm.fecha_nacimiento}
+                                      onChange={e => setEditForm(f => ({ ...f, fecha_nacimiento: e.target.value }))}
+                                      className="w-full text-sm border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                    />
+                                  </td>
+                                  <td className="py-1.5">
+                                    <div className="flex gap-1">
+                                      <button
+                                        onClick={async () => {
+                                          await handleMemberAction('update', { id: m.id, ...editForm });
+                                          setEditingId(null);
+                                        }}
+                                        className="p-1 text-violet-600 hover:bg-violet-100 rounded"
+                                      ><Check size={14} /></button>
+                                      <button onClick={() => setEditingId(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded">
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-2 pr-4 font-medium text-gray-800">{m.nombre}</td>
+                                  <td className="py-2 pr-4 text-gray-700">{m.apellido}</td>
+                                  <td className="py-2 pr-4">
+                                    <span className={`flex items-center gap-1 text-xs ${isBirthMonth ? 'text-amber-600 font-semibold' : 'text-gray-500'}`}>
+                                      {isBirthMonth && <Cake size={12} />}
+                                      {formatBirthday(m.fecha_nacimiento)}
+                                    </span>
+                                  </td>
+                                  <td className="py-2">
+                                    <div className="flex gap-1">
+                                      <button onClick={() => startEdit(m)} className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors">
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => { if (confirm(`¿Eliminar a ${m.nombre} ${m.apellido}?`)) handleMemberAction('delete', { id: m.id }); }}
+                                        className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            </section>
           </>
         )}
       </div>

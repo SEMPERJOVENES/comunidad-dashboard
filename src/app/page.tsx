@@ -12,7 +12,7 @@ import { getDefaultRange, formatCurrency } from '@/lib/utils';
 import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
-  CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight,
+  CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Cake,
 } from 'lucide-react';
 
 interface TagTransaction { date: string; description: string; amount: number }
@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [expandedCajaTag, setExpandedCajaTag] = useState<string | null>(null);
   const [showAllCaja, setShowAllCaja] = useState(false);
+  const [birthdayMembers, setBirthdayMembers] = useState<{ nombre: string; apellido: string; fecha_nacimiento: string }[]>([]);
 
   const periodLabel = useMemo(() => {
     const s = selectedRange.startDate;
@@ -97,6 +98,19 @@ export default function DashboardPage() {
     }
     fetchData();
   }, [selectedRange]);
+
+  useEffect(() => {
+    fetch('/api/community-members')
+      .then(r => r.json())
+      .then(json => {
+        const currentMonth = new Date().getMonth() + 1;
+        const thisMonth = (json.members || []).filter((m: any) =>
+          parseInt(m.fecha_nacimiento.split('-')[1]) === currentMonth
+        );
+        setBirthdayMembers(thisMonth);
+      })
+      .catch(() => {});
+  }, []);
 
   const analysis = useMemo(() => {
     if (!data) return null;
@@ -413,6 +427,31 @@ export default function DashboardPage() {
                 </button>
               )}
             </Card>
+
+            {/* ══════ CUMPLEAÑOS ESTE MES ══════ */}
+            {birthdayMembers.length > 0 && (
+              <Card className="!p-4 border-l-4 border-l-amber-400 bg-amber-50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Cake size={16} className="text-amber-500" />
+                  <h3 className="text-sm font-bold text-amber-800">
+                    Cumpleaños este mes ({birthdayMembers.length})
+                  </h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {birthdayMembers.map((m, i) => {
+                    const [, month, day] = m.fecha_nacimiento.split('-');
+                    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+                    return (
+                      <span key={i} className="flex items-center gap-1.5 text-xs bg-white border border-amber-200 text-amber-700 font-medium px-2.5 py-1 rounded-full">
+                        <Cake size={11} className="text-amber-400" />
+                        {m.nombre} {m.apellido}
+                        <span className="text-amber-400 font-normal">{parseInt(day)} {months[parseInt(month)-1]}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
 
             {/* ══════ CHARTS ══════ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
