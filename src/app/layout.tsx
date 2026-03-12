@@ -13,9 +13,16 @@ export const metadata: Metadata = {
   description: "Dashboard financiero integrado con Shopify y Stripe",
   icons: {
     icon: [
+      { url: '/logo.png', type: 'image/png' },
       { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
     ],
-    apple: '/apple-icon.png',
+    apple: { url: '/logo.png', type: 'image/png' },
+    shortcut: '/logo.png',
+  },
+  openGraph: {
+    title: 'Semper Dashboard',
+    description: 'Dashboard financiero Semper',
+    images: [{ url: '/logo.png', width: 132, height: 132 }],
   },
 };
 
