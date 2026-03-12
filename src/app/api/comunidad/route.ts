@@ -127,11 +127,12 @@ export async function GET(request: NextRequest) {
     // 5. Members summary
     const { data: membersData } = await supabase
       .from('diezmos_members')
-      .select('id, is_active');
+      .select('id, name, nickname, community, is_active, stripe_subscription_id')
+      .order('name');
 
     const { data: paymentsData } = await supabase
       .from('diezmos_payments')
-      .select('member_id, month');
+      .select('member_id, month, amount');
 
     const currentMonth = getMonthKey(new Date());
     const totalMembers = (membersData || []).length;
@@ -140,6 +141,19 @@ export async function GET(request: NextRequest) {
       (paymentsData || []).filter((p: any) => p.month === currentMonth).map((p: any) => p.member_id)
     );
     const payingMembers = payingIds.size;
+
+    const prevDate = new Date();
+    prevDate.setMonth(prevDate.getMonth() - 1);
+    const prevMonthKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const memberStatus = (membersData || []).map((m: any) => ({
+      id: m.id,
+      name: m.nickname || m.name,
+      community: m.community || 'Sin comunidad',
+      paidPrevMonth: (paymentsData || []).some((p: any) => p.member_id === m.id && p.month === prevMonthKey),
+      paidCurrentMonth: (paymentsData || []).some((p: any) => p.member_id === m.id && p.month === currentMonth),
+      isActive: m.is_active,
+    }));
 
     // 6. Unmatched diezmo bank transactions (no member_name)
     const unmatchedTxs = (bankTxs || [])
@@ -196,6 +210,8 @@ export async function GET(request: NextRequest) {
       tagBreakdown,
       monthlyChart,
       unmatchedTxs,
+      memberStatus,
+      prevMonthKey,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';

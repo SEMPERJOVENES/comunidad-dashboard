@@ -8,8 +8,7 @@ import { DateRange } from '@/lib/types';
 import {
   Church, UserPlus, Loader2, Search, Trash2, Edit3, Check, X,
   ChevronLeft, ChevronRight, CreditCard, Landmark, Link2, Unlink,
-  TrendingUp, ChevronDown, ChevronUp,
-  Users, LayoutGrid, Table2, PieChart, Plus,
+  TrendingUp, Users, LayoutGrid, Table2, PieChart, Plus,
 } from 'lucide-react';
 
 type ViewMode = 'grid' | 'list' | 'summary';
@@ -44,20 +43,22 @@ function formatMonthFull(key: string) {
   return `${months[parseInt(m) - 1]} ${y}`;
 }
 
-const TAG_ICONS: Record<string, string> = {
-  'Música': '🎵',
-  'Misa/Tabor': '⛪',
-  'Retiros': '🏔️',
-  'Donativo': '🎁',
-  'BAC': '🏦',
-  'Diezmo (gasto)': '📤',
-};
+
+function getMonthsInRange(start: Date, end: Date): string[] {
+  const months: string[] = [];
+  const d = new Date(start.getFullYear(), start.getMonth(), 1);
+  const e = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (d <= e) {
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() + 1);
+  }
+  return months.length > 0 ? months : [];
+}
 
 export default function DiezmosPage() {
-  // Diezmos siempre carga todos los datos (no usa filtro global de fecha)
-  const [dummyRange] = useState<DateRange>({
-    label: 'Todo',
-    startDate: new Date(2023, 0, 1),
+  const [selectedRange, setSelectedRange] = useState<DateRange>({
+    label: 'Este año',
+    startDate: new Date(new Date().getFullYear(), 0, 1),
     endDate: new Date(),
   });
   const [members, setMembers] = useState<any[]>([]);
@@ -99,14 +100,17 @@ export default function DiezmosPage() {
   const [creatingFromStripe, setCreatingFromStripe] = useState<any | null>(null);
   const [newMemberCommunity, setNewMemberCommunity] = useState('San Pablo');
 
+  // API always loads all data from 2023 for complete history
+  const apiRange = { start: new Date(2023, 0, 1), end: new Date() };
+
   useEffect(() => { fetchDiezmos(); }, []);
 
   async function fetchDiezmos() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        start: dummyRange.startDate.toISOString(),
-        end: dummyRange.endDate.toISOString(),
+        start: apiRange.start.toISOString(),
+        end: apiRange.end.toISOString(),
       });
       const res = await fetch(`/api/diezmos?${params}`);
       const data = await res.json();
@@ -256,6 +260,13 @@ export default function DiezmosPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }, []);
+  const prevMonth = useMemo(() => {
+    const prev = new Date(); prev.setMonth(prev.getMonth() - 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  // Months in the selected range — used for avgMonthly calculation
+  const rangeMonths = useMemo(() => getMonthsInRange(selectedRange.startDate, selectedRange.endDate), [selectedRange]);
 
   const visibleMonths = useMemo(() => {
     const start = Math.max(0, allMonths.length - monthsToShow - monthOffset);
@@ -288,18 +299,18 @@ export default function DiezmosPage() {
     for (const m of sortedFiltered) {
       const c = m.community || 'Sin comunidad';
       if (!groups[c]) groups[c] = [];
-      groups[c].push(m);
+      // avgMonthly = total paid in selected range / months in range
+      const totalInRange = rangeMonths.reduce((s: number, month: string) =>
+        s + (m.payments?.[month]?.amount || 0), 0);
+      const avgMonthly = rangeMonths.length > 0 ? totalInRange / rangeMonths.length : 0;
+      groups[c].push({ ...m, avgMonthly });
     }
+    // Sort each community by avgMonthly descending
     for (const key of Object.keys(groups)) {
-      groups[key].sort((a: any, b: any) => {
-        const aPays = a.payments?.[currentMonth] ? 1 : 0;
-        const bPays = b.payments?.[currentMonth] ? 1 : 0;
-        if (aPays !== bPays) return bPays - aPays;
-        return (a.name || '').localeCompare(b.name || '');
-      });
+      groups[key].sort((a: any, b: any) => b.avgMonthly - a.avgMonthly);
     }
     return groups;
-  }, [sortedFiltered, communities, currentMonth]);
+  }, [sortedFiltered, communities, rangeMonths]);
 
   function displayName(m: any) {
     return m.nickname || m.name;
@@ -316,7 +327,7 @@ export default function DiezmosPage() {
   }, [members, selectedMonth]);
 
   return (
-    <DashboardLayout selectedRange={dummyRange} onRangeChange={() => {}} hideRangeSelector>
+    <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-5">
         {/* Header + View Selector */}
         <div className="flex flex-col gap-4">
@@ -485,24 +496,29 @@ export default function DiezmosPage() {
             {communityStats
               .filter((cs: any) => filterCommunity === 'all' || cs.community === filterCommunity)
               .map((cs: any) => {
-              const nonPaying = members.filter(m => m.community === cs.community && !m.payments?.[selectedMonth]);
               const paying = members.filter(m => m.community === cs.community && m.payments?.[selectedMonth]);
-              const payingCount = paying.length;
               const totalMembers = members.filter(m => m.community === cs.community).length;
+              // Alert = paid prev month but NOT selected month (only meaningful for past months)
+              const isCurrentMonthSelected = selectedMonth === currentMonth;
+              const nonPayingAll = members.filter(m => m.community === cs.community && !m.payments?.[selectedMonth]);
+              // True defaulters: paid in prev completed month but missing in selectedMonth
+              const trueDefaulters = nonPayingAll.filter(m => m.payments?.[prevMonth]);
+              // Pending (current month or no history yet)
+              const pending = nonPayingAll.filter(m => !m.payments?.[prevMonth]);
+              const payingCount = paying.length;
               const pctPaying = totalMembers > 0 ? Math.round((payingCount / totalMembers) * 100) : 0;
               const monthlyTotal = paying.reduce((s: number, m: any) => s + (m.payments?.[selectedMonth]?.amount || 0), 0);
+              const commColor =
+                cs.community === 'San Pablo' ? { bg: 'bg-blue-100', text: 'text-blue-600' } :
+                cs.community === 'San Ignacio' ? { bg: 'bg-green-100', text: 'text-green-600' } :
+                cs.community === 'Colaboradores' ? { bg: 'bg-purple-100', text: 'text-purple-600' } :
+                { bg: 'bg-orange-100', text: 'text-orange-600' };
               return (
                 <Card key={cs.community} className="!p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        cs.community === 'San Pablo' ? 'bg-blue-100' :
-                        cs.community === 'San Ignacio' ? 'bg-green-100' : 'bg-orange-100'
-                      }`}>
-                        <Church size={18} className={
-                          cs.community === 'San Pablo' ? 'text-blue-600' :
-                          cs.community === 'San Ignacio' ? 'text-green-600' : 'text-orange-600'
-                        } />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${commColor.bg}`}>
+                        <Church size={18} className={commColor.text} />
                       </div>
                       <div>
                         <h3 className="text-base font-bold text-gray-900">{cs.community}</h3>
@@ -515,7 +531,7 @@ export default function DiezmosPage() {
                     </div>
                   </div>
 
-                  {/* Progress bar con porcentaje */}
+                  {/* Progress bar */}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex-1 bg-gray-100 rounded-full h-3">
                       <div className={`h-3 rounded-full transition-all ${
@@ -535,7 +551,7 @@ export default function DiezmosPage() {
                           <Check size={10} /> Han dado ({paying.length})
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {paying.map((m: any) => (
+                          {paying.sort((a: any, b: any) => (b.payments?.[selectedMonth]?.amount || 0) - (a.payments?.[selectedMonth]?.amount || 0)).map((m: any) => (
                             <span key={m.id} className="text-[11px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
                               {displayName(m)} · {formatCurrency(m.payments[selectedMonth]?.amount || 0)}
                             </span>
@@ -543,14 +559,33 @@ export default function DiezmosPage() {
                         </div>
                       </div>
                     )}
-                    {nonPaying.length > 0 && (
+                    {(trueDefaulters.length > 0 || (!isCurrentMonthSelected && pending.length > 0)) && (
                       <div className="bg-red-50/50 rounded-xl p-3">
                         <p className="text-[10px] text-red-600 font-semibold uppercase mb-2 flex items-center gap-1">
-                          <X size={10} /> No han dado ({nonPaying.length})
+                          <X size={10} /> Falta ({trueDefaulters.length + (!isCurrentMonthSelected ? pending.length : 0)})
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {nonPaying.map((m: any) => (
+                          {trueDefaulters.map((m: any) => (
+                            <span key={m.id} className="text-[11px] px-2 py-0.5 bg-red-100 text-red-600 rounded-full font-medium">
+                              {displayName(m)}
+                            </span>
+                          ))}
+                          {!isCurrentMonthSelected && pending.map((m: any) => (
                             <span key={m.id} className="text-[11px] px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+                              {displayName(m)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {isCurrentMonthSelected && pending.length > 0 && (
+                      <div className="bg-amber-50/50 rounded-xl p-3">
+                        <p className="text-[10px] text-amber-600 font-semibold uppercase mb-2">
+                          Pendiente ({pending.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {pending.map((m: any) => (
+                            <span key={m.id} className="text-[11px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
                               {displayName(m)}
                             </span>
                           ))}
@@ -602,6 +637,9 @@ export default function DiezmosPage() {
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Miembro</th>
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Comunidad</th>
                       <th className="text-left text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">Vinculación</th>
+                      <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">
+                        <span title="Media mensual en el período seleccionado">Media/mes</span>
+                      </th>
                       <th className="text-right text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3">{formatMonth(selectedMonth)}</th>
                       <th className="text-center text-xs font-semibold text-gray-600 px-4 sm:px-6 py-3 w-24">Acciones</th>
                     </tr>
@@ -644,6 +682,7 @@ export default function DiezmosPage() {
                                 className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer hover:ring-2 hover:ring-violet-300 transition-all ${
                                   m.community === 'San Pablo' ? 'bg-blue-50 text-blue-700' :
                                   m.community === 'San Ignacio' ? 'bg-green-50 text-green-700' :
+                                  m.community === 'Colaboradores' ? 'bg-purple-50 text-purple-700' :
                                   'bg-orange-50 text-orange-700'
                                 }`}
                                 title="Clic para cambiar comunidad"
@@ -677,6 +716,12 @@ export default function DiezmosPage() {
                                 <span className="text-xs text-gray-300">—</span>
                               )}
                             </div>
+                          </td>
+                          <td className="px-4 sm:px-6 py-3 text-right">
+                            {m.avgMonthly > 0
+                              ? <span className="text-xs font-medium text-violet-600">{formatCurrency(m.avgMonthly)}</span>
+                              : <span className="text-xs text-gray-300">—</span>
+                            }
                           </td>
                           <td className="px-4 sm:px-6 py-3 text-right">
                             {payment ? (
