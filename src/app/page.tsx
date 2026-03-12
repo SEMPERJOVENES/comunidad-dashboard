@@ -14,6 +14,7 @@ import {
   Landmark, ChevronDown, ChevronRight, Package,
   CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Cake,
 } from 'lucide-react';
+import { getBirthdaysThisMonth } from '@/lib/birthdays';
 
 interface TagTransaction { date: string; description: string; amount: number }
 
@@ -64,7 +65,7 @@ export default function DashboardPage() {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [expandedCajaTag, setExpandedCajaTag] = useState<string | null>(null);
   const [showAllCaja, setShowAllCaja] = useState(false);
-  const [birthdayMembers, setBirthdayMembers] = useState<{ nombre: string; apellido: string; fecha_nacimiento: string }[]>([]);
+  const birthdayMembers = useMemo(() => getBirthdaysThisMonth(), []);
 
   const periodLabel = useMemo(() => {
     const s = selectedRange.startDate;
@@ -99,18 +100,6 @@ export default function DashboardPage() {
     fetchData();
   }, [selectedRange]);
 
-  useEffect(() => {
-    fetch('/api/community-members')
-      .then(r => r.json())
-      .then(json => {
-        const currentMonth = new Date().getMonth() + 1;
-        const thisMonth = (json.members || []).filter((m: any) =>
-          m.fecha_nacimiento && parseInt(m.fecha_nacimiento.split('-')[1]) === currentMonth
-        );
-        setBirthdayMembers(thisMonth);
-      })
-      .catch(() => {});
-  }, []);
 
   const analysis = useMemo(() => {
     if (!data) return null;
@@ -439,13 +428,12 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {birthdayMembers.map((m, i) => {
-                    const [, month, day] = m.fecha_nacimiento.split('-');
                     const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
                     return (
                       <span key={i} className="flex items-center gap-1.5 text-xs bg-white border border-amber-200 text-amber-700 font-medium px-2.5 py-1 rounded-full">
                         <Cake size={11} className="text-amber-400" />
-                        {m.nombre} {m.apellido}
-                        <span className="text-amber-400 font-normal">{parseInt(day)} {months[parseInt(month)-1]}</span>
+                        {m.name}
+                        <span className="text-amber-400 font-normal">{m.day} {months[m.month - 1]}</span>
                       </span>
                     );
                   })}
