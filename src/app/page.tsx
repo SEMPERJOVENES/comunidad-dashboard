@@ -105,7 +105,7 @@ export default function DashboardPage() {
       .then(json => {
         const currentMonth = new Date().getMonth() + 1;
         const thisMonth = (json.members || []).filter((m: any) =>
-          parseInt(m.fecha_nacimiento.split('-')[1]) === currentMonth
+          m.fecha_nacimiento && parseInt(m.fecha_nacimiento.split('-')[1]) === currentMonth
         );
         setBirthdayMembers(thisMonth);
       })

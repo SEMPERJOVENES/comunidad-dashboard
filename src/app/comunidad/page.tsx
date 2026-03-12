@@ -75,14 +75,15 @@ export default function ComunidadPage() {
   const [showUnmatched, setShowUnmatched] = useState(false);
 
   // Miembros
-  interface Member { id: string; nombre: string; apellido: string; fecha_nacimiento: string }
+  interface Member { id: string; nombre: string; apellido: string; comunidad: string | null; fecha_nacimiento: string | null }
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', fecha_nacimiento: '' });
-  const [addForm, setAddForm] = useState({ nombre: '', apellido: '', fecha_nacimiento: '' });
+  const [editForm, setEditForm] = useState({ nombre: '', apellido: '', comunidad: '', fecha_nacimiento: '' });
+  const [addForm, setAddForm] = useState({ nombre: '', apellido: '', comunidad: '', fecha_nacimiento: '' });
   const [showAddForm, setShowAddForm] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
+  const [comunidadFilter, setComunidadFilter] = useState('');
 
   async function fetchMembers() {
     setMembersLoading(true);
@@ -108,19 +109,23 @@ export default function ComunidadPage() {
 
   function startEdit(m: Member) {
     setEditingId(m.id);
-    setEditForm({ nombre: m.nombre, apellido: m.apellido, fecha_nacimiento: m.fecha_nacimiento });
+    setEditForm({ nombre: m.nombre, apellido: m.apellido, comunidad: m.comunidad || '', fecha_nacimiento: m.fecha_nacimiento || '' });
   }
 
-  function formatBirthday(date: string) {
+  function formatBirthday(date: string | null) {
+    if (!date) return '—';
     const [, month, day] = date.split('-');
     const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     return `${parseInt(day)} ${months[parseInt(month) - 1]}`;
   }
 
+  const COMUNIDADES = ['S. Martín', 'S. Ignacio', 'S. Pablo'];
   const currentMonth = new Date().getMonth() + 1;
   const filteredMembers = members.filter(m => {
     const q = memberSearch.toLowerCase();
-    return m.nombre.toLowerCase().includes(q) || m.apellido.toLowerCase().includes(q);
+    const matchSearch = m.nombre.toLowerCase().includes(q) || m.apellido.toLowerCase().includes(q);
+    const matchComunidad = !comunidadFilter || m.comunidad === comunidadFilter;
+    return matchSearch && matchComunidad;
   });
 
   useEffect(() => {
@@ -575,7 +580,7 @@ export default function ComunidadPage() {
               </div>
 
               <Card className="!p-4">
-                {/* Barra superior: buscador + añadir */}
+                {/* Barra superior: buscador + filtro + añadir */}
                 <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   <input
                     type="text"
@@ -584,8 +589,16 @@ export default function ComunidadPage() {
                     onChange={e => setMemberSearch(e.target.value)}
                     className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300"
                   />
+                  <select
+                    value={comunidadFilter}
+                    onChange={e => setComunidadFilter(e.target.value)}
+                    className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                  >
+                    <option value="">Todas las comunidades</option>
+                    {COMUNIDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                   <button
-                    onClick={() => { setShowAddForm(true); setAddForm({ nombre: '', apellido: '', fecha_nacimiento: '' }); }}
+                    onClick={() => { setShowAddForm(true); setAddForm({ nombre: '', apellido: '', comunidad: '', fecha_nacimiento: '' }); }}
                     className="flex items-center gap-2 px-3 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors whitespace-nowrap"
                   >
                     <Plus size={14} /> Añadir miembro
@@ -596,7 +609,7 @@ export default function ComunidadPage() {
                 {showAddForm && (
                   <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-xl">
                     <p className="text-xs font-semibold text-violet-700 mb-2">Nuevo miembro</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                       <input
                         type="text"
                         placeholder="Nombre"
@@ -611,6 +624,14 @@ export default function ComunidadPage() {
                         onChange={e => setAddForm(f => ({ ...f, apellido: e.target.value }))}
                         className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300"
                       />
+                      <select
+                        value={addForm.comunidad}
+                        onChange={e => setAddForm(f => ({ ...f, comunidad: e.target.value }))}
+                        className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                      >
+                        <option value="">Comunidad...</option>
+                        {COMUNIDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
                       <input
                         type="date"
                         value={addForm.fecha_nacimiento}
@@ -621,7 +642,7 @@ export default function ComunidadPage() {
                     <div className="flex gap-2 mt-2">
                       <button
                         onClick={async () => {
-                          if (!addForm.nombre || !addForm.apellido || !addForm.fecha_nacimiento) return;
+                          if (!addForm.nombre || !addForm.apellido) return;
                           await handleMemberAction('add', addForm);
                           setShowAddForm(false);
                         }}
@@ -655,6 +676,7 @@ export default function ComunidadPage() {
                         <tr className="border-b border-gray-100">
                           <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Nombre</th>
                           <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Apellido</th>
+                          <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Comunidad</th>
                           <th className="text-left text-xs font-semibold text-gray-400 uppercase py-2 pr-4">Cumpleaños</th>
                           <th className="w-16" />
                         </tr>
@@ -662,7 +684,7 @@ export default function ComunidadPage() {
                       <tbody>
                         {filteredMembers.map(m => {
                           const isEditing = editingId === m.id;
-                          const bMonth = parseInt(m.fecha_nacimiento.split('-')[1]);
+                          const bMonth = m.fecha_nacimiento ? parseInt(m.fecha_nacimiento.split('-')[1]) : null;
                           const isBirthMonth = bMonth === currentMonth;
                           return (
                             <tr key={m.id} className={`border-b border-gray-50 ${isBirthMonth ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
@@ -683,6 +705,16 @@ export default function ComunidadPage() {
                                       onChange={e => setEditForm(f => ({ ...f, apellido: e.target.value }))}
                                       className="w-full text-sm border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
                                     />
+                                  </td>
+                                  <td className="py-1.5 pr-2">
+                                    <select
+                                      value={editForm.comunidad}
+                                      onChange={e => setEditForm(f => ({ ...f, comunidad: e.target.value }))}
+                                      className="w-full text-sm border border-violet-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                                    >
+                                      <option value="">—</option>
+                                      {COMUNIDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
                                   </td>
                                   <td className="py-1.5 pr-2">
                                     <input
@@ -711,6 +743,9 @@ export default function ComunidadPage() {
                                 <>
                                   <td className="py-2 pr-4 font-medium text-gray-800">{m.nombre}</td>
                                   <td className="py-2 pr-4 text-gray-700">{m.apellido}</td>
+                                  <td className="py-2 pr-4">
+                                    <span className="text-xs text-gray-500">{m.comunidad || '—'}</span>
+                                  </td>
                                   <td className="py-2 pr-4">
                                     <span className={`flex items-center gap-1 text-xs ${isBirthMonth ? 'text-amber-600 font-semibold' : 'text-gray-500'}`}>
                                       {isBirthMonth && <Cake size={12} />}

@@ -5,7 +5,8 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('community_members')
-      .select('id, nombre, apellido, fecha_nacimiento')
+      .select('id, nombre, apellido, comunidad, fecha_nacimiento')
+      .order('comunidad')
       .order('apellido');
     if (error) throw error;
     return NextResponse.json({ members: data || [] });
@@ -22,14 +23,16 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase.from('community_members').insert({
         nombre: body.nombre.trim(),
         apellido: body.apellido.trim(),
-        fecha_nacimiento: body.fecha_nacimiento,
+        comunidad: body.comunidad?.trim() || null,
+        fecha_nacimiento: body.fecha_nacimiento || null,
       });
       if (error) throw error;
     } else if (body.action === 'update') {
       const { error } = await supabase.from('community_members').update({
         nombre: body.nombre.trim(),
         apellido: body.apellido.trim(),
-        fecha_nacimiento: body.fecha_nacimiento,
+        comunidad: body.comunidad?.trim() || null,
+        fecha_nacimiento: body.fecha_nacimiento || null,
       }).eq('id', body.id);
       if (error) throw error;
     } else if (body.action === 'delete') {
@@ -41,7 +44,8 @@ export async function POST(request: NextRequest) {
 
     const { data } = await supabase
       .from('community_members')
-      .select('id, nombre, apellido, fecha_nacimiento')
+      .select('id, nombre, apellido, comunidad, fecha_nacimiento')
+      .order('comunidad')
       .order('apellido');
     return NextResponse.json({ members: data || [] });
   } catch (error: any) {
