@@ -13,7 +13,7 @@ const FALLBACK_CATEGORIES = [
   'Viajes', 'Material', 'Música', 'Semper CD', 'BAC',
   'Gastos Varios', 'Stripe', 'Shopify', 'Bizum', 'Transferencia',
   'Comisión bancaria', 'Venta presencial', 'Gasto operativo',
-  'Nómina', 'Alquiler', 'Proveedor', 'Otro',
+  'Nómina', 'Alquiler', 'Proveedor', 'Otro', 'No contabilizar',
 ];
 
 interface Rule {

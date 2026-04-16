@@ -127,18 +127,24 @@ export default function MiembrosPage() {
 
   async function handleAdd() {
     if (!newName.trim()) return;
-    await fetch('/api/diezmos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add_member', name: newName, nickname: newNickname || null, community: newCommunity, email: newEmail || null }),
-    });
-    setNewName(''); setNewNickname(''); setNewEmail(''); setShowAddForm(false);
-    fetchData();
+    try {
+      const res = await fetch('/api/diezmos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_member', name: newName, nickname: newNickname || null, community: newCommunity, email: newEmail || null }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al añadir miembro: ${err.error || res.statusText}`); return; }
+      setNewName(''); setNewNickname(''); setNewEmail(''); setShowAddForm(false);
+      fetchData();
+    } catch (e: any) { alert(`Error de red: ${e.message}`); }
   }
 
   async function handleDelete(id: string) {
-    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_member', id }) });
-    setDeletingId(null); fetchData();
+    try {
+      const res = await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_member', id }) });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al eliminar miembro: ${err.error || res.statusText}`); return; }
+      setDeletingId(null); fetchData();
+    } catch (e: any) { alert(`Error de red: ${e.message}`); }
   }
 
   async function handleManualPayment(memberId: string, month: string, amount: number) {

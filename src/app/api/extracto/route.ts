@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
       manualTag: row.manual_tag,
       isDiezmo: row.is_diezmo,
       memberName: row.member_name,
+      originalAmount: row.original_amount != null ? parseFloat(row.original_amount) : null,
       source: 'bank' as const,
     }));
 
@@ -147,6 +148,31 @@ export async function POST(request: NextRequest) {
           concept: data.concept, amount: parseFloat(data.amount),
           balance: parseFloat(data.balance || 0), autoTag: data.auto_tag,
           manualTag: data.manual_tag, isDiezmo: data.is_diezmo, memberName: data.member_name,
+          source: 'bank',
+        },
+      });
+    }
+
+    if (body.action === 'edit_amount') {
+      const { id, amount } = body;
+      if (!id || amount === undefined) {
+        return NextResponse.json({ error: 'Se requieren id y amount' }, { status: 400 });
+      }
+      // Save original amount on first edit
+      const { data: current } = await supabase.from('bank_transactions').select('amount, original_amount').eq('id', id).single();
+      const updates: any = { amount: parseFloat(amount) };
+      if (current && current.original_amount === null) {
+        updates.original_amount = current.amount;
+      }
+      const { data, error } = await supabase.from('bank_transactions').update(updates).eq('id', id).select().single();
+      if (error) throw error;
+      return NextResponse.json({
+        transaction: {
+          id: data.id, date: data.date, valueDate: data.value_date,
+          concept: data.concept, amount: parseFloat(data.amount),
+          balance: parseFloat(data.balance || 0), autoTag: data.auto_tag,
+          manualTag: data.manual_tag, isDiezmo: data.is_diezmo, memberName: data.member_name,
+          originalAmount: data.original_amount != null ? parseFloat(data.original_amount) : null,
           source: 'bank',
         },
       });

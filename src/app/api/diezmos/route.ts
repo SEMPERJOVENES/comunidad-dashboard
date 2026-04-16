@@ -119,6 +119,7 @@ export async function GET(request: import('next/server').NextRequest) {
         stripeSubscriptionId: m.stripe_subscription_id,
         stripeAmount: m.stripe_amount ? parseFloat(m.stripe_amount) : null,
         stripeInterval: m.stripe_interval,
+        paymentFrequency: m.payment_frequency || 'mensual',
         payments: memberPayments,
         bankRules: memberBankRules,
       };
@@ -565,19 +566,24 @@ export async function POST(request: import('next/server').NextRequest) {
 
     if (body.action === 'add_member') {
       const id = `m${Date.now()}`;
-      const { error } = await supabase.from('diezmos_members').insert({
+      const row: any = {
         id,
         name: body.name.trim(),
         nickname: body.nickname?.trim() || null,
         community: body.community || 'San Pablo',
         email: body.email || null,
         is_active: true,
-      });
+      };
+      if (body.paymentFrequency) row.payment_frequency = body.paymentFrequency;
+      const { error } = await supabase.from('diezmos_members').insert(row);
       if (error) throw error;
       return NextResponse.json({ success: true, id });
     }
 
     if (body.action === 'delete_member') {
+      // Delete bank rules first (FK may not cascade)
+      await supabase.from('diezmos_bank_rules').delete().eq('member_id', body.id);
+      await supabase.from('diezmos_payments').delete().eq('member_id', body.id);
       const { error } = await supabase.from('diezmos_members').delete().eq('id', body.id);
       if (error) throw error;
       return NextResponse.json({ success: true });
@@ -590,6 +596,7 @@ export async function POST(request: import('next/server').NextRequest) {
       if (body.community !== undefined) updates.community = body.community;
       if (body.email !== undefined) updates.email = body.email;
       if (body.isActive !== undefined) updates.is_active = body.isActive;
+      if (body.paymentFrequency !== undefined) updates.payment_frequency = body.paymentFrequency;
       const { error } = await supabase.from('diezmos_members').update(updates).eq('id', body.id);
       if (error) throw error;
       return NextResponse.json({ success: true });

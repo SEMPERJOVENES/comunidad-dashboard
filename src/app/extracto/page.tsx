@@ -23,6 +23,8 @@ export default function ExtractoPage() {
   const [importing, setImporting] = useState(false);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   // Paste modal
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editingAmountValue, setEditingAmountValue] = useState('');
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [pastePreview, setPastePreview] = useState<{ date: string; concept: string; amount: string; balance: string }[]>([]);
@@ -45,7 +47,7 @@ export default function ExtractoPage() {
 
       // Extraer etiquetas únicas de las transacciones reales
       const txs: BankTransaction[] = data.transactions || [];
-      const uniqueTags = new Set<string>();
+      const uniqueTags = new Set<string>(['No contabilizar']);
       txs.forEach(tx => {
         const tag = tx.manualTag || tx.autoTag;
         if (tag) uniqueTags.add(tag);
@@ -81,6 +83,21 @@ export default function ExtractoPage() {
         setEditingId(null);
       }
     } catch {}
+  }
+
+  async function handleEditAmount(id: string, newAmount: number) {
+    try {
+      const res = await fetch('/api/extracto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'edit_amount', id, amount: newAmount }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTransactions(prev => prev.map(t => t.id === id ? data.transaction : t));
+      }
+    } catch {}
+    setEditingAmountId(null);
   }
 
   async function handleImportExcel(file: File) {
@@ -429,7 +446,35 @@ export default function ExtractoPage() {
                           </div>
                         </td>
                         <td className={`px-4 sm:px-6 py-3 text-right text-sm font-semibold whitespace-nowrap ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                          {editingAmountId === tx.id ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <input
+                                type="number"
+                                step="0.01"
+                                autoFocus
+                                value={editingAmountValue}
+                                onChange={(e) => setEditingAmountValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleEditAmount(tx.id, parseFloat(editingAmountValue));
+                                  if (e.key === 'Escape') setEditingAmountId(null);
+                                }}
+                                className="w-28 text-right text-xs px-2 py-1 border border-violet-300 rounded focus:ring-2 focus:ring-violet-500"
+                              />
+                              <button onClick={() => handleEditAmount(tx.id, parseFloat(editingAmountValue))} className="text-green-600 hover:text-green-800"><Check size={14} /></button>
+                              <button onClick={() => setEditingAmountId(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingAmountId(tx.id); setEditingAmountValue(String(tx.amount)); }}
+                              className="cursor-pointer hover:opacity-70 transition-opacity"
+                              title="Clic para editar importe"
+                            >
+                              {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                              {(tx as any).originalAmount != null && (tx as any).originalAmount !== tx.amount && (
+                                <span className="ml-1 text-[10px] text-orange-400" title={`Original: ${formatCurrency((tx as any).originalAmount)}`}>✏️</span>
+                              )}
+                            </button>
+                          )}
                         </td>
                         <td className="px-4 sm:px-6 py-3 text-right text-sm text-gray-500 whitespace-nowrap">
                           {formatCurrency(tx.balance)}

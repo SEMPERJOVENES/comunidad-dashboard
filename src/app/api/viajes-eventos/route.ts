@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
 
-      // Skip Brand and Diezmo tags (they belong to other sections)
-      if (BRAND_TAGS.includes(tag) || DIEZMO_TAGS.includes(tag) || tx.is_diezmo) continue;
+      // Skip Brand, Diezmo, and excluded tags (they belong to other sections)
+      if (BRAND_TAGS.includes(tag) || DIEZMO_TAGS.includes(tag) || tx.is_diezmo || tag === 'No contabilizar') continue;
 
       // Find which specific category this tag belongs to
       let matched = false;

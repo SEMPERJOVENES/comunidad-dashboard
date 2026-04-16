@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
 
     for (const tx of bankTxs) {
       const macro = getMacroCategory(tx);
+      if (macro === 'excluido') continue; // Skip "No contabilizar"
       const amt = parseFloat(tx.amount || '0');
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
 
@@ -123,6 +124,8 @@ export async function GET(request: NextRequest) {
     const cajaByCategory: Record<string, { net: number; count: number; transactions: TagTx[] }> = {};
     const cajaMacro = { comunidad: 0, brand: 0, otros: 0 };
     for (const tx of allBankTxs) {
+      const macro = getMacroCategory(tx);
+      if (macro === 'excluido') continue; // Skip "No contabilizar"
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
       const amt = parseFloat(tx.amount || '0');
       if (!cajaByCategory[tag]) {
@@ -137,7 +140,6 @@ export async function GET(request: NextRequest) {
       });
 
       // Aggregate by macro category
-      const macro = getMacroCategory(tx);
       if (macro === 'diezmos') cajaMacro.comunidad += amt;
       else if (macro === 'brand') cajaMacro.brand += amt;
       else cajaMacro.otros += amt;

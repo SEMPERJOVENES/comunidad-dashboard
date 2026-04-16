@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatDate, formatDateTime, getDefaultRange } from '@/lib/utils';
 import { DateRange, PresentialSale, ShopifyProduct } from '@/lib/types';
-import { Store, Plus, Loader2, Minus, Trash2, Check, Package, X, User, StickyNote } from 'lucide-react';
+import { Store, Plus, Loader2, Minus, Trash2, Check, Package, X, User, StickyNote, Calendar } from 'lucide-react';
 
 export default function VentasPresencialesPage() {
   const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
@@ -22,6 +22,7 @@ export default function VentasPresencialesPage() {
   const [items, setItems] = useState<{ productId: number; productTitle: string; quantity: number; unitPrice: number; image?: string }[]>([]);
   const [customAmount, setCustomAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -88,6 +89,7 @@ export default function VentasPresencialesPage() {
         customerName: customerName.trim(),
         paymentMethod,
         totalAmount,
+        date: new Date(saleDate + 'T12:00:00').toISOString(),
         items: items.map(({ image, ...rest }) => rest),
         notes: [
           notes.trim(),
@@ -108,6 +110,7 @@ export default function VentasPresencialesPage() {
         setCustomAmount('');
         setNotes('');
         setCashHolder('');
+        setSaleDate(new Date().toISOString().split('T')[0]);
       } else {
         alert('Error al guardar la venta. Revisa la conexión.');
       }
@@ -164,7 +167,7 @@ export default function VentasPresencialesPage() {
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Registrar Venta</h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Nombre del cliente</label>
                 <div className="relative">
@@ -174,6 +177,18 @@ export default function VentasPresencialesPage() {
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="Ej: Sara Cuesta"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de venta</label>
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="date"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                 </div>
@@ -345,6 +360,7 @@ export default function VentasPresencialesPage() {
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Método</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Artículos</th>
                     <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Importe</th>
+                    <th className="text-center text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Banco</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -364,11 +380,24 @@ export default function VentasPresencialesPage() {
                         }
                       </td>
                       <td className="px-4 sm:px-6 py-3 text-right text-sm font-semibold">{formatCurrency(sale.totalAmount)}</td>
+                      <td className="px-4 sm:px-6 py-3 text-center">
+                        {(sale as any).bankTransactionId ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-600 border border-green-100" title="Conciliado con extracto bancario">
+                            <Check size={10} /> Conciliado
+                          </span>
+                        ) : sale.paymentMethod !== 'efectivo' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-500 border border-amber-100" title="Pendiente de conciliar">
+                            Pendiente
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {sales.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-sm text-gray-400">
+                      <td colSpan={6} className="text-center py-8 text-sm text-gray-400">
                         Sin ventas presenciales registradas
                       </td>
                     </tr>

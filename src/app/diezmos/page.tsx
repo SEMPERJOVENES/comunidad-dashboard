@@ -74,6 +74,7 @@ export default function DiezmosPage() {
   const [newNickname, setNewNickname] = useState('');
   const [newCommunity, setNewCommunity] = useState('San Pablo');
   const [newEmail, setNewEmail] = useState('');
+  const [newFrequency, setNewFrequency] = useState<'mensual' | 'anual'>('mensual');
   const [monthsToShow, setMonthsToShow] = useState(6);
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingPayment, setEditingPayment] = useState<{ memberId: string; month: string } | null>(null);
@@ -130,23 +131,29 @@ export default function DiezmosPage() {
 
   async function handleAdd() {
     if (!newName.trim()) return;
-    await fetch('/api/diezmos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add_member', name: newName, nickname: newNickname || null, community: newCommunity, email: newEmail || null }),
-    });
-    setNewName(''); setNewNickname(''); setNewEmail(''); setShowAddForm(false);
-    fetchDiezmos();
+    try {
+      const res = await fetch('/api/diezmos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_member', name: newName, nickname: newNickname || null, community: newCommunity, email: newEmail || null, paymentFrequency: newFrequency }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al añadir miembro: ${err.error || res.statusText}`); return; }
+      setNewName(''); setNewNickname(''); setNewEmail(''); setNewFrequency('mensual'); setShowAddForm(false);
+      fetchDiezmos();
+    } catch (e: any) { alert(`Error de red: ${e.message}`); }
   }
 
   async function handleDelete(id: string) {
-    await fetch('/api/diezmos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_member', id }),
-    });
-    setDeletingId(null);
-    fetchDiezmos();
+    try {
+      const res = await fetch('/api/diezmos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_member', id }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); alert(`Error al eliminar miembro: ${err.error || res.statusText}`); return; }
+      setDeletingId(null);
+      fetchDiezmos();
+    } catch (e: any) { alert(`Error de red: ${e.message}`); }
   }
 
   async function handleManualPayment(memberId: string, month: string, amount: number) {
@@ -284,6 +291,21 @@ export default function DiezmosPage() {
     });
   }, [members, filterCommunity, searchTerm]);
 
+  // Helper: para miembros anuales, distribuir pago en 12 meses
+  function getEffectivePayment(m: any, month: string): { amount: number; source: string; isSpread?: boolean } | null {
+    const direct = m.payments?.[month];
+    if (direct) return direct;
+    if (m.paymentFrequency !== 'anual') return null;
+    // Buscar pago anual en cualquier mes del mismo año
+    const year = month.split('-')[0];
+    const annualPayments = Object.entries(m.payments || {}).filter(
+      ([k, v]: [string, any]) => k.startsWith(year) && v?.amount > 0
+    );
+    if (annualPayments.length === 0) return null;
+    const totalAnnual = annualPayments.reduce((s, [, v]: [string, any]) => s + v.amount, 0);
+    return { amount: Math.round((totalAnnual / 12) * 100) / 100, source: 'anual', isSpread: true };
+  }
+
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => {
       const aPays = a.payments?.[selectedMonth] ? 1 : 0;
@@ -418,7 +440,7 @@ export default function DiezmosPage() {
         {showAddForm && (
           <Card className="border-2 border-violet-200 bg-violet-50/30">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Añadir Miembro</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
                 placeholder="Nombre completo" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
               <input type="text" value={newNickname} onChange={e => setNewNickname(e.target.value)}
@@ -427,6 +449,14 @@ export default function DiezmosPage() {
                 className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500">
                 {communities.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+              <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                {(['mensual', 'anual'] as const).map(freq => (
+                  <button key={freq} onClick={() => setNewFrequency(freq)}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${newFrequency === freq ? 'bg-violet-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {freq === 'mensual' ? '📅 Mensual' : '📆 Anual'}
+                  </button>
+                ))}
+              </div>
               <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
                 placeholder="Email (opcional)" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
               <button onClick={handleAdd} disabled={!newName.trim()}
@@ -496,18 +526,18 @@ export default function DiezmosPage() {
             {communityStats
               .filter((cs: any) => filterCommunity === 'all' || cs.community === filterCommunity)
               .map((cs: any) => {
-              const paying = members.filter(m => m.community === cs.community && m.payments?.[selectedMonth]);
+              const paying = members.filter(m => m.community === cs.community && getEffectivePayment(m, selectedMonth));
               const totalMembers = members.filter(m => m.community === cs.community).length;
               // Alert = paid prev month but NOT selected month (only meaningful for past months)
               const isCurrentMonthSelected = selectedMonth === currentMonth;
-              const nonPayingAll = members.filter(m => m.community === cs.community && !m.payments?.[selectedMonth]);
+              const nonPayingAll = members.filter(m => m.community === cs.community && !getEffectivePayment(m, selectedMonth));
               // True defaulters: paid in prev completed month but missing in selectedMonth
-              const trueDefaulters = nonPayingAll.filter(m => m.payments?.[prevMonth]);
+              const trueDefaulters = nonPayingAll.filter(m => getEffectivePayment(m, prevMonth));
               // Pending (current month or no history yet)
-              const pending = nonPayingAll.filter(m => !m.payments?.[prevMonth]);
+              const pending = nonPayingAll.filter(m => !getEffectivePayment(m, prevMonth));
               const payingCount = paying.length;
               const pctPaying = totalMembers > 0 ? Math.round((payingCount / totalMembers) * 100) : 0;
-              const monthlyTotal = paying.reduce((s: number, m: any) => s + (m.payments?.[selectedMonth]?.amount || 0), 0);
+              const monthlyTotal = paying.reduce((s: number, m: any) => s + (getEffectivePayment(m, selectedMonth)?.amount || 0), 0);
               const commColor =
                 cs.community === 'San Pablo' ? { bg: 'bg-blue-100', text: 'text-blue-600' } :
                 cs.community === 'San Ignacio' ? { bg: 'bg-green-100', text: 'text-green-600' } :
@@ -658,7 +688,12 @@ export default function DiezmosPage() {
                                 </span>
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-gray-900">{displayName(m)}</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {displayName(m)}
+                                  {m.paymentFrequency === 'anual' && (
+                                    <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 align-middle">ANUAL</span>
+                                  )}
+                                </p>
                                 {m.nickname && <p className="text-xs text-gray-400">{m.name}</p>}
                               </div>
                             </div>
@@ -977,9 +1012,9 @@ export default function DiezmosPage() {
                   {Object.entries(grouped).map(([community, mems]) => {
                     if (mems.length === 0) return null;
                     const communityTotal = visibleMonths.map(month =>
-                      mems.reduce((s: number, m: any) => s + (m.payments?.[month]?.amount || 0), 0)
+                      mems.reduce((s: number, m: any) => s + (getEffectivePayment(m, month)?.amount || 0), 0)
                     );
-                    const payingCount = mems.filter((m: any) => m.payments?.[currentMonth]).length;
+                    const payingCount = mems.filter((m: any) => getEffectivePayment(m, currentMonth)).length;
                     return (
                       <React.Fragment key={community}>
                         <tr className={`${
@@ -1019,11 +1054,12 @@ export default function DiezmosPage() {
                                   <span className={`text-xs truncate max-w-[100px] ${m.isActive ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
                                     {displayName(m)}
                                   </span>
+                                  {m.paymentFrequency === 'anual' && <span className="text-[8px] font-bold text-amber-600 bg-amber-50 px-1 rounded flex-shrink-0">A</span>}
                                   {m.stripeSubscriptionId && <CreditCard size={9} className="text-blue-400 flex-shrink-0" />}
                                 </div>
                               </td>
                               {visibleMonths.map(month => {
-                                const p = m.payments?.[month];
+                                const p = getEffectivePayment(m, month);
                                 const isEditing = editingPayment?.memberId === m.id && editingPayment?.month === month;
                                 const isCurrentMonth = month === currentMonth;
                                 return (
@@ -1043,11 +1079,13 @@ export default function DiezmosPage() {
                                     ) : p ? (
                                       <button onClick={() => { setEditingPayment({ memberId: m.id, month }); setPaymentAmount(String(p.amount)); }}
                                         className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-lg cursor-pointer transition-colors ${
+                                          (p as any).isSpread ? 'bg-amber-50/60 text-amber-600 hover:bg-amber-100 border border-dashed border-amber-200' :
                                           p.source === 'stripe' ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
                                           p.source === 'banco' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' :
                                           'bg-violet-50 text-violet-700 hover:bg-violet-100'
-                                        }`}>
-                                        {p.amount}€
+                                        }`}
+                                        title={(p as any).isSpread ? 'Pago anual distribuido' : undefined}>
+                                        {Math.round(p.amount)}€
                                       </button>
                                     ) : (
                                       <button onClick={() => { setEditingPayment({ memberId: m.id, month }); setPaymentAmount(''); }}
@@ -1080,6 +1118,10 @@ export default function DiezmosPage() {
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-violet-50 border border-violet-200 rounded-md" />
                 <span className="text-xs text-gray-500">Manual</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-amber-50 border border-dashed border-amber-200 rounded-md" />
+                <span className="text-xs text-gray-500">Anual (÷12)</span>
               </div>
             </div>
           </Card>

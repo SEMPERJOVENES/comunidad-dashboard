@@ -44,6 +44,11 @@ export async function GET(request: NextRequest) {
 
     const tagCategories = tagCatsResult.data;
 
+    // Tags excluidos ("No contabilizar")
+    const excludedTags = new Set(
+      (tagCategories || []).filter((tc: any) => tc.macro_group === 'excluido').map((tc: any) => tc.name)
+    );
+
     // Agrupar por categoría (tag)
     const categoriesMap: Record<string, {
       tag: string;
@@ -56,6 +61,7 @@ export async function GET(request: NextRequest) {
 
     for (const tx of txs) {
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
+      if (excludedTags.has(tag)) continue; // Skip "No contabilizar"
       const amount = parseFloat(tx.amount || '0');
 
       if (!categoriesMap[tag]) {
@@ -94,6 +100,7 @@ export async function GET(request: NextRequest) {
 
     for (const tx of txs) {
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
+      if (excludedTags.has(tag)) continue;
       const month = tx.date.substring(0, 7);
       const amount = parseFloat(tx.amount || '0');
       const groupTag = topTags.includes(tag) ? tag : 'Otros';
