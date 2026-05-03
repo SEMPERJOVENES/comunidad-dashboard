@@ -136,9 +136,6 @@ export default function DashboardPage() {
           >
             <FileText size={14} /> Descargar PDF
           </a>
-          <a href="/precios" className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-sm font-medium rounded-xl hover:bg-gray-50 text-gray-700">
-            <Tag size={14} /> Tabla precios
-          </a>
         </div>
 
         {loading ? (
