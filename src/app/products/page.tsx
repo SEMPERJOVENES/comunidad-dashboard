@@ -520,19 +520,27 @@ export default function InventarioPage() {
                           <td className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
                             {formatCurrency(price)}
                           </td>
-                          {/* € Invertido = stock × coste */}
+                          {/* € Invertido = stock × coste — preventa no cuenta */}
                           <td className="px-3 py-3 text-right bg-orange-50/30">
-                            {costPrice > 0 ? (
+                            {productCost?.category === 'preproduccion' ? (
+                              <span className="text-xs text-purple-400 italic">preventa</span>
+                            ) : costPrice > 0 ? (
                               <span className="text-sm font-semibold text-orange-700">{formatCurrency(costPrice * totalInv)}</span>
                             ) : <span className="text-xs text-gray-300">—</span>}
                           </td>
-                          {/* Pot. ingreso = stock × PVP */}
+                          {/* Pot. ingreso = stock × PVP — preventa no cuenta porque no hay stock físico */}
                           <td className="px-3 py-3 text-right bg-blue-50/30">
-                            <span className="text-sm font-semibold text-blue-700">{formatCurrency(price * totalInv)}</span>
+                            {productCost?.category === 'preproduccion' ? (
+                              <span className="text-xs text-purple-400 italic">preventa</span>
+                            ) : (
+                              <span className="text-sm font-semibold text-blue-700">{formatCurrency(price * totalInv)}</span>
+                            )}
                           </td>
-                          {/* Beneficio potencial = (PVP - coste) × stock */}
+                          {/* Beneficio potencial */}
                           <td className="px-3 py-3 text-right bg-emerald-50/30">
-                            {costPrice > 0 ? (
+                            {productCost?.category === 'preproduccion' ? (
+                              <span className="text-xs text-purple-400 italic">—</span>
+                            ) : costPrice > 0 ? (
                               <div>
                                 <span className={`text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                                   {formatCurrency(margin * totalInv)}
