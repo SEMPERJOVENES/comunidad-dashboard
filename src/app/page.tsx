@@ -306,45 +306,106 @@ export default function DashboardPage() {
                         </div>
                       </button>
                       {isExpanded && group.tags.length > 0 && (
-                        <div className="px-4 sm:px-5 pb-4 space-y-1 border-t border-gray-100">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider pt-3 pb-1">Desglose por categoría</p>
-                          {group.tags.sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).map(t => {
-                            const tagKey = `${key[0]}-${t.tag}`;
-                            const isTagExpanded = expandedTag === tagKey;
+                        <div className="px-4 sm:px-5 pb-4 border-t border-gray-100 space-y-4">
+                          {/* INGRESOS */}
+                          {(() => {
+                            const incomeTags = group.tags.filter(t => t.income > 0).sort((a, b) => b.income - a.income);
+                            if (incomeTags.length === 0) return null;
                             return (
-                              <div key={t.tag}>
-                                <button onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
-                                  className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-gray-50 rounded-lg px-2 -mx-1 transition-colors">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
-                                    <span className="text-gray-700 font-medium">{t.tag}</span>
-                                    <span className="text-gray-400 text-[10px]">({t.transactions.length})</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`font-semibold ${t.net >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                      {t.net >= 0 ? '+' : ''}{formatCurrency(t.net)}
-                                    </span>
-                                    {isTagExpanded ? <ChevronDown size={10} className="text-gray-400" /> : <ChevronRight size={10} className="text-gray-400" />}
-                                  </div>
-                                </button>
-                                {isTagExpanded && t.transactions.length > 0 && (
-                                  <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-gray-100 pl-3">
-                                    {t.transactions.map((tx, i) => (
-                                      <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                          <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
-                                          <span className="truncate" title={tx.description || ''}>{tx.description || '—'}</span>
-                                        </div>
-                                        <span className={`font-medium flex-shrink-0 ml-2 ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                          {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                                        </span>
+                              <div className="pt-3">
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-emerald-100">
+                                  <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">↑ Ingresos</p>
+                                  <p className="text-sm font-bold text-emerald-700">+{formatCurrency(group.income)}</p>
+                                </div>
+                                <div className="space-y-0.5">
+                                  {incomeTags.map(t => {
+                                    const tagKey = `${key[0]}-i-${t.tag}`;
+                                    const isTagExpanded = expandedTag === tagKey;
+                                    const incomeTxs = t.transactions.filter(tx => tx.amount > 0);
+                                    return (
+                                      <div key={t.tag}>
+                                        <button onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
+                                          className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-emerald-50/50 rounded-lg px-2 -mx-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                                            <span className="text-gray-700 font-medium">{t.tag}</span>
+                                            <span className="text-gray-400 text-[10px]">({incomeTxs.length})</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-semibold text-emerald-600">+{formatCurrency(t.income)}</span>
+                                            {isTagExpanded ? <ChevronDown size={10} className="text-gray-400" /> : <ChevronRight size={10} className="text-gray-400" />}
+                                          </div>
+                                        </button>
+                                        {isTagExpanded && incomeTxs.length > 0 && (
+                                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-emerald-100 pl-3">
+                                            {incomeTxs.map((tx, i) => (
+                                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                                  <span className="truncate" title={tx.description || ''}>{tx.description || '—'}</span>
+                                                </div>
+                                                <span className="font-medium flex-shrink-0 ml-2 text-emerald-600">+{formatCurrency(tx.amount)}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
-                          })}
+                          })()}
+
+                          {/* GASTOS */}
+                          {(() => {
+                            const expenseTags = group.tags.filter(t => t.expenses > 0).sort((a, b) => b.expenses - a.expenses);
+                            if (expenseTags.length === 0) return null;
+                            return (
+                              <div>
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-100">
+                                  <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ Gastos</p>
+                                  <p className="text-sm font-bold text-rose-700">-{formatCurrency(group.expenses)}</p>
+                                </div>
+                                <div className="space-y-0.5">
+                                  {expenseTags.map(t => {
+                                    const tagKey = `${key[0]}-e-${t.tag}`;
+                                    const isTagExpanded = expandedTag === tagKey;
+                                    const expTxs = t.transactions.filter(tx => tx.amount < 0);
+                                    return (
+                                      <div key={t.tag}>
+                                        <button onClick={(e) => { e.stopPropagation(); setExpandedTag(isTagExpanded ? null : tagKey); }}
+                                          className="w-full flex items-center justify-between text-xs py-1.5 hover:bg-rose-50/50 rounded-lg px-2 -mx-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                                            <span className="text-gray-700 font-medium">{t.tag}</span>
+                                            <span className="text-gray-400 text-[10px]">({expTxs.length})</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-semibold text-rose-600">-{formatCurrency(t.expenses)}</span>
+                                            {isTagExpanded ? <ChevronDown size={10} className="text-gray-400" /> : <ChevronRight size={10} className="text-gray-400" />}
+                                          </div>
+                                        </button>
+                                        {isTagExpanded && expTxs.length > 0 && (
+                                          <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-rose-100 pl-3">
+                                            {expTxs.map((tx, i) => (
+                                              <div key={i} className="flex items-center justify-between text-[11px] text-gray-500">
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                  <span className="text-gray-400 flex-shrink-0">{tx.date}</span>
+                                                  <span className="truncate" title={tx.description || ''}>{tx.description || '—'}</span>
+                                                </div>
+                                                <span className="font-medium flex-shrink-0 ml-2 text-rose-600">-{formatCurrency(Math.abs(tx.amount))}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
