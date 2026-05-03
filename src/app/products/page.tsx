@@ -373,40 +373,32 @@ export default function InventarioPage() {
               </Card>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <Card>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={14} className="text-blue-500" />
-                  <p className="text-xs text-gray-500 font-medium">Valor Stock (PVP)</p>
+                  <p className="text-xs text-gray-500 font-medium">Valor teórico stock (PVP)</p>
                 </div>
                 <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(totalStockValue)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Ingreso potencial</p>
+                <p className="text-xs text-gray-400 mt-0.5">Si vendiéramos todo a precio venta</p>
               </Card>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
                   <Archive size={14} className="text-orange-500" />
-                  <p className="text-xs text-gray-500 font-medium">Inmovilizado (€ invertidos)</p>
+                  <p className="text-xs text-gray-500 font-medium">Coste stock / Inmovilizado</p>
                 </div>
-                <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(totalStockCost)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Coste × unidades</p>
+                <p className="text-lg sm:text-xl font-bold text-orange-700">{formatCurrency(totalStockCost)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">€ invertidos · capital atrapado</p>
               </Card>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={14} className="text-green-500" />
-                  <p className="text-xs text-gray-500 font-medium">Beneficio Potencial</p>
+                  <p className="text-xs text-gray-500 font-medium">Margen potencial</p>
                 </div>
                 <p className={`text-lg sm:text-xl font-bold ${totalMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {formatCurrency(totalMargin)}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">{marginPercent.toFixed(1)}% margen</p>
-              </Card>
-              <Card>
-                <div className="flex items-center gap-2 mb-1">
-                  <Warehouse size={14} className="text-purple-500" />
-                  <p className="text-xs text-gray-500 font-medium">Inmov. (categ.)</p>
-                </div>
-                <p className="text-lg sm:text-xl font-bold text-purple-700">{formatCurrency(totalInmovilizadoValue)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Coste: {formatCurrency(totalInmovilizadoCost)}</p>
               </Card>
             </div>
           </div>
