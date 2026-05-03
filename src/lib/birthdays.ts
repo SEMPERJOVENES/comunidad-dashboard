@@ -91,3 +91,45 @@ export function getBirthdaysThisMonth(): Birthday[] {
   const month = new Date().getMonth() + 1;
   return BIRTHDAYS.filter(b => b.month === month).sort((a, b) => a.day - b.day);
 }
+
+function normalizeName(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Busca un cumpleaños en el registro hardcoded por nombre/apodo/comunidad.
+ * Match: si TODAS las palabras significativas del nombre del miembro
+ * están contenidas en el nombre del registro (o viceversa).
+ */
+export function findBirthday(memberName: string, apodo?: string | null, community?: string): Birthday | null {
+  const candidates = [memberName, apodo].filter(Boolean) as string[];
+  for (const cand of candidates) {
+    const candNorm = normalizeName(cand);
+    const candWords = candNorm.split(' ').filter(w => w.length > 2);
+    if (candWords.length === 0) continue;
+    for (const b of BIRTHDAYS) {
+      if (community && b.community !== community) continue;
+      const bNorm = normalizeName(b.name);
+      // exacto o uno contiene al otro
+      if (candNorm === bNorm) return b;
+      if (bNorm.includes(candNorm) || candNorm.includes(bNorm)) return b;
+      // todas las palabras del miembro están en el registro
+      const bWords = new Set(bNorm.split(' ').filter(w => w.length > 2));
+      if (candWords.every(w => bWords.has(w))) return b;
+    }
+  }
+  return null;
+}
+
+export function getBirthdaysByCommunity(community: string): Birthday[] {
+  return BIRTHDAYS.filter(b => b.community === community).sort((a, b) => {
+    if (a.month !== b.month) return a.month - b.month;
+    return a.day - b.day;
+  });
+}

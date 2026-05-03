@@ -8,7 +8,7 @@ import {
   Users, Loader2, UserPlus, Search, Cake, Church, X, Edit3, Trash2,
   Mail, Phone, Save, Calendar, MapPin, Heart,
 } from 'lucide-react';
-import { getBirthdaysThisMonth } from '@/lib/birthdays';
+import { getBirthdaysThisMonth, findBirthday, getBirthdaysByCommunity, BIRTHDAYS } from '@/lib/birthdays';
 
 const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const COMMUNITY_ORDER = ['San Pablo', 'San Ignacio', 'San Martín', 'Colaboradores'];
@@ -66,6 +66,7 @@ export default function MiembrosPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newBirthday, setNewBirthday] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [view, setView] = useState<'lista' | 'calendario'>('lista');
 
   const birthdays = useMemo(() => getBirthdaysThisMonth(), []);
 
@@ -159,6 +160,18 @@ export default function MiembrosPage() {
           </button>
         </div>
 
+        {/* Toggle Lista / Calendario */}
+        <div className="flex gap-2 bg-gray-100 rounded-xl p-1 w-full sm:w-auto sm:inline-flex">
+          <button onClick={() => setView('lista')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${view === 'lista' ? 'bg-white shadow-sm text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}>
+            <Users size={14} /> Lista
+          </button>
+          <button onClick={() => setView('calendario')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${view === 'calendario' ? 'bg-white shadow-sm text-amber-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            <Cake size={14} /> Calendario cumpleaños
+          </button>
+        </div>
+
         {/* 4 círculos de KPIs por comunidad */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {communityStats.map(({ community, count }) => {
@@ -237,15 +250,19 @@ export default function MiembrosPage() {
           </Card>
         )}
 
-        {/* Búsqueda */}
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder={`Buscar en ${communityTab}...`}
-            className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white" />
-        </div>
+        {/* Búsqueda (solo en vista lista) */}
+        {view === 'lista' && (
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={`Buscar en ${communityTab}...`}
+              className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white" />
+          </div>
+        )}
 
-        {loading ? (
+        {view === 'calendario' ? (
+          <CalendarioComunidad community={communityTab} members={members} />
+        ) : loading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-violet-600" size={32} /></div>
         ) : visibleMembers.length === 0 ? (
           <Card><p className="text-center py-12 text-gray-400 text-sm">Sin miembros en {communityTab}</p></Card>
@@ -254,7 +271,12 @@ export default function MiembrosPage() {
             {visibleMembers.map((m: any) => {
               const isEditing = editingId === m.id;
               const isDeleting = deletingId === m.id;
-              const hasBday = birthdays.some(b => b.name === displayName(m) || b.name === m.name);
+              // Resolver cumpleaños: 1º registro hardcoded, 2º campo BD fecha_nacimiento
+              const bdayHardcoded = findBirthday(m.name, m.nickname, m.community);
+              const bdayDay = bdayHardcoded?.day ?? (m.fechaNacimiento ? new Date(m.fechaNacimiento).getDate() : null);
+              const bdayMonth = bdayHardcoded?.month ?? (m.fechaNacimiento ? new Date(m.fechaNacimiento).getMonth() + 1 : null);
+              const currentMonthNum = new Date().getMonth() + 1;
+              const hasBday = bdayMonth === currentMonthNum;
               const initials = getInitials(displayName(m));
               const colorClass = avatarColor(m.name);
 
@@ -338,14 +360,10 @@ export default function MiembrosPage() {
                     </div>
 
                     {/* Cumpleaños */}
-                    {m.fechaNacimiento ? (
+                    {bdayDay && bdayMonth ? (
                       <span className={`mt-2 inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full ${hasBday ? 'bg-amber-100 text-amber-700' : 'bg-gray-50 text-gray-500'}`}>
                         <Cake size={9} className={hasBday ? 'text-amber-500' : 'text-gray-400'} />
-                        {(() => {
-                          const d = new Date(m.fechaNacimiento);
-                          if (isNaN(d.getTime())) return 'Sin cumpleaños';
-                          return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
-                        })()}
+                        {bdayDay} {MONTHS_SHORT[bdayMonth - 1]}
                       </span>
                     ) : (
                       <span className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 text-gray-400 text-[9px] font-medium rounded-full italic">
@@ -403,5 +421,122 @@ export default function MiembrosPage() {
         );
       })()}
     </DashboardLayout>
+  );
+}
+
+function CalendarioComunidad({ community, members }: { community: string; members: any[] }) {
+  const style = COMMUNITY_STYLES[community] || DEFAULT_STYLE;
+  const currentMonth = new Date().getMonth() + 1;
+  const currentDay = new Date().getDate();
+
+  // Cumpleaños de la comunidad: prioriza registro hardcoded, luego BD
+  const bdaysInCommunity = useMemo(() => {
+    const fromHardcoded = getBirthdaysByCommunity(community);
+    const seenNames = new Set(fromHardcoded.map(b => b.name.toLowerCase()));
+    const all: { name: string; community: string; month: number; day: number; memberId?: string; apodo?: string }[] = [...fromHardcoded];
+    // Añadir cumpleaños de BD que no estén ya en hardcoded
+    for (const m of members.filter((x: any) => x.community === community)) {
+      const found = findBirthday(m.name, m.nickname, m.community);
+      if (found) continue;
+      if (m.fechaNacimiento) {
+        const d = new Date(m.fechaNacimiento);
+        if (!isNaN(d.getTime()) && !seenNames.has((m.name || '').toLowerCase())) {
+          all.push({ name: m.name, community, month: d.getMonth() + 1, day: d.getDate(), memberId: m.id, apodo: m.nickname });
+        }
+      }
+    }
+    return all.sort((a, b) => a.month !== b.month ? a.month - b.month : a.day - b.day);
+  }, [community, members]);
+
+  // Agrupar por mes
+  const byMonth: Record<number, typeof bdaysInCommunity> = {};
+  for (let i = 1; i <= 12; i++) byMonth[i] = [];
+  for (const b of bdaysInCommunity) byMonth[b.month].push(b);
+
+  // Cumpleaños de hoy / esta semana
+  const today = bdaysInCommunity.filter(b => b.month === currentMonth && b.day === currentDay);
+  const thisWeek = bdaysInCommunity.filter(b => {
+    if (b.month !== currentMonth) return false;
+    const diff = b.day - currentDay;
+    return diff > 0 && diff <= 7;
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Banner del header */}
+      <div className={`rounded-3xl p-5 bg-gradient-to-br ${style.gradient} text-white shadow-lg`}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-white/25 flex items-center justify-center">
+            <Cake size={24} />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">Cumpleaños · {community}</h2>
+            <p className="text-sm text-white/80">{bdaysInCommunity.length} cumpleaños registrados</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="bg-white/15 backdrop-blur rounded-xl p-3">
+            <p className="text-[10px] uppercase font-bold tracking-wide text-white/70">Hoy</p>
+            <p className="text-2xl font-bold">{today.length}</p>
+            {today.length > 0 && <p className="text-xs text-white/85 truncate">{today.map(b => b.name).join(', ')}</p>}
+          </div>
+          <div className="bg-white/15 backdrop-blur rounded-xl p-3">
+            <p className="text-[10px] uppercase font-bold tracking-wide text-white/70">Próximos 7 días</p>
+            <p className="text-2xl font-bold">{thisWeek.length}</p>
+            {thisWeek.length > 0 && <p className="text-xs text-white/85 truncate">{thisWeek.map(b => `${b.name.split(' ')[0]} (${b.day})`).join(', ')}</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* Grid 12 meses */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
+          const list = byMonth[month];
+          const isCurrentMonth = month === currentMonth;
+          const monthFull = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][month - 1];
+          return (
+            <div key={month} className={`rounded-2xl border-2 p-3 transition-all ${isCurrentMonth ? `${style.soft} border-2 ${style.bg.replace('bg-','border-')} shadow-md` : 'bg-white border-gray-200 hover:shadow-sm'}`}>
+              <div className="flex items-baseline justify-between mb-2 pb-2 border-b border-gray-100">
+                <h3 className={`text-sm font-bold ${isCurrentMonth ? style.text : 'text-gray-700'}`}>{monthFull}</h3>
+                <span className={`text-[10px] font-bold ${isCurrentMonth ? style.text : 'text-gray-400'}`}>
+                  {list.length} {list.length === 1 ? 'cumple' : 'cumples'}
+                </span>
+              </div>
+              {list.length === 0 ? (
+                <p className="text-[11px] text-gray-300 italic text-center py-3">Ningún cumpleaños</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {list.map((b, idx) => {
+                    const isToday = isCurrentMonth && b.day === currentDay;
+                    const isPast = isCurrentMonth && b.day < currentDay;
+                    const colorAvatar = avatarColor(b.name);
+                    return (
+                      <li key={idx} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${isToday ? 'bg-amber-100 ring-2 ring-amber-400' : isPast ? 'bg-gray-50/50 opacity-60' : 'bg-gray-50/40 hover:bg-gray-50'}`}>
+                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${colorAvatar} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0`}>
+                          {getInitials(b.name)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs truncate ${isToday ? 'font-bold text-amber-800' : 'text-gray-800 font-medium'}`}>
+                            {b.name}
+                          </p>
+                        </div>
+                        <span className={`text-[11px] font-bold flex-shrink-0 ${isToday ? 'text-amber-700' : isPast ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {b.day}
+                        </span>
+                        {isToday && <Cake size={11} className="text-amber-500 flex-shrink-0" />}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-gray-400 text-center py-2">
+        💡 Mes actual destacado · cumpleaños de hoy con anillo amber · pasados en gris
+      </p>
+    </div>
   );
 }
