@@ -322,15 +322,21 @@ export async function GET(request: NextRequest) {
       items: (o.line_items || []).map((li: any) => li.title).join(', '),
     })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // === TOTALES — método CONCILIACIÓN (no duplicar) ===
-    // Ingresos teóricos = Shopify (online) + Ventas presenciales (in-store)
-    // El banco brand NO se suma aquí porque YA está reflejado en presencial+shopify
-    // (es la otra cara de la misma moneda — los Bizum/transferencias del banco son las
-    // ventas presenciales cobradas; los Stripe payouts son las ventas Shopify cobradas).
-    const totalIncome = shopifyGross + ventasTotal;
+    // === TOTALES — fuente de verdad: BANCO BRAND ===
+    // El user confirmó (2026-05-03) que TODAS las txs etiquetadas Brand en el banco
+    // son ingresos brand legítimos. Por tanto:
+    //   - totalIncome = totalBankIncome (lo que entró al banco como Brand)
+    //   - Shopify y Presencial son INFORMATIVOS (vista comercial, drill-down)
+    //   - Esto cuadra con el dashboard / (macroGroups.brand.income)
+    const totalIncome = totalBankIncome;
     const totalExpensesAll = totalBankExpenses + netStripeFees + shopifyRefundAmount;
     const profit = totalIncome - totalExpensesAll;
     const margin = totalIncome > 0 ? (profit / totalIncome) * 100 : 0;
+
+    // Diferencia entre teórico (lo que vendimos según POS+Shopify) y real (banco)
+    // — cuanto más cerca de 0, mejor cuadra el sistema comercial con el banco.
+    const totalIncomeTeorico = shopifyGross + ventasTotal;
+    const conciliacionDif = totalIncome - totalIncomeTeorico;
 
     // Ventas presenciales detalle para drill-down
     const ventasDetail = (ventas || []).map((v: any) => ({
@@ -417,8 +423,7 @@ export async function GET(request: NextRequest) {
     const stockPotentialProfit = stockRetailValue - stockCostValue;
     const stockPotentialMargin = stockRetailValue > 0 ? (stockPotentialProfit / stockRetailValue) * 100 : 0;
 
-    // Conciliación: ingreso teórico vs real banco
-    // (Real banco = bank_income brand + Stripe payouts - se calcula en /api/conciliacion)
+    // total ingresos = banco brand. shopify y presencial son drill-down informativo.
     return NextResponse.json({
       income: {
         shopify: shopifyGross,
@@ -426,9 +431,11 @@ export async function GET(request: NextRequest) {
         shopifyPaidOrders: paidOrders.length,
         ventasPresenciales: ventasTotal,
         ventasCount: (ventas || []).length,
-        bankIncome: incomeByTag,           // INFO conciliación (NO suma)
-        totalBankIncome,                   // INFO conciliación (NO suma)
-        total: totalIncome,                // SÓLO Shopify + Presencial
+        bankIncome: incomeByTag,
+        totalBankIncome,
+        teorico: totalIncomeTeorico,       // Shopify + Presencial (vista comercial)
+        conciliacionDif,                   // banco - teórico (debe ser cercano a 0)
+        total: totalIncome,                // = totalBankIncome (banco brand = verdad)
       },
       expenses: {
         byTag: expensesByTag,
