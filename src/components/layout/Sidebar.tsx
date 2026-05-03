@@ -32,8 +32,8 @@ const navSections = [
   {
     title: 'Finanzas',
     items: [
+      { href: '/extracto', label: 'Extracto Bancario', icon: Landmark, highlight: true },
       { href: '/categorias', label: 'Categorías', icon: Tag },
-      { href: '/extracto', label: 'Extracto Bancario', icon: Landmark },
       { href: '/reglas', label: 'Reglas Etiquetado', icon: BookOpen },
       { href: '/stripe', label: 'Stripe', icon: CreditCard },
     ],
@@ -50,9 +50,9 @@ const navSections = [
   {
     title: 'Comunidad',
     items: [
-      { href: '/miembros', label: 'Miembros', icon: Users },
+      { href: '/miembros', label: 'Diezmos · Miembros', icon: Church, highlight: true },
+      { href: '/miembros/pagos', label: 'Cómo paga cada uno', icon: Users },
       { href: '/comunidad', label: 'Dashboard Comunidad', icon: PieChart },
-      { href: '/diezmos', label: 'Diezmos', icon: Church },
       { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },
       { href: '/inventario-comunidad', label: 'Inventario Material', icon: Box },
     ],
@@ -104,7 +104,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div key={section.title}>
               <p className="px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{section.title}</p>
               <div className="space-y-0.5">
-                {section.items.map((item) => {
+                {section.items.map((item: any) => {
                   const isActive = pathname === item.href;
                   return (
                     <Link
@@ -112,14 +112,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       href={item.href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
                         isActive
                           ? 'bg-violet-600/20 text-violet-400'
+                          : item.highlight
+                          ? 'text-amber-300 hover:bg-amber-900/20 hover:text-amber-200 ring-1 ring-amber-500/20'
                           : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                       )}
                     >
                       <item.icon size={18} />
                       {item.label}
+                      {item.highlight && (
+                        <span className="ml-auto inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      )}
                     </Link>
                   );
                 })}
