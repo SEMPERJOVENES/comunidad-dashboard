@@ -162,7 +162,8 @@ export async function getAllCharges(params: { created?: { gte?: number; lte?: nu
 function mapCharge(c: Stripe.Charge) {
   const customer = c.customer as Stripe.Customer | null;
   // Detectar si es de suscripción (tiene invoice asociado)
-  const isSubscription = !!c.invoice;
+  const invoice = (c as any).invoice;
+  const isSubscription = !!invoice;
   return {
     id: c.id,
     amount: c.amount / 100,
@@ -177,7 +178,7 @@ function mapCharge(c: Stripe.Charge) {
     customerName: customer && typeof customer === 'object' ? (customer.name || customer.email || null) : null,
     customerEmail: customer && typeof customer === 'object' ? (customer.email || null) : null,
     isSubscription,
-    invoiceId: c.invoice ? (typeof c.invoice === 'string' ? c.invoice : (c.invoice as any).id) : null,
+    invoiceId: invoice ? (typeof invoice === 'string' ? invoice : invoice?.id || null) : null,
     type: isSubscription ? 'subscription' : 'one_time',
     category: isSubscription ? 'Diezmo' : 'Brand',
   };
