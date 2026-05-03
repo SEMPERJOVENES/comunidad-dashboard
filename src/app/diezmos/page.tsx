@@ -616,24 +616,23 @@ export default function ConciliacionMiembrosPage() {
                         );
                       })()}
 
-                      {/* Histórico expandible */}
+                      {/* Histórico expandible — muestra el concepto entero, sin truncar */}
                       {isOpen && m.history.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Histórico ({m.history.length})</p>
-                          <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                            {m.history.slice(0, 12).map((h: any, i: number) => {
+                          <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+                            {m.history.map((h: any, i: number) => {
                               const Ico = METHOD_ICON[h.method] || Landmark;
                               const cl = METHOD_COLORS[h.method] || METHOD_COLORS.otro;
                               return (
-                                <div key={i} className="flex items-center gap-1.5 text-[11px] py-1 px-1.5 hover:bg-gray-50 rounded">
-                                  <Ico size={10} className={cl.text + ' flex-shrink-0'} />
-                                  <span className="text-gray-400 w-16 flex-shrink-0">{new Date(h.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
-                                  <span className="flex-1 truncate text-gray-500 text-[10px]">{h.concept || '—'}</span>
-                                  <span className="font-semibold text-gray-900 ml-auto">{formatCurrency(h.amount)}</span>
+                                <div key={i} className="flex items-start gap-1.5 text-[11px] py-1.5 px-2 bg-gray-50/60 rounded">
+                                  <Ico size={11} className={cl.text + ' flex-shrink-0 mt-0.5'} />
+                                  <span className="text-gray-400 w-16 flex-shrink-0 mt-0.5">{new Date(h.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                                  <span className="flex-1 text-gray-700 text-[10.5px] break-words whitespace-normal leading-snug">{h.concept || '—'}</span>
+                                  <span className="font-semibold text-gray-900 ml-2 flex-shrink-0 mt-0.5">{formatCurrency(h.amount)}</span>
                                 </div>
                               );
                             })}
-                            {m.history.length > 12 && <p className="text-[10px] text-gray-400 italic px-1.5">+{m.history.length - 12} más...</p>}
                           </div>
                         </div>
                       )}
