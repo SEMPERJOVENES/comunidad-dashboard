@@ -33,6 +33,101 @@ export async function getPayouts(params: { limit?: number; created?: { gte?: num
   }));
 }
 
+/**
+ * Para un payout, obtiene el desglose por categoría:
+ * - subsAmount: total de cargos de suscripción (Diezmo) en ese payout
+ * - oneTimeAmount: total de cargos puntuales (Brand) en ese payout
+ * - charges: lista de cargos que componen el payout
+ */
+export async function getPayoutBreakdown(payoutId: string) {
+  // Listar balance_transactions del payout (con paginación)
+  const allTxs: Stripe.BalanceTransaction[] = [];
+  let hasMore = true;
+  let startingAfter: string | undefined;
+  while (hasMore) {
+    const txs = await stripe.balanceTransactions.list({
+      payout: payoutId,
+      limit: 100,
+      expand: ['data.source'],
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+    allTxs.push(...txs.data);
+    hasMore = txs.has_more;
+    if (txs.data.length > 0) startingAfter = txs.data[txs.data.length - 1].id;
+  }
+
+  // Para charges, mirar si tiene invoice (subscription)
+  let subsAmount = 0, oneTimeAmount = 0, feesAmount = 0;
+  const breakdown: Array<{
+    type: 'subscription' | 'one_time' | 'fee' | 'refund' | 'other';
+    amount: number; net: number; fee: number;
+    description: string | null;
+    chargeId?: string; created: string;
+    customerName?: string | null; customerEmail?: string | null;
+  }> = [];
+
+  for (const tx of allTxs) {
+    const amount = tx.amount / 100;
+    const fee = tx.fee / 100;
+    const net = tx.net / 100;
+    const created = new Date(tx.created * 1000).toISOString();
+
+    if (tx.type === 'charge' || tx.type === 'payment') {
+      // Cargar charge para ver si es subscription
+      const source = tx.source as any;
+      let isSubscription = false;
+      let customerName: string | null = null, customerEmail: string | null = null;
+      if (source && typeof source === 'object' && 'object' in source && source.object === 'charge') {
+        isSubscription = !!source.invoice;
+        // expand customer si está disponible
+        if (source.customer && typeof source.customer === 'object') {
+          customerName = source.customer.name || source.customer.email || null;
+          customerEmail = source.customer.email || null;
+        } else if (typeof source.customer === 'string') {
+          // No expandido, hacer fetch puntual
+          try {
+            const cust = await stripe.customers.retrieve(source.customer);
+            if ('name' in cust) {
+              customerName = cust.name || cust.email || null;
+              customerEmail = cust.email || null;
+            }
+          } catch {}
+        }
+      }
+
+      if (isSubscription) {
+        subsAmount += net;
+        breakdown.push({ type: 'subscription', amount, net, fee, description: tx.description, chargeId: typeof tx.source === 'string' ? tx.source : (tx.source as any)?.id, created, customerName, customerEmail });
+      } else {
+        oneTimeAmount += net;
+        breakdown.push({ type: 'one_time', amount, net, fee, description: tx.description, chargeId: typeof tx.source === 'string' ? tx.source : (tx.source as any)?.id, created, customerName, customerEmail });
+      }
+      feesAmount += fee;
+    } else if (tx.type === 'refund') {
+      breakdown.push({ type: 'refund', amount, net, fee, description: tx.description, created });
+    } else if (tx.type === 'stripe_fee' || tx.type === 'application_fee') {
+      breakdown.push({ type: 'fee', amount, net, fee, description: tx.description, created });
+    } else {
+      breakdown.push({ type: 'other', amount, net, fee, description: tx.description, created });
+    }
+  }
+
+  const total = subsAmount + oneTimeAmount;
+  let composition: 'pure_subscription' | 'pure_one_time' | 'mixed' | 'empty' = 'empty';
+  if (subsAmount > 0 && oneTimeAmount > 0) composition = 'mixed';
+  else if (subsAmount > 0) composition = 'pure_subscription';
+  else if (oneTimeAmount > 0) composition = 'pure_one_time';
+
+  return {
+    payoutId,
+    subsAmount, oneTimeAmount, feesAmount, total,
+    composition,
+    pctSubs: total > 0 ? (subsAmount / total) * 100 : 0,
+    pctOneTime: total > 0 ? (oneTimeAmount / total) * 100 : 0,
+    breakdown,
+  };
+}
+
 export async function getCharges(params: { limit?: number; created?: { gte?: number; lte?: number } } = {}) {
   const charges = await stripe.charges.list({
     limit: params.limit || 100,
