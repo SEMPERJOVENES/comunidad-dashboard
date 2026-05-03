@@ -29,10 +29,63 @@ export default function ExtractoPage() {
   const [pasteText, setPasteText] = useState('');
   const [pastePreview, setPastePreview] = useState<{ date: string; concept: string; amount: string; balance: string }[]>([]);
   const [pasteError, setPasteError] = useState('');
+  const [members, setMembers] = useState<any[]>([]);
+  const [bankRules, setBankRules] = useState<any[]>([]);
+  const [linkingTxId, setLinkingTxId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTransactions();
+    fetchMembers();
   }, [selectedRange]);
+
+  async function fetchMembers() {
+    try {
+      const res = await fetch('/api/diezmos?start=' + new Date(2026,0,1).toISOString());
+      if (res.ok) {
+        const d = await res.json();
+        setMembers(d.members || []);
+        setBankRules(d.bankRules || []);
+      }
+    } catch {}
+  }
+
+  // Normalización + match miembro por concepto
+  function normalize(s: string) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  const COMMON_NAMES = new Set(['maria','jose','juan','pedro','ana','manuel','antonio','francisco','carlos','jesus','luis','miguel','angel','rafael','pablo','alejandro','david','javier','jorge','ignacio','andres','fernando','alberto','raul','sergio','ruben','oscar','marco','marcos','gonzalo','enrique','eduardo','ricardo','roberto','cristina','laura','isabel','patricia','sonia','carmen','lucia','sara','elena','paula','andrea','sofia','monica','silvia','natalia','beatriz','rocio','marta','pilar','teresa','angela','concepcion','claudia','salvador','bruno','stephanie','rodrigo','guillermo','guillem','elisabet','eli','mariana','martin','martina','ines','irene','celia','blanca','nieves','ginebra','oriana','mencia','macarena','leticia','gloria','vanesa','valeria','veronica','de','del','la','el','los','las','san','santa','concepto','transferencia','bizum','transfer','recibo','compra','pago','diezmo','donativo','misiones','semana','cena','tabor','misa','comida','subscription','update','apizz','camiseta','apixx','favor']);
+  function getSurnames(name: string) {
+    return normalize(name).split(' ').filter(w => w.length > 2 && !COMMON_NAMES.has(w));
+  }
+  function findLinkedMember(tx: any) {
+    const tag = tx.manualTag || tx.autoTag;
+    if (tag !== 'Diezmo') return null;
+    const txText = ((tx.memberName || '') + ' ' + (tx.concept || '')).toLowerCase();
+    // 1) bank_rules
+    const txNorm = normalize(txText);
+    for (const r of bankRules) {
+      if (txNorm.includes(normalize(r.pattern))) {
+        const m = members.find(x => x.id === r.member_id);
+        if (m) return m;
+      }
+    }
+    // 2) fuzzy estricto: TODOS los apellidos del miembro en el concepto
+    const txTokens = new Set(normalize(txText).split(' ').filter(w => w.length > 2));
+    for (const m of members) {
+      const surnames = getSurnames(m.name);
+      if (surnames.length === 0) continue;
+      if (surnames.every(s => txTokens.has(s))) return m;
+    }
+    return null;
+  }
+
+  async function handleLinkMember(txId: string, memberId: string, concept: string) {
+    const pattern = (concept || '').toLowerCase().split(' ').slice(0, 3).join(' ');
+    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create_bank_rule', memberId, pattern }) });
+    setLinkingTxId(null);
+    await fetchMembers();
+  }
 
   async function fetchTransactions() {
     setLoading(true);
@@ -430,6 +483,7 @@ export default function ExtractoPage() {
                     <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-3 w-28">Importe</th>
                     <th className="text-right text-xs font-medium text-gray-500 px-4 sm:px-6 py-3 w-28">Saldo</th>
                     <th className="text-center text-xs font-medium text-gray-500 px-4 sm:px-6 py-3 w-40">Etiqueta</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3 w-44">Miembro</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -519,12 +573,47 @@ export default function ExtractoPage() {
                             </button>
                           )}
                         </td>
+                        <td className="px-4 sm:px-6 py-3 text-left">
+                          {(() => {
+                            if (tag !== 'Diezmo') return <span className="text-xs text-gray-200">—</span>;
+                            const linked = findLinkedMember(tx);
+                            if (linked) {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 text-xs font-medium rounded">
+                                  ✓ {linked.nickname || linked.name}
+                                </span>
+                              );
+                            }
+                            if (linkingTxId === tx.id) {
+                              return (
+                                <select
+                                  autoFocus
+                                  defaultValue=""
+                                  onChange={(e) => { if (e.target.value) handleLinkMember(tx.id, e.target.value, tx.memberName || tx.concept || ''); }}
+                                  onBlur={() => setLinkingTxId(null)}
+                                  className="text-xs px-2 py-1 border border-violet-300 rounded focus:ring-2 focus:ring-violet-500 max-w-[180px]"
+                                >
+                                  <option value="">Asignar a...</option>
+                                  {members.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((m: any) => (
+                                    <option key={m.id} value={m.id}>{m.nickname || m.name} · {m.community}</option>
+                                  ))}
+                                </select>
+                              );
+                            }
+                            return (
+                              <button onClick={() => setLinkingTxId(tx.id)}
+                                className="text-xs text-amber-600 hover:text-amber-700 px-2 py-0.5 border border-dashed border-amber-300 rounded hover:border-amber-500 transition-colors">
+                                ⚠ Sin miembro
+                              </button>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     );
                   })}
                   {filtered.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-sm text-gray-400">
+                      <td colSpan={6} className="text-center py-8 text-sm text-gray-400">
                         {transactions.length === 0
                           ? 'Sin datos para este período. Importa o pega un extracto bancario para comenzar.'
                           : 'Sin resultados para este filtro'}
