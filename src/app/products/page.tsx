@@ -264,7 +264,13 @@ export default function InventarioPage() {
       const k = `${productId}_${variantId}`;
       if (costMap[k]) return costMap[k];
     }
-    return costMap[`${productId}`] || null;
+    if (costMap[`${productId}`]) return costMap[`${productId}`];
+    // Fallback: si CUALQUIER variant del producto tiene un coste, usar el primero (para detectar cat=preproduccion)
+    const productKey = String(productId);
+    for (const [k, v] of Object.entries(costMap)) {
+      if (k.startsWith(productKey + '_')) return v;
+    }
+    return null;
   }
 
   // ============ FILTROS ============
