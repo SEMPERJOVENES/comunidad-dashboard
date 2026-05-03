@@ -230,20 +230,58 @@ export async function GET(request: NextRequest) {
         profit: data.shopify + data.ventas + data.bankIncome - data.expenses - data.stripeFees - data.shopifyRefunds,
       }));
 
-    // 5. Top productos (de Shopify)
-    const productMap = new Map<string, { title: string; revenue: number; units: number }>();
-    for (const o of paidOrders) {
-      for (const item of o.line_items || []) {
+    // 5. Top productos — combinar Shopify + ventas presenciales, restando refunds
+    const productMap = new Map<string, { title: string; revenue: number; units: number; source: { shopify: number; presencial: number } }>();
+
+    function ensureProduct(key: string, title: string) {
+      if (!productMap.has(key)) {
+        productMap.set(key, { title, revenue: 0, units: 0, source: { shopify: 0, presencial: 0 } });
+      }
+      return productMap.get(key)!;
+    }
+
+    // Shopify orders (TODAS, no solo pagadas — restamos refunds después)
+    for (const o of orders) {
+      // Mapa de items refundados por line_item_id
+      const refundedByLineItem = new Map<number, number>();
+      for (const r of (o.refunds || [])) {
+        for (const rli of (r.refund_line_items || [])) {
+          const lineItemId = rli.line_item_id;
+          refundedByLineItem.set(lineItemId, (refundedByLineItem.get(lineItemId) || 0) + (rli.quantity || 0));
+        }
+      }
+      for (const item of (o.line_items || [])) {
         const key = item.product_id?.toString() || item.title;
-        const existing = productMap.get(key) || { title: item.title, revenue: 0, units: 0 };
-        existing.revenue += parseFloat(item.price || '0') * (item.quantity || 1);
-        existing.units += item.quantity || 1;
-        productMap.set(key, existing);
+        const refundedQty = refundedByLineItem.get(item.id) || 0;
+        const netQty = (item.quantity || 1) - refundedQty;
+        if (netQty <= 0) continue;
+        const p = ensureProduct(key, item.title);
+        const revenue = parseFloat(item.price || '0') * netQty;
+        p.revenue += revenue;
+        p.units += netQty;
+        p.source.shopify += revenue;
       }
     }
+
+    // Ventas presenciales — items
+    for (const v of (ventas || [])) {
+      const saleType = v.sale_type || (v.payment_method === 'regalo' ? 'regalo' : 'venta');
+      if (saleType === 'regalo') continue; // regalos no son ingresos
+      for (const item of (v.items || [])) {
+        const title = item.productTitle || item.title || 'Sin título';
+        const key = `pres_${title}`;
+        const p = ensureProduct(key, title);
+        const qty = item.quantity || 1;
+        const revenue = (item.unitPrice || 0) * qty;
+        p.revenue += revenue;
+        p.units += qty;
+        p.source.presencial += revenue;
+      }
+    }
+
     const topProducts = Array.from(productMap.values())
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
+      .slice(0, 15);
 
     // 6. Órdenes individuales (TODAS, incluidas reembolsadas)
     const allOrders = orders.map((o: any) => ({
@@ -262,8 +300,12 @@ export async function GET(request: NextRequest) {
       items: (o.line_items || []).map((li: any) => li.title).join(', '),
     })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // Totales — Método bruto: Ingresos = TODOS los pedidos + presencial + banco
-    const totalIncome = shopifyGross + ventasTotal + totalBankIncome;
+    // === TOTALES — método CONCILIACIÓN (no duplicar) ===
+    // Ingresos teóricos = Shopify (online) + Ventas presenciales (in-store)
+    // El banco brand NO se suma aquí porque YA está reflejado en presencial+shopify
+    // (es la otra cara de la misma moneda — los Bizum/transferencias del banco son las
+    // ventas presenciales cobradas; los Stripe payouts son las ventas Shopify cobradas).
+    const totalIncome = shopifyGross + ventasTotal;
     const totalExpensesAll = totalBankExpenses + netStripeFees + shopifyRefundAmount;
     const profit = totalIncome - totalExpensesAll;
     const margin = totalIncome > 0 ? (profit / totalIncome) * 100 : 0;
@@ -353,6 +395,8 @@ export async function GET(request: NextRequest) {
     const stockPotentialProfit = stockRetailValue - stockCostValue;
     const stockPotentialMargin = stockRetailValue > 0 ? (stockPotentialProfit / stockRetailValue) * 100 : 0;
 
+    // Conciliación: ingreso teórico vs real banco
+    // (Real banco = bank_income brand + Stripe payouts - se calcula en /api/conciliacion)
     return NextResponse.json({
       income: {
         shopify: shopifyGross,
@@ -360,9 +404,9 @@ export async function GET(request: NextRequest) {
         shopifyPaidOrders: paidOrders.length,
         ventasPresenciales: ventasTotal,
         ventasCount: (ventas || []).length,
-        bankIncome: incomeByTag,
-        totalBankIncome,
-        total: totalIncome,
+        bankIncome: incomeByTag,           // INFO conciliación (NO suma)
+        totalBankIncome,                   // INFO conciliación (NO suma)
+        total: totalIncome,                // SÓLO Shopify + Presencial
       },
       expenses: {
         byTag: expensesByTag,
