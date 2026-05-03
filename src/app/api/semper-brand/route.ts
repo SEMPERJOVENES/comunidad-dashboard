@@ -21,20 +21,27 @@ export async function GET(request: NextRequest) {
     const paidOrders = orders.filter((o: any) => o.financial_status !== 'refunded');
     const refundedOrders = orders.filter((o: any) => o.financial_status === 'refunded' || o.financial_status === 'partially_refunded');
 
-    // Calcular importe REAL de devoluciones (no el total del pedido)
+    // Calcular importe REAL de devoluciones — usar TRANSACTIONS (lo que el procesador de pago realmente devolvió)
+    // Los adjustments tipo `refund_discrepancy` se compensan entre sí (+X / -X) y NO se deben sumar con abs.
     function getActualRefundAmount(order: any): number {
       let total = 0;
       for (const refund of (order.refunds || [])) {
+        // Preferir transactions (refund de Stripe / pasarela): es el dinero real devuelto al cliente
+        const refundTxs = (refund.transactions || []).filter((t: any) => t.kind === 'refund' && t.status === 'success');
+        if (refundTxs.length > 0) {
+          for (const tx of refundTxs) total += parseFloat(tx.amount || '0');
+          continue;
+        }
+        // Fallback: line_items + adjustments con SIGNO (no abs) — los discrepancies se cancelan
         for (const li of (refund.refund_line_items || [])) {
           total += parseFloat(li.subtotal || '0');
           total += parseFloat(li.total_tax || '0');
         }
-        // Ajustes adicionales (envío devuelto, etc.)
         for (const adj of (refund.order_adjustments || [])) {
-          total += Math.abs(parseFloat(adj.amount || '0'));
+          total += parseFloat(adj.amount || '0');  // SIN abs — discrepancies +X/-X se cancelan
         }
       }
-      return total;
+      return Math.max(0, total);
     }
     const shopifyRefundAmount = orders.reduce((sum: number, o: any) => sum + getActualRefundAmount(o), 0);
 
