@@ -49,21 +49,59 @@ export async function GET(request: NextRequest) {
     const allPayments = paymentsRes.data || [];
     const bankTxs = bankTxsRes.data || [];
 
-    // Función fuzzy para nombres
+    // Normalización correcta (rango unicode escapado)
     function normalize(s: string) {
       return (s || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
-        .replace(/[^a-z0-9 ]/g, '').trim();
+        .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
     }
-    function fuzzy(a: string, b: string): boolean {
-      const na = normalize(a), nb = normalize(b);
-      if (!na || !nb) return false;
-      const wa = na.split(' ').filter(w => w.length > 2);
-      const wb = nb.split(' ').filter(w => w.length > 2);
-      // Al menos 2 palabras de >2 chars en común
-      let matches = 0;
-      for (const x of wa) for (const y of wb) if (x === y) matches++;
-      return matches >= Math.min(2, Math.min(wa.length, wb.length));
+
+    // Nombres de pila comunes y conectores (no cuentan como apellidos identificadores)
+    const COMMON_NAMES = new Set([
+      'maria', 'jose', 'juan', 'pedro', 'ana', 'manuel', 'antonio', 'francisco',
+      'carlos', 'jesus', 'luis', 'miguel', 'angel', 'rafael', 'pablo', 'alejandro',
+      'david', 'javier', 'jorge', 'ignacio', 'andres', 'fernando', 'alberto', 'raul',
+      'sergio', 'ruben', 'oscar', 'marco', 'marcos', 'gonzalo', 'enrique', 'eduardo',
+      'ricardo', 'roberto', 'cristina', 'laura', 'isabel', 'patricia', 'sonia',
+      'carmen', 'lucia', 'sara', 'elena', 'paula', 'andrea', 'sofia', 'monica',
+      'silvia', 'natalia', 'beatriz', 'rocio', 'marta', 'pilar', 'teresa', 'angela',
+      'concepcion', 'lucia', 'claudia', 'salvador', 'bruno', 'stephanie', 'rodrigo',
+      'guillermo', 'guillem', 'elisabet', 'eli', 'mariana', 'martin', 'martina',
+      'ines', 'irene', 'celia', 'blanca', 'nieves', 'ginebra', 'oriana', 'mariana',
+      'mencia', 'macarena', 'leticia', 'gloria', 'vanesa', 'valeria', 'veronica',
+      // conectores
+      'de', 'del', 'la', 'el', 'los', 'las', 'san', 'santa', 'concepto', 'transferencia',
+      'bizum', 'transfer', 'recibo', 'compra', 'pago', 'diezmo', 'donativo', 'misiones',
+      'semana', 'cena', 'tabor', 'misa', 'comida', 'subscription', 'update', 'apizz',
+      'camiseta', 'apixx',
+    ]);
+
+    function getSurnames(name: string): string[] {
+      // Devuelve tokens >2 chars que NO sean nombres comunes ni conectores
+      return normalize(name).split(' ')
+        .filter(w => w.length > 2)
+        .filter(w => !COMMON_NAMES.has(w));
+    }
+
+    /**
+     * Match estricto: requiere AL MENOS UN APELLIDO específico del miembro
+     * presente en el concepto. Si el miembro tiene apellidos, exige uno.
+     * Si solo tiene nombre de pila, exige el nombre completo coincidente.
+     */
+    function fuzzy(memberName: string, conceptText: string): boolean {
+      if (!memberName || !conceptText) return false;
+      const memberSurnames = getSurnames(memberName);
+      const conceptTokens = new Set(normalize(conceptText).split(' ').filter(w => w.length > 2));
+
+      // Si tiene apellidos identificadores: exigir al menos UNO
+      if (memberSurnames.length >= 1) {
+        return memberSurnames.some(s => conceptTokens.has(s));
+      }
+
+      // Sin apellidos (caso raro): exigir el nombre completo
+      const fullNorm = normalize(memberName);
+      const conceptNorm = normalize(conceptText);
+      return conceptNorm.includes(fullNorm);
     }
 
     // Clasificar tipo de tx bancaria
@@ -194,10 +232,33 @@ export async function GET(request: NextRequest) {
       return !matched;
     });
 
+    // Transferencias bancarias diezmo SIN miembro asignado
+    const matchedBankIds = new Set<string>();
+    for (const m of result) {
+      for (const h of m.history) {
+        if (h.source === 'banco') {
+          // No tenemos id de tx en history, no podemos rastrear. Mejor recorrer bankTxs
+        }
+      }
+    }
+    const unmatchedBank = bankTxs.filter((tx: any) => {
+      if (parseFloat(tx.amount) <= 0) return false;
+      const txText = (tx.member_name || '') + ' ' + (tx.concept || '');
+      const matched = result.some(r => fuzzy(r.name, txText) || (r.apodo && fuzzy(r.apodo, txText)));
+      return !matched;
+    }).map((tx: any) => ({
+      id: tx.id,
+      date: tx.date,
+      concept: tx.concept,
+      memberName: tx.member_name,
+      amount: parseFloat(tx.amount),
+    }));
+
     return NextResponse.json({
       members: result,
       byCommunity: Array.from(byCommunity.entries()).map(([name, data]) => ({ community: name, ...data })),
       unmatchedSubs,
+      unmatchedBank,
       totals: {
         members: result.length,
         paying: result.filter(r => r.totalPaid > 0).length,

@@ -51,7 +51,8 @@ const navSections = [
   {
     title: 'Comunidad',
     items: [
-      { href: '/miembros', label: 'Diezmos · Miembros', icon: Church, highlight: true },
+      { href: '/diezmos', label: 'Diezmos (KPIs)', icon: Church, highlight: true },
+      { href: '/miembros', label: 'Miembros', icon: Users, highlight: true },
       { href: '/miembros/pagos', label: 'Conciliación pagos', icon: ArrowDownUp, highlight: true },
       { href: '/comunidad', label: 'Dashboard Comunidad', icon: PieChart },
       { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },

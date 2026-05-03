@@ -3,23 +3,52 @@ import { supabase } from '@/lib/supabase';
 import { getSubscriptions, getInvoices, getAllCharges, getAllBalanceTransactions } from '@/lib/stripe';
 
 function normalize(name: string) {
-  return name.toLowerCase()
+  return (name || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z\s]/g, '').trim();
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function fuzzyNameMatch(nameA: string, nameB: string): boolean {
-  const wordsA = normalize(nameA).split(/\s+/).filter(w => w.length > 2);
-  const wordsB = normalize(nameB).split(/\s+/).filter(w => w.length > 2);
-  if (wordsA.length === 0 || wordsB.length === 0) return false;
+// Nombres comunes que NO sirven como identificador \u00fanico (solo apellidos importan)
+const COMMON_NAMES = new Set([
+  'maria', 'jose', 'juan', 'pedro', 'ana', 'manuel', 'antonio', 'francisco',
+  'carlos', 'jesus', 'luis', 'miguel', 'angel', 'rafael', 'pablo', 'alejandro',
+  'david', 'javier', 'jorge', 'ignacio', 'andres', 'fernando', 'alberto', 'raul',
+  'sergio', 'ruben', 'oscar', 'marco', 'marcos', 'gonzalo', 'enrique', 'eduardo',
+  'ricardo', 'roberto', 'cristina', 'laura', 'isabel', 'patricia', 'sonia',
+  'carmen', 'lucia', 'sara', 'elena', 'paula', 'andrea', 'sofia', 'monica',
+  'silvia', 'natalia', 'beatriz', 'rocio', 'marta', 'pilar', 'teresa', 'angela',
+  'concepcion', 'claudia', 'salvador', 'bruno', 'stephanie', 'rodrigo',
+  'guillermo', 'guillem', 'elisabet', 'eli', 'mariana', 'martin', 'martina',
+  'ines', 'irene', 'celia', 'blanca', 'nieves', 'ginebra', 'oriana',
+  'mencia', 'macarena', 'leticia', 'gloria', 'vanesa', 'valeria', 'veronica',
+  'de', 'del', 'la', 'el', 'los', 'las', 'san', 'santa', 'concepto', 'transferencia',
+  'bizum', 'transfer', 'recibo', 'compra', 'pago', 'diezmo', 'donativo', 'misiones',
+  'semana', 'cena', 'tabor', 'misa', 'comida', 'subscription', 'update', 'apizz',
+  'camiseta', 'apixx', 'favor', 'concepto', 'misiones',
+]);
 
-  const nA = normalize(nameA);
-  const nB = normalize(nameB);
-  if (nA.includes(nB) || nB.includes(nA)) return true;
+function getSurnames(name: string): string[] {
+  return normalize(name).split(' ')
+    .filter(w => w.length > 2)
+    .filter(w => !COMMON_NAMES.has(w));
+}
 
-  const matchingWords = wordsA.filter(wa => wordsB.some(wb => wa === wb || wa.includes(wb) || wb.includes(wa)));
-  if (wordsA.length === 1 || wordsB.length === 1) return matchingWords.length >= 1;
-  return matchingWords.length >= 2;
+/**
+ * Match estricto: exige al menos un APELLIDO espec\u00edfico del miembro
+ * presente en el otro texto. Si el miembro no tiene apellidos identificadores,
+ * exige que el nombre completo aparezca contenido literalmente.
+ */
+function fuzzyNameMatch(memberName: string, candidateText: string): boolean {
+  if (!memberName || !candidateText) return false;
+  const memberSurnames = getSurnames(memberName);
+  const candidateTokens = new Set(normalize(candidateText).split(' ').filter(w => w.length > 2));
+
+  if (memberSurnames.length >= 1) {
+    return memberSurnames.some(s => candidateTokens.has(s));
+  }
+  // Sin apellidos: exige nombre completo contenido
+  const fullNorm = normalize(memberName);
+  return normalize(candidateText).includes(fullNorm);
 }
 
 function getMonthKey(date: string | Date) {
@@ -99,7 +128,7 @@ export async function GET(request: import('next/server').NextRequest) {
 
     // Build members array (using indexed lookups)
     const members = (membersData || []).map((m: any) => {
-      const memberPayments: Record<string, { amount: number; source: string }> = {};
+      const memberPayments: Record<string, { amount: number; source: string; splitPair?: boolean; originalAmount?: number }> = {};
       for (const p of (paymentsByMember[m.id] || [])) {
         memberPayments[p.month] = { amount: parseFloat(p.amount), source: p.source };
       }
@@ -496,20 +525,39 @@ export async function GET(request: import('next/server').NextRequest) {
 
     // Index miembros por id para resolver pares
     const memberById = new Map(members.map((m: any) => [m.id, m]));
+
+    // ── SPLIT 50/50 entre parejas vinculadas ─────────────────────────
+    // Si A paga 50€ y está vinculada con B, A queda con 25€ y B con 25€
+    // (lo aplicamos en TODOS los meses, no solo current/prev)
+    const splittedPairs = new Set<string>();
+    for (const m of members) {
+      if (!m.pairedWith || !memberById.has(m.pairedWith)) continue;
+      const pairKey = [m.id, m.pairedWith].sort().join('|');
+      if (splittedPairs.has(pairKey)) continue;
+      splittedPairs.add(pairKey);
+      const pair: any = memberById.get(m.pairedWith);
+      // Recolectar todos los meses involucrados
+      const allMonths = new Set([...Object.keys(m.payments || {}), ...Object.keys(pair.payments || {})]);
+      for (const month of allMonths) {
+        const payA = m.payments?.[month];
+        const payB = pair.payments?.[month];
+        const totalAmt = (payA?.amount || 0) + (payB?.amount || 0);
+        if (totalAmt <= 0) continue;
+        const half = totalAmt / 2;
+        const sources = [payA?.source, payB?.source].filter(Boolean);
+        const combinedSource = sources.length === 2 && sources[0] !== sources[1] ? 'ambos' : (sources[0] || 'banco');
+        m.payments[month] = { amount: half, source: combinedSource, splitPair: true, originalAmount: totalAmt };
+        pair.payments[month] = { amount: half, source: combinedSource, splitPair: true, originalAmount: totalAmt };
+      }
+    }
+
+    // ── Marcar isActive considerando pago propio o de la pareja ──────
     for (const m of members) {
       const paidRecently = m.payments?.[currentMonth] || m.payments?.[prevMonth] || m.stripeSubscriptionId;
-      // Si está en pareja, considerar también si la pareja paga
       let pairPays = false;
       if (m.pairedWith && memberById.has(m.pairedWith)) {
         const pair: any = memberById.get(m.pairedWith);
         pairPays = !!(pair.payments?.[currentMonth] || pair.payments?.[prevMonth] || pair.stripeSubscriptionId);
-        // Espejar el pago del par para que aparezca como "paga" en la UI
-        if (pair.payments?.[currentMonth] && !m.payments?.[currentMonth]) {
-          m.payments[currentMonth] = { ...pair.payments[currentMonth], source: 'pareja' };
-        }
-        if (pair.payments?.[prevMonth] && !m.payments?.[prevMonth]) {
-          m.payments[prevMonth] = { ...pair.payments[prevMonth], source: 'pareja' };
-        }
       }
       m.isActive = !!(paidRecently || pairPays);
     }

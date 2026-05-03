@@ -209,6 +209,24 @@ export default function ConciliacionMiembrosPage() {
               </Card>
             </div>
 
+            {/* Transferencias bancarias sin vincular */}
+            {data.unmatchedBank?.length > 0 && (
+              <Card className="border-2 border-amber-300 bg-amber-50/50">
+                <div className="flex items-start gap-2 mb-3">
+                  <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-900">{data.unmatchedBank.length} transferencia(s) bancaria(s) sin vincular</p>
+                    <p className="text-[11px] text-amber-700">Marcadas como diezmo pero sin miembro asignado · Click para asignar manualmente</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {data.unmatchedBank.slice(0, 30).map((tx: any) => (
+                    <UnmatchedBankRow key={tx.id} tx={tx} members={data.members} onLinked={load} />
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {/* Stripe sin matchear (alerta) */}
             {data.unmatchedSubs?.length > 0 && (
               <Card className="border-2 border-amber-300 bg-amber-50/50">
@@ -574,5 +592,66 @@ export default function ConciliacionMiembrosPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+function UnmatchedBankRow({ tx, members, onLinked }: { tx: any; members: any[]; onLinked: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [createRule, setCreateRule] = useState(true);
+
+  async function link(memberId: string) {
+    await fetch('/api/diezmos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'link_bank_tx', memberId, amount: tx.amount, date: tx.date }),
+    });
+    if (createRule) {
+      const pattern = (tx.memberName || tx.concept || '').toLowerCase().split(' ').slice(0, 3).join(' ');
+      if (pattern) {
+        await fetch('/api/diezmos', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create_bank_rule', pattern, memberId }),
+        });
+      }
+    }
+    setOpen(false); setSearch(''); onLinked();
+  }
+
+  const candidates = members
+    .filter((m: any) => !search || m.name.toLowerCase().includes(search.toLowerCase()) || (m.apodo || '').toLowerCase().includes(search.toLowerCase()))
+    .slice(0, 30);
+
+  return (
+    <div className="bg-white border border-amber-200 rounded-lg overflow-hidden">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-amber-50 text-left">
+        <Landmark size={12} className="text-amber-500 flex-shrink-0" />
+        <span className="text-[11px] text-gray-500 w-16 flex-shrink-0">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+        <span className="flex-1 text-xs text-gray-700 truncate">{tx.concept}</span>
+        <span className="text-xs font-bold text-amber-700 ml-2">{formatCurrency(tx.amount)}</span>
+        <ChevronRight size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-amber-100 p-2 bg-amber-50/30">
+          <div className="flex items-center gap-2 mb-2">
+            <input value={search} onChange={e => setSearch(e.target.value)} autoFocus
+              placeholder="Buscar miembro..." className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:ring-1 focus:ring-amber-400" />
+            <label className="flex items-center gap-1 text-[10px] text-gray-600">
+              <input type="checkbox" checked={createRule} onChange={e => setCreateRule(e.target.checked)} />
+              regla auto
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+            {candidates.map((m: any) => (
+              <button key={m.id} onClick={() => link(m.id)}
+                className="text-left px-2 py-1 text-xs bg-white hover:bg-violet-50 border border-gray-100 rounded flex items-center gap-1.5">
+                <Link2 size={10} className="text-violet-500 flex-shrink-0" />
+                <span className="truncate">{m.apodo || m.name}</span>
+                <span className="text-[9px] text-gray-400 ml-auto flex-shrink-0">{m.community}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
