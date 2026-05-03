@@ -576,6 +576,14 @@ export default function ExtractoPage() {
                         <td className="px-4 sm:px-6 py-3 text-left">
                           {(() => {
                             if (tag !== 'Diezmo') return <span className="text-xs text-gray-200">—</span>;
+                            const isStripePayout = (tx.concept || '').toLowerCase().includes('stripe');
+                            if (isStripePayout) {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-medium rounded" title="Este es un payout de Stripe (suma de cargos individuales). El desglose por miembro se calcula automáticamente vía Stripe API y aparece en /stripe. NO se duplica con los charges individuales.">
+                                  🔒 Payout Stripe
+                                </span>
+                              );
+                            }
                             const linked = findLinkedMember(tx);
                             if (linked) {
                               return (
