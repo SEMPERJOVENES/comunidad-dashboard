@@ -210,19 +210,42 @@ export async function GET(request: import('next/server').NextRequest) {
       }
 
       if (matched) {
-        const monthKey = getMonthKey(inv.periodStart || inv.created);
-        const existing = matched.payments[monthKey];
-        if (!existing || existing.source !== 'stripe') {
-          const newSource = existing ? (existing.source === 'banco' ? 'ambos' : 'stripe') : 'stripe';
-          const newAmount = existing ? existing.amount + inv.amount : inv.amount;
-          matched.payments[monthKey] = { amount: newAmount, source: newSource };
-          paymentUpserts.push({
-            id: `dp-stripe-${matched.id}-${monthKey}`,
-            member_id: matched.id,
-            month: monthKey,
-            amount: newAmount,
-            source: newSource,
-          });
+        const startMonthKey = getMonthKey(inv.periodStart || inv.created);
+        const isAnnual = matched.stripeInterval === 'year' || (inv.amount >= 100 && (inv.description || '').toLowerCase().includes('year'));
+
+        if (isAnnual) {
+          // Distribuir el invoice anual entre 12 meses desde periodStart
+          const monthly = inv.amount / 12;
+          const startDate = new Date(inv.periodStart || inv.created);
+          for (let i = 0; i < 12; i++) {
+            const mDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+            const monthKey = `${mDate.getFullYear()}-${String(mDate.getMonth() + 1).padStart(2, '0')}`;
+            const existing = matched.payments[monthKey];
+            const newSource = existing ? (existing.source === 'banco' ? 'ambos' : 'stripe-anual') : 'stripe-anual';
+            const newAmount = existing ? existing.amount + monthly : monthly;
+            matched.payments[monthKey] = { amount: newAmount, source: newSource };
+            paymentUpserts.push({
+              id: `dp-stripe-anual-${matched.id}-${monthKey}`,
+              member_id: matched.id,
+              month: monthKey,
+              amount: newAmount,
+              source: newSource,
+            });
+          }
+        } else {
+          const existing = matched.payments[startMonthKey];
+          if (!existing || existing.source !== 'stripe') {
+            const newSource = existing ? (existing.source === 'banco' ? 'ambos' : 'stripe') : 'stripe';
+            const newAmount = existing ? existing.amount + inv.amount : inv.amount;
+            matched.payments[startMonthKey] = { amount: newAmount, source: newSource };
+            paymentUpserts.push({
+              id: `dp-stripe-${matched.id}-${startMonthKey}`,
+              member_id: matched.id,
+              month: startMonthKey,
+              amount: newAmount,
+              source: newSource,
+            });
+          }
         }
       }
     }
