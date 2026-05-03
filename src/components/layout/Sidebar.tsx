@@ -19,6 +19,7 @@ import {
   X,
   PieChart,
   Users,
+  ArrowDownUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,7 +52,7 @@ const navSections = [
     title: 'Comunidad',
     items: [
       { href: '/miembros', label: 'Diezmos · Miembros', icon: Church, highlight: true },
-      { href: '/miembros/pagos', label: 'Cómo paga cada uno', icon: Users },
+      { href: '/miembros/pagos', label: 'Conciliación pagos', icon: ArrowDownUp, highlight: true },
       { href: '/comunidad', label: 'Dashboard Comunidad', icon: PieChart },
       { href: '/viajes-eventos', label: 'Viajes, eventos y otros', icon: Plane },
       { href: '/inventario-comunidad', label: 'Inventario Material', icon: Box },
