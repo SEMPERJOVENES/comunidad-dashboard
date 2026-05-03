@@ -550,20 +550,21 @@ export default function ConciliacionMiembrosPage() {
                         </div>
                       )}
 
-                      {/* Tags meses Ene/Feb/Mar/Abr/May 2026 — verde pagó, rojo no pagó (mes pasado), gris futuro */}
+                      {/* Tags 12 meses año actual — verde pagó, rojo no pagó (pasado), amber actual, gris futuro */}
                       {(() => {
-                        const monthsToShow = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'];
-                        const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May'];
                         const now = new Date();
-                        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                        // Pagos por mes desde history (incluye charges Stripe + bank txs)
+                        const year = now.getFullYear();
+                        const monthLabels = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+                        const currentMonthKey = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                        // Pagos por mes desde history
                         const paidMonths = new Set<string>();
                         for (const h of m.history || []) {
                           paidMonths.add(h.date.slice(0, 7));
                         }
                         return (
-                          <div className="flex gap-1 mt-2">
-                            {monthsToShow.map((mk, i) => {
+                          <div className="flex gap-0.5 mt-2">
+                            {Array.from({ length: 12 }, (_, i) => {
+                              const mk = `${year}-${String(i + 1).padStart(2, '0')}`;
                               const paid = paidMonths.has(mk);
                               const isPast = mk < currentMonthKey;
                               const isCurrent = mk === currentMonthKey;
@@ -572,10 +573,10 @@ export default function ConciliacionMiembrosPage() {
                                 : isPast
                                   ? 'bg-rose-100 text-rose-600'
                                   : isCurrent
-                                    ? 'bg-amber-50 text-amber-600'
-                                    : 'bg-gray-100 text-gray-300';
+                                    ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-300'
+                                    : 'bg-gray-50 text-gray-300';
                               return (
-                                <span key={mk} className={`flex-1 text-center text-[9px] font-bold py-1 rounded ${cls}`} title={paid ? 'Pagado' : isPast ? 'No pagó' : isCurrent ? 'Mes en curso' : 'Futuro'}>
+                                <span key={mk} className={`flex-1 text-center text-[9px] font-bold py-1 rounded ${cls}`} title={`${monthLabels[i]} ${year} · ${paid ? 'Pagado' : isPast ? 'No pagó' : isCurrent ? 'Mes en curso' : 'Futuro'}`}>
                                   {monthLabels[i]}
                                 </span>
                               );
