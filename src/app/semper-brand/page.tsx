@@ -273,41 +273,7 @@ export default function SemperBrandPage() {
               <p className="text-sm text-gray-500">Pérdidas y ganancias con costes de producto</p>
             </div>
           </div>
-          <button onClick={() => setShowAddCost(!showAddCost)}
-            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
-            <Plus size={16} /> Añadir Coste
-          </button>
         </div>
-
-        {/* Add Cost Form */}
-        {showAddCost && (
-          <Card className="border-2 border-indigo-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Registrar Coste de Brand</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-              <input type="date" value={costForm.date} onChange={e => setCostForm({ ...costForm, date: e.target.value })}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <select value={costForm.type} onChange={e => setCostForm({ ...costForm, type: e.target.value })}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                {COST_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
-              </select>
-              <input type="text" value={costForm.description} onChange={e => setCostForm({ ...costForm, description: e.target.value })}
-                placeholder="Descripción (ej: 50 camisetas)" className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <input type="number" step="0.01" value={costForm.amount} onChange={e => setCostForm({ ...costForm, amount: e.target.value })}
-                placeholder="Importe €" className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <input type="text" value={costForm.product} onChange={e => setCostForm({ ...costForm, product: e.target.value })}
-                placeholder="Producto (opcional)" className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <div className="flex gap-2">
-                <button onClick={handleAddCost} disabled={!costForm.amount || !costForm.description}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1">
-                  <Check size={14} /> Guardar
-                </button>
-                <button onClick={() => setShowAddCost(false)} className="px-3 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-          </Card>
-        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-20">

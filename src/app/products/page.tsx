@@ -299,13 +299,10 @@ export default function InventarioPage() {
       const cost = getCost(p.id, v.id) || productCost;
       const costPrice = cost?.cost_price || 0;
       const cat = cost?.category || 'inventario';
-      if (cat === 'inmovilizado') {
-        totalInmovilizadoValue += price * qty;
-        totalInmovilizadoCost += costPrice * qty;
-      } else {
-        totalStockValue += price * qty;
-        totalStockCost += costPrice * qty;
-      }
+      // Excluir preproduccion e inmovilizado del valor teórico
+      if (cat === 'preproduccion' || cat === 'inmovilizado') continue;
+      totalStockValue += price * qty;
+      totalStockCost += costPrice * qty;
       if (costPrice > 0) pHasCost = true;
     }
     if (pHasCost) productsWithCost++;
@@ -370,7 +367,7 @@ export default function InventarioPage() {
               <Card>
                 <div className="flex items-center gap-2 mb-1">
                   <Archive size={14} className="text-orange-500" />
-                  <p className="text-xs text-gray-500 font-medium">Coste stock / Inmovilizado</p>
+                  <p className="text-xs text-gray-500 font-medium">Coste stock</p>
                 </div>
                 <p className="text-lg sm:text-xl font-bold text-orange-700">{formatCurrency(totalStockCost)}</p>
                 <p className="text-xs text-gray-400 mt-0.5">€ invertidos · capital atrapado</p>
@@ -403,7 +400,7 @@ export default function InventarioPage() {
             </div>
             <div className="flex gap-2">
               <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                {(['all', 'inventario', 'inmovilizado'] as CategoryFilter[]).map((cat) => (
+                {(['all', 'inventario'] as CategoryFilter[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setCategoryFilter(cat)}
@@ -413,7 +410,7 @@ export default function InventarioPage() {
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    {cat === 'all' ? 'Todo' : cat === 'inventario' ? '📦 Inventario' : '🏗️ Inmovilizado'}
+                    {cat === 'all' ? 'Todo' : '📦 Inventario'}
                   </button>
                 ))}
               </div>
@@ -678,8 +675,8 @@ export default function InventarioPage() {
               <span>·</span>
               <span>Valor liquidación: <strong className="text-gray-700">{formatCurrency(totalStockValue)}</strong></span>
               <span>·</span>
-              <span>Inmovilizado: <strong className="text-gray-700">{formatCurrency(totalStockCost)}</strong></span>
-              {totalInmovilizadoValue > 0 && (
+              <span>Coste stock: <strong className="text-gray-700">{formatCurrency(totalStockCost)}</strong></span>
+              {false && totalInmovilizadoValue > 0 && (
                 <>
                   <span>·</span>
                   <span>Inmov. categ.: <strong className="text-purple-700">{formatCurrency(totalInmovilizadoValue)}</strong></span>
