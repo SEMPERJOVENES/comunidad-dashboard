@@ -133,6 +133,14 @@ export async function POST(request: NextRequest) {
 
     if (body.action === 'tag') {
       const { id, manualTag, isDiezmo } = body;
+      // BLOQUEAR clasificación manual de transacciones Stripe — se gestionan desde /stripe
+      const { data: existing } = await supabase
+        .from('bank_transactions').select('concept').eq('id', id).single();
+      if (existing?.concept && existing.concept.toLowerCase().includes('stripe')) {
+        return NextResponse.json({
+          error: 'Las transacciones de Stripe se clasifican automáticamente desde su Concepto (Shopify=Brand · Stripe=Diezmo). Para reclasificar, gestionar desde la pestaña /stripe.',
+        }, { status: 403 });
+      }
       const { data, error } = await supabase
         .from('bank_transactions')
         .update({ manual_tag: manualTag || null, is_diezmo: isDiezmo || false })

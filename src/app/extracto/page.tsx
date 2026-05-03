@@ -480,7 +480,14 @@ export default function ExtractoPage() {
                           {formatCurrency(tx.balance)}
                         </td>
                         <td className="px-4 sm:px-6 py-3 text-center">
-                          {isEditing ? (
+                          {/* Stripe txs: clasificación bloqueada (viene auto del concept Shopify/Stripe) */}
+                          {(tx.concept || '').toLowerCase().includes('stripe') ? (
+                            <div className="inline-flex items-center gap-1" title="Clasificación bloqueada — viene del Concepto Stripe (Shopify=Brand · Stripe=Diezmo). Para cambiar, edítalo en /stripe.">
+                              <Badge variant={tag === 'Diezmo' ? 'purple' : 'info'}>
+                                🔒 {tag || 'Stripe'}
+                              </Badge>
+                            </div>
+                          ) : isEditing ? (
                             <select
                               autoFocus
                               defaultValue={tag || ''}
