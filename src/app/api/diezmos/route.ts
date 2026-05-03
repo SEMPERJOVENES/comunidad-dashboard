@@ -494,9 +494,24 @@ export async function GET(request: import('next/server').NextRequest) {
     const prevDate = new Date(); prevDate.setMonth(prevDate.getMonth() - 1);
     const prevMonth = getMonthKey(prevDate);
 
+    // Index miembros por id para resolver pares
+    const memberById = new Map(members.map((m: any) => [m.id, m]));
     for (const m of members) {
       const paidRecently = m.payments?.[currentMonth] || m.payments?.[prevMonth] || m.stripeSubscriptionId;
-      m.isActive = !!paidRecently;
+      // Si está en pareja, considerar también si la pareja paga
+      let pairPays = false;
+      if (m.pairedWith && memberById.has(m.pairedWith)) {
+        const pair: any = memberById.get(m.pairedWith);
+        pairPays = !!(pair.payments?.[currentMonth] || pair.payments?.[prevMonth] || pair.stripeSubscriptionId);
+        // Espejar el pago del par para que aparezca como "paga" en la UI
+        if (pair.payments?.[currentMonth] && !m.payments?.[currentMonth]) {
+          m.payments[currentMonth] = { ...pair.payments[currentMonth], source: 'pareja' };
+        }
+        if (pair.payments?.[prevMonth] && !m.payments?.[prevMonth]) {
+          m.payments[prevMonth] = { ...pair.payments[prevMonth], source: 'pareja' };
+        }
+      }
+      m.isActive = !!(paidRecently || pairPays);
     }
 
     const communityStats = communities.map((c: string) => {
