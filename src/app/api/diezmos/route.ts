@@ -120,6 +120,7 @@ export async function GET(request: import('next/server').NextRequest) {
         stripeAmount: m.stripe_amount ? parseFloat(m.stripe_amount) : null,
         stripeInterval: m.stripe_interval,
         paymentFrequency: m.payment_frequency || 'mensual',
+        pairedWith: m.paired_with_member_id || null,
         payments: memberPayments,
         bankRules: memberBankRules,
       };

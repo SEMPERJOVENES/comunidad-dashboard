@@ -487,10 +487,12 @@ export default function MiembrosPage() {
                         <div className="flex flex-wrap gap-1">
                           {paying.map(m => {
                             const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
+                            const pair = m.pairedWith ? members.find(x => x.id === m.pairedWith) : null;
                             return (
                               <span key={m.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700 border border-green-200 ${hasBday ? 'ring-1 ring-amber-400' : ''}`}>
                                 {hasBday && <Cake size={9} className="text-amber-400 flex-shrink-0" />}
                                 {displayName(m)}
+                                {pair && <span className="text-[9px] text-violet-600">↔ {displayName(pair)}</span>}
                               </span>
                             );
                           })}
