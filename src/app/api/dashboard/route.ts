@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     // Sort caja by absolute value
     const cajaSorted = Object.entries(cajaByCategory)
-      .map(([tag, data]) => ({ tag, net: data.net, count: data.count, transactions: data.transactions.slice(0, 20) }))
+      .map(([tag, data]) => ({ tag, net: data.net, count: data.count, transactions: data.transactions }))
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 
     // === SHOPIFY DATA ===
@@ -200,19 +200,19 @@ export async function GET(request: NextRequest) {
           income: macroGroups.diezmos.income,
           expenses: macroGroups.diezmos.expenses,
           net: macroGroups.diezmos.income - macroGroups.diezmos.expenses,
-          tags: Object.entries(macroGroups.diezmos.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
+          tags: Object.entries(macroGroups.diezmos.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions })),
         },
         brand: {
           income: macroGroups.brand.income,
           expenses: macroGroups.brand.expenses,
           net: macroGroups.brand.income - macroGroups.brand.expenses,
-          tags: Object.entries(macroGroups.brand.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
+          tags: Object.entries(macroGroups.brand.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions })),
         },
         otros: {
           income: macroGroups.otros.income,
           expenses: macroGroups.otros.expenses,
           net: macroGroups.otros.income - macroGroups.otros.expenses,
-          tags: Object.entries(macroGroups.otros.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions.slice(0, 20) })),
+          tags: Object.entries(macroGroups.otros.tags).map(([tag, d]) => ({ tag, ...d, net: d.income - d.expenses, transactions: d.transactions })),
         },
       },
       // Caja breakdown
