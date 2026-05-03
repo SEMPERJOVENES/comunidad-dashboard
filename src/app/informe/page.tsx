@@ -117,19 +117,21 @@ export default function InformePage() {
             <p className="text-2xl text-gray-500 font-light">{periodLabel}</p>
           </div>
 
-          <div className="space-y-6 my-12">
-            <Big label="Ingresos totales" value={formatCurrency(totalIngresos)} color="emerald" />
-            <Big label="Gastos totales" value={formatCurrency(totalGastos)} color="rose" />
-            <Big label={totalBeneficio >= 0 ? "Beneficio neto" : "Pérdida neta"} value={formatCurrency(totalBeneficio)} color={totalBeneficio >= 0 ? 'emerald' : 'rose'} big />
+          <div className="space-y-3 my-12">
+            <p className="text-xs uppercase tracking-widest text-gray-400 font-bold mb-4">Resultado neto por área</p>
+            <BigArea label="Comunidad" value={comunidadNeto} sub={`Ingresos ${formatCurrency(comunidadIngresos)} · Gastos ${formatCurrency(comunidadGastos)}`} color="violet" />
+            <BigArea label="Semper Brand" value={brandBeneficio} sub={`Ingresos ${formatCurrency(brandIngresos)} · Gastos ${formatCurrency(brandGastos)}`} color="indigo" />
+            <BigArea label="Otros" value={otrosNeto} sub={`Ingresos ${formatCurrency(otrosIngresos)} · Gastos ${formatCurrency(otrosGastos)}`} color="amber" />
           </div>
 
           <div className="border-t border-gray-200 pt-6">
-            <div className="grid grid-cols-3 gap-4">
-              <PortadaArea label="Comunidad" value={comunidadNeto} color="violet" />
-              <PortadaArea label="Semper Brand" value={brandBeneficio} color="indigo" />
-              <PortadaArea label="Otros" value={otrosNeto} color="amber" />
+            <div className="bg-gray-50 rounded-xl p-4 mb-4">
+              <p className="text-[11px] text-gray-500 italic">
+                Nota: el total agregado no se muestra porque los ingresos de Viajes/Eventos están pendientes de gastarse (vuelos, alojamiento, etc.).
+                El resultado real solo cuadra al cierre de cada viaje. La cifra significativa para gestión es el resultado por área.
+              </p>
             </div>
-            <p className="text-xs text-gray-400 mt-8">
+            <p className="text-xs text-gray-400 mt-4">
               Generado el {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} · economia.semperjovenes.com
             </p>
           </div>
@@ -390,6 +392,26 @@ function Big({ label, value, color, big }: { label: string; value: string; color
     <div className={`flex items-center justify-between p-4 rounded-xl ${colors[color]}`}>
       <span className="text-sm font-semibold opacity-70">{label}</span>
       <span className={`font-bold ${big ? 'text-4xl' : 'text-2xl'}`}>{value}</span>
+    </div>
+  );
+}
+
+function BigArea({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
+  const colors: Record<string, string> = {
+    violet: 'text-violet-700 bg-violet-50 border-violet-200',
+    indigo: 'text-indigo-700 bg-indigo-50 border-indigo-200',
+    amber: 'text-amber-700 bg-amber-50 border-amber-200',
+  };
+  const isPositive = value >= 0;
+  return (
+    <div className={`border-2 rounded-xl p-5 ${colors[color]}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-base font-bold uppercase tracking-wide">{label}</span>
+        <span className={`text-3xl font-bold ${isPositive ? 'text-emerald-700' : 'text-rose-700'}`}>
+          {isPositive ? '+' : ''}{formatCurrency(value)}
+        </span>
+      </div>
+      <p className="text-[11px] opacity-70">{sub}</p>
     </div>
   );
 }
