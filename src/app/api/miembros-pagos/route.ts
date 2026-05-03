@@ -243,6 +243,9 @@ export async function GET(request: NextRequest) {
     }
     const unmatchedBank = bankTxs.filter((tx: any) => {
       if (parseFloat(tx.amount) <= 0) return false;
+      const concept = (tx.concept || '').toLowerCase();
+      // Excluir payouts agregados de Stripe (ya contabilizados vía Stripe API por miembro)
+      if (concept.includes('stripe')) return false;
       const txText = (tx.member_name || '') + ' ' + (tx.concept || '');
       const matched = result.some(r => fuzzy(r.name, txText) || (r.apodo && fuzzy(r.apodo, txText)));
       return !matched;
