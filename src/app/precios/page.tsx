@@ -104,10 +104,28 @@ export default function PreciosPage() {
     }
   }
 
-  const filtered = products.filter(p => {
-    if (!search) return true;
-    return p.title.toLowerCase().includes(search.toLowerCase());
-  });
+  const filtered = products
+    .filter(p => {
+      if (!search) return true;
+      return p.title.toLowerCase().includes(search.toLowerCase());
+    })
+    .map(p => {
+      const cost = getCost(p.id, p.variants?.[0]?.id) || getCost(p.id);
+      const totalStock = p.variants?.reduce((s, v) => s + (v.inventory_quantity || 0), 0) || 0;
+      const pvp = parseFloat(p.variants?.[0]?.price || '0');
+      const isPreventa = cost?.category === 'preproduccion';
+      const noPhoto = !p.images?.[0]?.src;
+      const isRaro = pvp === 0 || !cost?.cost_price;
+      // Orden: activo con stock alto > activo con stock bajo > preventa > raros/sin foto
+      let priority = 0;
+      if (isPreventa) priority = 200;
+      else if (noPhoto) priority = 300;
+      else if (isRaro) priority = 100;
+      else priority = -totalStock; // negativo para orden DESC por stock
+      return { p, priority, totalStock };
+    })
+    .sort((a, b) => a.priority - b.priority)
+    .map(x => x.p);
 
   // Agregados
   const totalCoste = products.reduce((s, p) => {
