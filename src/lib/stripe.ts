@@ -66,9 +66,12 @@ export async function getAllCharges(params: { created?: { gte?: number; lte?: nu
 
 function mapCharge(c: Stripe.Charge) {
   const customer = c.customer as Stripe.Customer | null;
+  // Detectar si es de suscripción (tiene invoice asociado)
+  const isSubscription = !!c.invoice;
   return {
     id: c.id,
     amount: c.amount / 100,
+    amountRefunded: (c.amount_refunded || 0) / 100,
     currency: c.currency,
     status: c.status,
     created: new Date(c.created * 1000).toISOString(),
@@ -78,6 +81,10 @@ function mapCharge(c: Stripe.Charge) {
     disputed: c.disputed,
     customerName: customer && typeof customer === 'object' ? (customer.name || customer.email || null) : null,
     customerEmail: customer && typeof customer === 'object' ? (customer.email || null) : null,
+    isSubscription,
+    invoiceId: c.invoice ? (typeof c.invoice === 'string' ? c.invoice : (c.invoice as any).id) : null,
+    type: isSubscription ? 'subscription' : 'one_time',
+    category: isSubscription ? 'Diezmo' : 'Brand',
   };
 }
 
