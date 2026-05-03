@@ -12,12 +12,13 @@ import {
 } from 'lucide-react';
 import { getBirthdaysThisMonth } from '@/lib/birthdays';
 
-type ViewMode = 'grid' | 'list' | 'pertenencia';
+type ViewMode = 'pertenencia' | 'grid' | 'list' | 'sin-diezmo';
 
 const VIEW_TABS: { key: ViewMode; label: string; icon: any; desc: string }[] = [
+  { key: 'pertenencia',label: 'Comunidades',   icon: PieChart,   desc: 'Por comunidad y paga/no paga' },
+  { key: 'sin-diezmo', label: 'Sin Diezmo',     icon: Users,      desc: 'Quien no paga este mes' },
   { key: 'grid',       label: 'Cuadrícula',    icon: LayoutGrid, desc: 'Matriz mensual' },
   { key: 'list',       label: 'Tabla',          icon: Table2,     desc: 'Tabla de miembros' },
-  { key: 'pertenencia',label: 'Pertenencia',    icon: PieChart,   desc: 'Verde / Rojo' },
 ];
 
 const COMUNIDADES_ORDER = ['San Martín', 'San Ignacio', 'San Pablo', 'Colaboradores'];
@@ -66,7 +67,7 @@ export default function MiembrosPage() {
   const [communityStats, setCommunityStats] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<ViewMode>('grid');
+  const [view, setView] = useState<ViewMode>('pertenencia');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCommunity, setFilterCommunity] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -307,7 +308,7 @@ export default function MiembrosPage() {
         )}
 
         {/* View tabs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {VIEW_TABS.map(({ key, label, icon: Icon, desc }) => (
             <button key={key} onClick={() => setView(key)}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${view === key ? 'border-violet-500 bg-violet-50 shadow-sm' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}`}>
@@ -429,59 +430,184 @@ export default function MiembrosPage() {
             <span className="text-gray-500 text-sm">Cargando miembros...</span>
           </div>
         ) : view === 'pertenencia' ? (
-          /* ══ PERTENENCIA ══ */
+          /* ══ COMUNIDADES (cards expandibles + filtrables) ══ */
           <div className="space-y-4">
-            <p className="text-xs text-gray-400 text-right">
-              Verde = da diezmo · Rojo = no da diezmo
-            </p>
-            {pertenenciaGrouped.map(({ comunidad, list, paying, notPaying, pct }) => {
-              const style = COMMUNITY_STYLES[comunidad] || COMMUNITY_STYLES['Colaboradores'];
-              return (
-                <Card key={comunidad} className="!p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${style.headerBg}`}>
-                        <Church size={15} className={style.text} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {pertenenciaGrouped.map(({ comunidad, list, paying, notPaying, pct }) => {
+                const style = COMMUNITY_STYLES[comunidad] || COMMUNITY_STYLES['Colaboradores'];
+                const isFiltered = filterCommunity === comunidad;
+                return (
+                  <Card key={comunidad} className={`!p-4 cursor-pointer transition-all hover:shadow-lg ${isFiltered ? 'ring-2 ring-violet-500 shadow-md' : 'hover:ring-1 hover:ring-violet-300'}`}>
+                    <button
+                      onClick={() => setFilterCommunity(isFiltered ? 'all' : comunidad)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${style.headerBg}`}>
+                            <Church size={18} className={style.text} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-gray-900">{comunidad}</h3>
+                            <p className="text-[10px] text-gray-400">{list.length} miembros · click para filtrar</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                            {pct}%
+                          </p>
+                          <p className="text-[10px] text-gray-400">{paying.length}/{list.length} pagan</p>
+                        </div>
                       </div>
+                      <div className="h-2 bg-gray-100 rounded-full mb-3 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                          style={{ width: `${Math.max(pct, 3)}%` }} />
+                      </div>
+                    </button>
+
+                    {paying.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-[10px] text-green-600 font-semibold uppercase mb-1.5 flex items-center gap-1">
+                          <Check size={10} /> Pagan ({paying.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {paying.map(m => {
+                            const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
+                            return (
+                              <span key={m.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700 border border-green-200 ${hasBday ? 'ring-1 ring-amber-400' : ''}`}>
+                                {hasBday && <Cake size={9} className="text-amber-400 flex-shrink-0" />}
+                                {displayName(m)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {notPaying.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-bold text-gray-900">{comunidad}</h3>
-                        <p className="text-[10px] text-gray-400">{list.length} miembros</p>
+                        <p className="text-[10px] text-red-500 font-semibold uppercase mb-1.5 flex items-center gap-1">
+                          <X size={10} /> No pagan ({notPaying.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {notPaying.map(m => {
+                            const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
+                            return (
+                              <span key={m.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600 border border-red-200 ${hasBday ? 'ring-1 ring-amber-400' : ''}`}>
+                                {hasBday && <Cake size={9} className="text-amber-400 flex-shrink-0" />}
+                                {displayName(m)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+
+            <p className="text-[11px] text-gray-400 text-center">
+              💡 Click en una comunidad para filtrar · ⭐ aro naranja = cumple este mes · Verde = paga · Rojo = no paga
+            </p>
+          </div>
+        ) : view === 'sin-diezmo' ? (
+          /* ══ SIN DIEZMO ══ */
+          <div className="space-y-4">
+            {(() => {
+              const noPaganMonth = members.filter(m => !m.payments?.[selectedMonth] && (filterCommunity === 'all' || m.community === filterCommunity));
+              const noPaganNunca = members.filter(m => Object.keys(m.payments || {}).length === 0 && (filterCommunity === 'all' || m.community === filterCommunity));
+              const totalIngresoLost = noPaganMonth.length * 10; // estimación 10€/mes
+              return (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Card className="!p-4 border-l-4 border-l-red-500">
+                      <p className="text-xs text-gray-500 font-medium uppercase">No pagan este mes</p>
+                      <p className="text-3xl font-bold text-red-600 mt-1">{noPaganMonth.length}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">{formatMonthFull(selectedMonth)}</p>
+                    </Card>
+                    <Card className="!p-4 border-l-4 border-l-amber-500">
+                      <p className="text-xs text-gray-500 font-medium uppercase">Nunca han pagado</p>
+                      <p className="text-3xl font-bold text-amber-600 mt-1">{noPaganNunca.length}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">Sin pago histórico</p>
+                    </Card>
+                    <Card className="!p-4 border-l-4 border-l-violet-500">
+                      <p className="text-xs text-gray-500 font-medium uppercase">% Sin pagar</p>
+                      <p className="text-3xl font-bold text-violet-600 mt-1">
+                        {members.length > 0 ? Math.round((noPaganMonth.length / members.length) * 100) : 0}%
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-1">{noPaganMonth.length}/{members.length} del total</p>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <Users size={16} className="text-red-500" />
+                        Sin pagar este mes ({formatMonthFull(selectedMonth)})
+                      </h3>
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => { const [y, m] = selectedMonth.split('-').map(Number); const prev = m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`; if (prev >= '2023-01') setSelectedMonth(prev); }}
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
+                          <ChevronLeft size={14} />
+                        </button>
+                        <span className="text-xs font-semibold text-gray-700 min-w-[90px] text-center">{formatMonthFull(selectedMonth)}</span>
+                        <button onClick={() => { const [y, m] = selectedMonth.split('-').map(Number); const next = m === 12 ? `${y+1}-01` : `${y}-${String(m+1).padStart(2,'0')}`; if (next <= currentMonth) setSelectedMonth(next); }}
+                          disabled={selectedMonth >= currentMonth}
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center disabled:opacity-30">
+                          <ChevronRight size={14} />
+                        </button>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-lg font-bold ${pct >= 80 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                        {paying.length}/{list.length}
+
+                    {/* Agrupado por comunidad */}
+                    {COMUNIDADES_ORDER.map(c => {
+                      if (filterCommunity !== 'all' && filterCommunity !== c) return null;
+                      const list = noPaganMonth.filter(m => m.community === c);
+                      if (list.length === 0) return null;
+                      const style = COMMUNITY_STYLES[c] || COMMUNITY_STYLES['Colaboradores'];
+                      return (
+                        <div key={c} className="mb-5 last:mb-0">
+                          <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${style.headerBg}`}>
+                                <Church size={13} className={style.text} />
+                              </div>
+                              <span className={`text-sm font-bold ${style.text}`}>{c}</span>
+                            </div>
+                            <span className="text-xs text-red-500 font-semibold">{list.length} sin pagar</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {list.map(m => {
+                              const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
+                              const lastPayment = Object.entries(m.payments || {}).sort(([a],[b]) => b.localeCompare(a))[0];
+                              return (
+                                <div key={m.id} className="flex items-center gap-2 p-2 bg-red-50/50 border border-red-100 rounded-lg hover:bg-red-50 transition-colors">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${hasBday ? 'bg-amber-100' : 'bg-red-100'}`}>
+                                    {hasBday ? <Cake size={14} className="text-amber-600" /> : <span className="text-[10px] font-bold text-red-600">{displayName(m).substring(0,2).toUpperCase()}</span>}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-gray-900 truncate">{displayName(m)}</p>
+                                    <p className="text-[10px] text-gray-400">
+                                      {lastPayment ? `Último: ${formatMonth(lastPayment[0])}` : 'Nunca pagó'}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {noPaganMonth.length === 0 && (
+                      <p className="text-center py-8 text-sm text-green-600 font-medium">
+                        ✅ Todos los miembros han pagado este mes
                       </p>
-                      <p className="text-[10px] text-gray-400">{pct}% dan diezmo</p>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full mb-3 overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                      style={{ width: `${Math.max(pct, 3)}%` }} />
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {paying.map(m => {
-                      const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
-                      return (
-                        <span key={m.id} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-green-100 text-green-700 ${hasBday ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}>
-                          {hasBday && <Cake size={10} className="text-amber-400 flex-shrink-0" />}
-                          {displayName(m)}
-                        </span>
-                      );
-                    })}
-                    {notPaying.map(m => {
-                      const hasBday = birthdaysThisMonth.some(b => b.name === (m.nickname || m.name) || b.name === m.name);
-                      return (
-                        <span key={m.id} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-red-100 text-red-600 ${hasBday ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}>
-                          {hasBday && <Cake size={10} className="text-amber-400 flex-shrink-0" />}
-                          {displayName(m)}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </Card>
+                    )}
+                  </Card>
+                </>
               );
-            })}
+            })()}
           </div>
         ) : view === 'list' ? (
           /* ══ TABLA DE MIEMBROS ══ */
