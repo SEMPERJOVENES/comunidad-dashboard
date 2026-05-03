@@ -5,7 +5,7 @@ embedded = false
 use_legacy_install_flow = true
 
 [access_scopes]
-scopes = "read_orders,read_products,read_customers,read_analytics,read_inventory,read_shopify_payments_payouts,read_shopify_payments_accounts"
+scopes = "read_orders,read_products,read_customers,read_analytics,read_inventory,read_shopify_payments_payouts,read_shopify_payments_accounts,write_inventory,write_products,read_locations"
 
 [auth]
 redirect_urls = [
