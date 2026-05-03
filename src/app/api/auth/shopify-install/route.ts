@@ -56,15 +56,33 @@ state: ${state || '-'}</pre>
     const accessToken = tokenData.access_token;
     const scope = tokenData.scope;
 
+    // Guardar en Supabase para que Claude lo recoja automáticamente
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (sbUrl && sbKey) {
+        const sb = createClient(sbUrl, sbKey);
+        await sb.from('shopify_tokens').upsert({
+          id: `tok-${shop}-${Date.now()}`,
+          shop,
+          access_token: accessToken,
+          scope,
+          client_id: clientId,
+        });
+      }
+    } catch (e) {
+      console.warn('[shopify-install] no se pudo guardar en Supabase:', e);
+    }
+
     return new NextResponse(
-      `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;background:#f5f5f5;max-width:800px;margin:0 auto">
-      <h1>✅ Instalación OK</h1>
+      `<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;background:#f5f5f5;max-width:800px;margin:0 auto;text-align:center">
+      <h1>✅ Token guardado automáticamente</h1>
       <p>App instalada en <strong>${shop}</strong></p>
-      <h2>Admin API access token (cópialo):</h2>
-      <pre style="background:#000;color:#0f0;padding:20px;border-radius:8px;font-size:16px;word-break:break-all;user-select:all">${accessToken}</pre>
-      <h3>Scopes concedidos:</h3>
-      <pre style="background:#fff;padding:20px;border-radius:8px;font-size:12px">${scope}</pre>
-      <p style="color:#666;font-size:14px">Pega ese token en el chat. Después de pegarlo, REVOCA acceso desde Shopify Admin → Apps si quieres invalidarlo.</p>
+      <p style="color:#666">Vuelve al chat de Claude — ya está aplicando el stock.</p>
+      <details style="text-align:left;margin-top:30px"><summary style="cursor:pointer;color:#999;font-size:12px">Ver token</summary>
+      <pre style="background:#fff;padding:15px;border-radius:8px;font-size:11px;word-break:break-all">${accessToken}</pre>
+      <p style="font-size:11px;color:#999">Scopes: ${scope}</p></details>
       </body></html>`,
       { headers: { 'Content-Type': 'text/html' } }
     );
