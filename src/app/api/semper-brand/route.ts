@@ -384,7 +384,7 @@ export async function GET(request: NextRequest) {
           const productKey = `${p.id}`;
           const cost = costMap[variantKey] || costMap[productKey];
           const cat = cost?.category || 'inventario';
-          if (cat === 'inmovilizado') continue; // separar inmovilizado del stock vendible
+          if (cat === 'inmovilizado' || cat === 'preproduccion') continue; // excluir inmovilizado y preventa
 
           prodUnits += qty;
           prodRetail += price * qty;

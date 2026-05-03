@@ -13,6 +13,7 @@ import {
   Loader2, TrendingUp, TrendingDown, Wallet, Church, Store,
   Landmark, ChevronDown, ChevronRight, Package,
   CreditCard, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Cake,
+  FileText, Tag,
 } from 'lucide-react';
 import { getBirthdaysThisMonth } from '@/lib/birthdays';
 
@@ -125,6 +126,21 @@ export default function DashboardPage() {
   return (
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-6">
+        {/* Botones acciones globales */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={`/informe?start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 shadow-sm"
+          >
+            <FileText size={14} /> Descargar PDF
+          </a>
+          <a href="/precios" className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-sm font-medium rounded-xl hover:bg-gray-50 text-gray-700">
+            <Tag size={14} /> Tabla precios
+          </a>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-violet-600" size={32} />

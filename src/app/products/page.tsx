@@ -485,13 +485,17 @@ export default function InventarioPage() {
                           </td>
                           <td className="px-3 py-3 text-center">
                             <span className={`text-sm font-semibold px-3 py-1 rounded-lg ${
+                              productCost?.category === 'preproduccion' ? 'text-purple-700 bg-purple-50' :
                               totalInv <= 0 ? 'text-red-600 bg-red-50' :
                               totalInv <= 5 ? 'text-amber-600 bg-amber-50' :
                               'text-gray-700 bg-gray-50'
                             }`}>
                               {totalInv}
                             </span>
-                            {hasOnlyDefault && (
+                            {productCost?.category === 'preproduccion' && (
+                              <Badge variant="purple" className="ml-1 text-[9px]">preventa</Badge>
+                            )}
+                            {hasOnlyDefault && productCost?.category !== 'preproduccion' && (
                               <Badge variant="warning" className="ml-1 text-[9px]">sin tallas</Badge>
                             )}
                           </td>

@@ -141,6 +141,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Set price de un variant
+    if (body.action === 'set_variant_price') {
+      const { variantId, price } = body;
+      if (!variantId || !price) {
+        return NextResponse.json({ error: 'variantId y price requeridos' }, { status: 400 });
+      }
+      const updated = await shopifyRequest(`variants/${variantId}.json`, 'PUT', {
+        variant: { id: variantId, price: String(price) },
+      });
+      return NextResponse.json({ success: true, variant: updated?.variant });
+    }
+
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
