@@ -82,11 +82,13 @@ export async function getOrders(params: {
 }
 
 // Orders con paginación completa — trae TODAS las órdenes
+// Filtra automáticamente las órdenes en la tabla `excluded_orders` de Supabase (fakes/tests)
 export async function getAllOrders(params: {
   status?: string;
   created_at_min?: string;
   created_at_max?: string;
   fields?: string;
+  includeExcluded?: boolean;
 } = {}) {
   const allOrders: any[] = [];
   const queryParams: Record<string, string> = {
@@ -131,7 +133,22 @@ export async function getAllOrders(params: {
     nextUrl = nextMatch ? nextMatch[1] : null;
   }
 
-  return allOrders;
+  if (params.includeExcluded) return allOrders;
+
+  // Filtrar excluded_orders desde Supabase
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return allOrders;
+    const sb = createClient(url, key);
+    const { data: excluded } = await sb.from('excluded_orders').select('order_id');
+    if (!excluded?.length) return allOrders;
+    const excludedSet = new Set(excluded.map((e: any) => Number(e.order_id)));
+    return allOrders.filter((o: any) => !excludedSet.has(Number(o.id)));
+  } catch {
+    return allOrders;
+  }
 }
 
 // Products

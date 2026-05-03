@@ -106,10 +106,12 @@ export interface PresentialSale {
   id: string;
   date: string;
   customerName: string;
-  paymentMethod: 'bizum' | 'efectivo' | 'transferencia';
+  paymentMethod: 'bizum' | 'efectivo' | 'transferencia' | 'regalo';
   totalAmount: number;
   items: PresentialSaleItem[];
   notes?: string;
+  saleType?: 'venta' | 'regalo';
+  costLoss?: number;
 }
 
 export interface PresentialSaleItem {

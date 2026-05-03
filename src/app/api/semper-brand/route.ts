@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllOrders } from '@/lib/shopify';
+import { getAllOrders, getProducts } from '@/lib/shopify';
 import { supabase } from '@/lib/supabase';
 import { getAllBalanceTransactions } from '@/lib/stripe';
 
@@ -274,7 +274,84 @@ export async function GET(request: NextRequest) {
       description: v.customer_name || v.notes || 'Venta presencial',
       amount: parseFloat(v.total_amount || '0'),
       paymentMethod: v.payment_method || '',
+      saleType: v.sale_type || 'venta',
+      costLoss: parseFloat(v.cost_loss || '0'),
     }));
+
+    // Pérdidas por regalos (coste de producción de unidades regaladas)
+    const giftLoss = (ventas || [])
+      .filter((v: any) => v.sale_type === 'regalo' || v.payment_method === 'regalo')
+      .reduce((s: number, v: any) => s + parseFloat(v.cost_loss || '0'), 0);
+
+    // ============================================================
+    // STOCK VALUATION — usando costes manuales de Supabase
+    // ============================================================
+    let stockUnits = 0;
+    let stockRetailValue = 0;     // ingreso potencial si vendemos todo a PVP
+    let stockCostValue = 0;        // inmovilizado real (€ invertidos)
+    let stockProductsWithCost = 0;
+    let stockProductsWithoutCost = 0;
+    const stockTopByValue: Array<{ title: string; units: number; retail: number; cost: number; potentialProfit: number }> = [];
+
+    try {
+      const [shopifyProducts, costsResult] = await Promise.all([
+        getProducts({ limit: 250 }).catch(() => []),
+        supabase.from('product_costs').select('*'),
+      ]);
+
+      const costMap: Record<string, { cost_price: number; category: string }> = {};
+      for (const row of (costsResult.data || [])) {
+        const key = row.shopify_variant_id
+          ? `${row.shopify_product_id}_${row.shopify_variant_id}`
+          : `${row.shopify_product_id}`;
+        costMap[key] = {
+          cost_price: parseFloat(row.cost_price) || 0,
+          category: row.category || 'inventario',
+        };
+      }
+
+      for (const p of shopifyProducts) {
+        let prodUnits = 0, prodRetail = 0, prodCost = 0;
+        let hasCost = false;
+        for (const v of (p.variants || [])) {
+          const qty = v.inventory_quantity || 0;
+          const price = parseFloat(v.price || '0');
+          const variantKey = `${p.id}_${v.id}`;
+          const productKey = `${p.id}`;
+          const cost = costMap[variantKey] || costMap[productKey];
+          const cat = cost?.category || 'inventario';
+          if (cat === 'inmovilizado') continue; // separar inmovilizado del stock vendible
+
+          prodUnits += qty;
+          prodRetail += price * qty;
+          if (cost?.cost_price) {
+            prodCost += cost.cost_price * qty;
+            hasCost = true;
+          }
+        }
+        stockUnits += prodUnits;
+        stockRetailValue += prodRetail;
+        stockCostValue += prodCost;
+        if (hasCost) stockProductsWithCost++;
+        else if (prodUnits > 0) stockProductsWithoutCost++;
+
+        if (prodUnits > 0) {
+          stockTopByValue.push({
+            title: p.title,
+            units: prodUnits,
+            retail: prodRetail,
+            cost: prodCost,
+            potentialProfit: prodRetail - prodCost,
+          });
+        }
+      }
+      stockTopByValue.sort((a, b) => b.retail - a.retail);
+    } catch (err) {
+      console.error('Stock valuation error:', err);
+    }
+
+    const stockPotentialProfit = stockRetailValue - stockCostValue;
+    const stockPotentialMargin = stockRetailValue > 0 ? (stockPotentialProfit / stockRetailValue) * 100 : 0;
 
     return NextResponse.json({
       income: {
@@ -298,9 +375,20 @@ export async function GET(request: NextRequest) {
       },
       profit,
       margin,
+      giftLoss,
       monthlyBreakdown,
       topProducts,
       orders: allOrders,
+      stockValuation: {
+        units: stockUnits,
+        retailValue: stockRetailValue,
+        costValue: stockCostValue,
+        potentialProfit: stockPotentialProfit,
+        potentialMargin: stockPotentialMargin,
+        productsWithCost: stockProductsWithCost,
+        productsWithoutCost: stockProductsWithoutCost,
+        topByValue: stockTopByValue.slice(0, 12),
+      },
       transactions: {
         ventas: ventasDetail,
         bankIncome: bankIncomeDetail,

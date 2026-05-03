@@ -29,6 +29,8 @@ export async function GET(request: NextRequest) {
       items: row.items || [],
       notes: row.notes,
       bankTransactionId: row.bank_transaction_id || null,
+      saleType: row.sale_type || 'venta',
+      costLoss: parseFloat(row.cost_loss || '0'),
     }));
 
     return NextResponse.json({ sales });
@@ -60,10 +62,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // Bulk insert (varias ventas a la vez — útil para importar CSV)
+    if (body.action === 'bulk_insert') {
+      const sales = body.sales as any[];
+      if (!sales?.length) {
+        return NextResponse.json({ error: 'sales requerido' }, { status: 400 });
+      }
+      const rows = sales.map((s: any, idx: number) => ({
+        id: s.id || `vp-${Date.now()}-${idx}`,
+        date: s.date || new Date().toISOString(),
+        customer_name: s.customerName,
+        payment_method: s.paymentMethod,
+        total_amount: s.totalAmount || 0,
+        items: s.items || [],
+        notes: s.notes || null,
+        sale_type: s.saleType || (s.paymentMethod === 'regalo' ? 'regalo' : 'venta'),
+        cost_loss: s.costLoss || 0,
+      }));
+      const { data, error } = await supabase
+        .from('ventas_presenciales')
+        .insert(rows)
+        .select();
+      if (error) throw error;
+      return NextResponse.json({ success: true, count: data?.length || 0, sales: data });
+    }
+
     // Create new sale (default action)
     const sale = body;
-    const id = `vp-${Date.now()}`;
+    const id = sale.id || `vp-${Date.now()}`;
     const now = new Date().toISOString();
+    const isRegalo = sale.paymentMethod === 'regalo' || sale.saleType === 'regalo';
 
     const { data, error } = await supabase
       .from('ventas_presenciales')
@@ -72,9 +100,11 @@ export async function POST(request: NextRequest) {
         date: sale.date || now,
         customer_name: sale.customerName,
         payment_method: sale.paymentMethod,
-        total_amount: sale.totalAmount,
+        total_amount: isRegalo ? 0 : sale.totalAmount,
         items: sale.items || [],
         notes: sale.notes || null,
+        sale_type: isRegalo ? 'regalo' : 'venta',
+        cost_loss: sale.costLoss || 0,
       })
       .select()
       .single();
@@ -90,6 +120,8 @@ export async function POST(request: NextRequest) {
       items: data.items || [],
       notes: data.notes,
       bankTransactionId: data.bank_transaction_id || null,
+      saleType: data.sale_type || 'venta',
+      costLoss: parseFloat(data.cost_loss || '0'),
     };
 
     return NextResponse.json({ sale: formatted });

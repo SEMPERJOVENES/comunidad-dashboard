@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Percent, ShoppingCart,
   Store, Landmark, Package, Loader2,
   BarChart3, Plus, Trash2, Truck, User, CreditCard, X, Check,
-  ChevronDown, ChevronUp, RotateCcw,
+  ChevronDown, ChevronUp, RotateCcw, Warehouse, Gift, Sparkles, Archive,
 } from 'lucide-react';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -37,6 +37,17 @@ interface TransactionDetail {
   concept?: string;
 }
 
+interface StockValuation {
+  units: number;
+  retailValue: number;
+  costValue: number;
+  potentialProfit: number;
+  potentialMargin: number;
+  productsWithCost: number;
+  productsWithoutCost: number;
+  topByValue: Array<{ title: string; units: number; retail: number; cost: number; potentialProfit: number }>;
+}
+
 interface SemperBrandData {
   income: {
     shopify: number;
@@ -59,6 +70,8 @@ interface SemperBrandData {
   };
   profit: number;
   margin: number;
+  giftLoss?: number;
+  stockValuation?: StockValuation;
   monthlyBreakdown: {
     month: string;
     shopify: number;
@@ -187,10 +200,12 @@ export default function SemperBrandPage() {
   const totalManualCosts = costsData?.total || 0;
   const stripeFees = data?.expenses.stripeFees || 0;
   const shopifyRefunds = data?.expenses.shopifyRefunds || 0;
-  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees + shopifyRefunds;
+  const giftLoss = data?.giftLoss || 0;
+  const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees + shopifyRefunds + giftLoss;
   const totalIncome = data?.income.total || 0;
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+  const stockVal = data?.stockValuation;
 
   const incomeBreakdown = useMemo(() => {
     if (!data) return [];
@@ -225,6 +240,12 @@ export default function SemperBrandPage() {
     // Stripe fees como categoría de gasto
     if (data.expenses.stripeFees > 0) {
       items.push({ key: 'stripe-fees', tag: '💳 Comisión Stripe', amount: data.expenses.stripeFees, transactions: data.transactions.stripeCharges.map(t => ({ date: t.date, description: t.description, amount: t.fee || 0 })) });
+    }
+    // Regalos (pérdida por coste producción)
+    if ((data.giftLoss || 0) > 0) {
+      const giftTxs = data.transactions.ventas.filter((v: any) => v.saleType === 'regalo' || v.paymentMethod === 'regalo')
+        .map((v: any) => ({ date: v.date, description: `🎁 ${v.description}`, amount: v.costLoss || 0 }));
+      items.push({ key: 'gift-loss', tag: '🎁 Regalos (coste prod.)', amount: data.giftLoss || 0, transactions: giftTxs });
     }
     if (costsData) {
       Object.entries(costsData.byType).forEach(([type, amount]) => {
@@ -317,6 +338,7 @@ export default function SemperBrandPage() {
                   {shopifyRefunds > 0 && <p>↩️ Devoluciones: {formatCurrency(shopifyRefunds)}</p>}
                   {data.expenses.total > 0 && <p>Banco: {formatCurrency(data.expenses.total)}</p>}
                   {stripeFees > 0 && <p>Comisión Stripe: {formatCurrency(stripeFees)}</p>}
+                  {giftLoss > 0 && <p>🎁 Regalos: {formatCurrency(giftLoss)}</p>}
                   {totalManualCosts > 0 && <p>Manuales: {formatCurrency(totalManualCosts)}</p>}
                 </div>
               </Card>
@@ -338,10 +360,110 @@ export default function SemperBrandPage() {
               <span>−</span>
               <span className="text-orange-600 font-semibold whitespace-nowrap">{formatCurrency(data.expenses.total)}</span>
               {stripeFees > 0 && (<><span>−</span><span className="text-purple-600 font-semibold whitespace-nowrap">{formatCurrency(stripeFees)} <span className="font-normal text-gray-400">Stripe</span></span></>)}
+              {giftLoss > 0 && (<><span>−</span><span className="text-amber-600 font-semibold whitespace-nowrap">{formatCurrency(giftLoss)} <span className="font-normal text-gray-400">regalos</span></span></>)}
               {totalManualCosts > 0 && (<><span>−</span><span className="text-red-600 font-semibold whitespace-nowrap">{formatCurrency(totalManualCosts)}</span></>)}
               <span>=</span>
               <span className={`font-bold whitespace-nowrap ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(netProfit)}</span>
             </div>
+
+            {/* === STOCK & INVERSIÓN === */}
+            {stockVal && stockVal.units > 0 && (
+              <Card className="!p-0 overflow-hidden border-l-4 border-l-indigo-500">
+                <div className="bg-gradient-to-r from-indigo-50 via-violet-50 to-white p-4 border-b border-indigo-100">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Warehouse size={16} className="text-indigo-600" />
+                      <span className="text-sm font-bold text-gray-900 uppercase tracking-wide">Stock & Inversión Inmovilizada</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{stockVal.units.toLocaleString('es-ES')} unidades</span>
+                      <span>·</span>
+                      <span>{stockVal.productsWithCost} productos con coste · {stockVal.productsWithoutCost} sin coste</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 divide-x divide-gray-100">
+                  <div className="p-4">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Archive size={12} className="text-orange-500" />
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">€ Invertidos</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-orange-700">{formatCurrency(stockVal.costValue)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Capital atrapado en stock</p>
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <DollarSign size={12} className="text-blue-500" />
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Ingreso Potencial</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-700">{formatCurrency(stockVal.retailValue)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Si se vendiera todo a PVP</p>
+                  </div>
+                  <div className="p-4 bg-emerald-50/50">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <TrendingUp size={12} className="text-emerald-500" />
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Beneficio Potencial</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-emerald-700">{formatCurrency(stockVal.potentialProfit)}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{stockVal.potentialMargin.toFixed(1)}% margen</p>
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Sparkles size={12} className="text-violet-500" />
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">ROI Stock</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-violet-700">
+                      {stockVal.costValue > 0
+                        ? `${((stockVal.potentialProfit / stockVal.costValue) * 100).toFixed(0)}%`
+                        : '—'}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Retorno sobre inversión</p>
+                  </div>
+                </div>
+                {stockVal.topByValue.length > 0 && (
+                  <div className="p-4 border-t border-gray-100">
+                    <p className="text-[11px] text-gray-500 uppercase tracking-wide font-semibold mb-3">Top productos por valor potencial</p>
+                    <div className="space-y-2">
+                      {stockVal.topByValue.slice(0, 6).map((p, i) => {
+                        const pct = stockVal.retailValue > 0 ? (p.retail / stockVal.retailValue) * 100 : 0;
+                        return (
+                          <div key={i} className="flex items-center gap-3">
+                            <span className="text-xs text-gray-400 w-5">#{i + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-xs font-medium text-gray-900 truncate">{p.title}</span>
+                                <div className="text-right ml-2">
+                                  <span className="text-xs font-bold text-blue-700">{formatCurrency(p.retail)}</span>
+                                  <span className="text-[10px] text-gray-400 ml-1">({p.units} uds)</span>
+                                </div>
+                              </div>
+                              <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                            {p.cost > 0 && (
+                              <span className="text-[10px] text-emerald-600 font-medium">+{formatCurrency(p.potentialProfit)}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* Gift loss banner si hay pérdida por regalos */}
+            {giftLoss > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+                <Gift size={18} className="text-amber-600 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900">Pérdida por regalos</p>
+                  <p className="text-xs text-amber-700">Coste de producción de unidades regaladas (no genera ingreso)</p>
+                </div>
+                <p className="text-lg font-bold text-amber-700">-{formatCurrency(giftLoss)}</p>
+              </div>
+            )}
 
             {/* Flujo de Comisiones Stripe */}
             {data.expenses.stripeGross > 0 && (
