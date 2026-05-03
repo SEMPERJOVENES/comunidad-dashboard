@@ -143,10 +143,22 @@ export async function GET(request: NextRequest) {
         fuzzy(m.name, c.customerName || '')
       );
 
-      // Bank txs del miembro (por nombre o member_name)
+      // Bank rules del miembro (matching explícito por patrón)
+      const memberRules = bankRules.filter((r: any) => r.member_id === m.id);
+
+      // Bank txs del miembro:
+      //  1) Por bank_rule explícita (pattern incluido en el concept)
+      //  2) Por fuzzy match (nombre+apellido del miembro en concept)
       const memberBankTxs = bankTxs.filter((tx: any) => {
         if (parseFloat(tx.amount) <= 0) return false;
+        const concept = (tx.concept || '').toLowerCase();
         const txName = (tx.member_name || '') + ' ' + (tx.concept || '');
+        // Regla bancaria explícita
+        for (const r of memberRules) {
+          const pattern = (r.pattern || '').toLowerCase();
+          if (pattern && concept.includes(pattern)) return true;
+        }
+        // Fuzzy estricto
         return fuzzy(m.name, txName) ||
           (m.apodo && fuzzy(m.apodo, txName));
       });
@@ -260,6 +272,12 @@ export async function GET(request: NextRequest) {
       const concept = (tx.concept || '').toLowerCase();
       // Excluir payouts agregados de Stripe (ya contabilizados vía Stripe API por miembro)
       if (concept.includes('stripe')) return false;
+      // 1) Coincide con alguna bank_rule explícita?
+      for (const r of bankRules) {
+        const pattern = (r.pattern || '').toLowerCase();
+        if (pattern && concept.includes(pattern)) return false;
+      }
+      // 2) Coincide con fuzzy de algún miembro?
       const txText = (tx.member_name || '') + ' ' + (tx.concept || '');
       const matched = result.some(r => fuzzy(r.name, txText) || (r.apodo && fuzzy(r.apodo, txText)));
       return !matched;
