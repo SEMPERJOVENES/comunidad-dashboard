@@ -363,25 +363,39 @@ export default function MiembrosPage() {
           </Card>
         </div>
 
-        {/* Add member form */}
+        {/* Add member form (mobile-friendly) */}
         {showAddForm && (
           <Card className="border-2 border-violet-200 bg-violet-50/30">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Añadir Miembro</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Añadir Miembro</h3>
+              <button onClick={() => setShowAddForm(false)} className="text-gray-400 hover:text-gray-600 p-1"><X size={18} /></button>
+            </div>
+            <div className="space-y-3">
               <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="Nombre completo" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <input type="text" value={newNickname} onChange={e => setNewNickname(e.target.value)}
-                placeholder="Apodo (opcional)" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <select value={newCommunity} onChange={e => setNewCommunity(e.target.value)}
-                className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500">
-                {communities.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                placeholder="Nombre completo *" className="w-full px-3 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="text" value={newNickname} onChange={e => setNewNickname(e.target.value)}
+                  placeholder="Apodo (opcional)" className="px-3 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <select value={newCommunity} onChange={e => setNewCommunity(e.target.value)}
+                  className="px-3 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white">
+                  {communities.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
               <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                placeholder="Email (opcional)" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              <button onClick={handleAdd} disabled={!newName.trim()}
-                className="px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors">
-                Guardar
-              </button>
+                placeholder="Email (opcional)" className="w-full px-3 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <div className="flex gap-2 flex-col sm:flex-row">
+                <button onClick={handleAdd} disabled={!newName.trim()}
+                  className="flex-1 px-4 py-3 bg-violet-600 text-white text-base font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors">
+                  Guardar
+                </button>
+                <button onClick={() => setShowAddForm(false)}
+                  className="sm:w-32 px-4 py-3 bg-gray-100 text-gray-700 text-base font-medium rounded-xl hover:bg-gray-200">
+                  Cancelar
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 text-center">
+                Para edición completa (apellidos, cumple, teléfono): <a href="/miembros/datos" className="text-violet-600 underline">/miembros/datos</a>
+              </p>
             </div>
           </Card>
         )}
