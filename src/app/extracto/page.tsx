@@ -584,6 +584,14 @@ export default function ExtractoPage() {
                                 </span>
                               );
                             }
+                            // Si los miembros aún no han cargado, mostrar spinner
+                            if (members.length === 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-gray-400 text-xs">
+                                  <Loader2 size={11} className="animate-spin" /> cargando
+                                </span>
+                              );
+                            }
                             const linked = findLinkedMember(tx);
                             if (linked) {
                               return (

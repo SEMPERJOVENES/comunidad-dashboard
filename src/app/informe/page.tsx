@@ -182,8 +182,8 @@ export default function InformePage() {
                 </div>
               </div>
 
-              {/* Grid de miembros — 2 columnas, formato compacto print-friendly */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Grid de miembros — 1 col en mobile, 2 en sm+ y print */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 print:grid-cols-2">
                 {list.sort((a: any, b: any) => b.totalPaid - a.totalPaid).map((m: any) => {
                   const paga = m.totalPaid > 0 || m.methods.stripe.subscriptionActive;
                   const method = paga ? (m.methods.stripe.subscriptionActive || m.methods.stripe.count > 0 ? 'stripe' : m.methodPrimary) : 'sin pagos';
@@ -203,36 +203,36 @@ export default function InformePage() {
                     >
                       <div className="flex items-start gap-2 mb-2">
                         {/* Avatar */}
-                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-xs font-bold" style={{ background: colors.gradient }}>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-white text-xs font-bold print:w-9 print:h-9" style={{ background: colors.gradient }}>
                           {m._isPair ? `${getInitials(m.apodo || m.name)[0]}↔${getInitials(m._partner.apodo || m._partner.name)[0]}` : getInitials(m.apodo || m.name)}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-gray-900 leading-tight truncate">
+                          <p className="text-sm sm:text-xs print:text-xs font-bold text-gray-900 leading-tight break-words">
                             {m._isPair ? `${m.apodo || m.name} ↔ ${m._partner.apodo || m._partner.name}` : (m.apodo || m.name)}
                           </p>
-                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                          <div className="flex items-center gap-1 flex-wrap mt-1">
                             {m.methods.stripe.subscriptionActive && (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0 bg-purple-100 text-purple-700 text-[8px] font-bold rounded">
-                                <Repeat size={7} /> SUB {m.methods.stripe.subscriptionAmount ? `${m.methods.stripe.subscriptionAmount}€` : ''}
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] print:text-[8px] font-bold rounded">
+                                <Repeat size={8} /> SUB {m.methods.stripe.subscriptionAmount ? `${m.methods.stripe.subscriptionAmount}€` : ''}
                               </span>
                             )}
                             {bday && (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0 bg-amber-100 text-amber-700 text-[8px] font-bold rounded">
-                                <Cake size={7} /> {bday.day} {MONTHS_FULL[bday.month - 1].slice(0, 3)}
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] print:text-[8px] font-bold rounded">
+                                <Cake size={8} /> {bday.day} {MONTHS_FULL[bday.month - 1].slice(0, 3)}
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="flex-shrink-0 text-right">
-                          <p className="text-sm font-bold" style={{ color: paga ? '#065f46' : '#991b1b' }}>
+                          <p className="text-base sm:text-sm print:text-sm font-bold whitespace-nowrap" style={{ color: paga ? '#065f46' : '#991b1b' }}>
                             {paga ? formatCurrency(m.totalPaid) : '—'}
                           </p>
-                          {paga && m.paymentCount > 0 && <p className="text-[8px] text-gray-500">{m.paymentCount} pagos</p>}
+                          {paga && m.paymentCount > 0 && <p className="text-[10px] print:text-[8px] text-gray-500 whitespace-nowrap">{m.paymentCount} pagos</p>}
                         </div>
                       </div>
 
                       {/* Tags 12 meses (verde si pagado, rojo si pasado sin pagar, gris futuro/actual sin pagar) */}
-                      <div className="flex gap-px">
+                      <div className="flex gap-0.5">
                         {Array.from({ length: 12 }, (_, i) => {
                           const mk = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
                           const monthPaid = paidMonths.has(mk);
@@ -244,7 +244,7 @@ export default function InformePage() {
                           else if (isPast) { bg = '#fecaca'; color = '#991b1b'; }
                           else if (isCurrent) { bg = '#fef3c7'; color = '#92400e'; }
                           return (
-                            <span key={i} className="flex-1 text-center text-[7px] font-bold py-0.5 rounded" style={{ background: bg, color }}>
+                            <span key={i} className="flex-1 text-center text-[9px] sm:text-[8px] print:text-[7px] font-bold py-1 print:py-0.5 rounded" style={{ background: bg, color }}>
                               {MONTH_LABELS_SHORT[i]}
                             </span>
                           );
