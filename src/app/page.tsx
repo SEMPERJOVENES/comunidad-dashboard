@@ -149,127 +149,33 @@ export default function DashboardPage() {
           </div>
         ) : data && analysis ? (
           <>
-            {/* ══════ RESUMEN GENERAL ══════ */}
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
-                      <BarChart3 size={18} className="text-violet-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-gray-900">Informe Económico</h2>
-                      <p className="text-xs text-gray-500">{periodLabel}</p>
-                    </div>
-                  </div>
-                  <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${data.financials.profit >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                    {data.financials.profit >= 0 ? '+' : ''}{formatCurrency(data.financials.profit)}
-                  </div>
+            {/* ══════ ACTIVOS ACTUALES (3 cards: Banco / Caja Brand / Stock) ══════ */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="bg-white rounded-2xl border-2 border-blue-200 px-5 py-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <Landmark size={14} className="text-blue-600" />
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Saldo Banco</p>
                 </div>
+                <p className="text-2xl sm:text-3xl font-bold text-blue-700">{formatCurrency(data.financials.bankBalance)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Última transacción registrada</p>
               </div>
-
-              {/* KPIs compactos */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-gray-100">
-                <div className="px-4 py-3 sm:px-5 sm:py-4">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <ArrowUpRight size={12} className="text-emerald-500" />
-                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Ingresos</p>
-                  </div>
-                  <p className="text-lg sm:text-xl font-bold text-emerald-600">{formatCurrency(data.financials.totalIncome)}</p>
+              <div className="bg-white rounded-2xl border-2 border-emerald-200 px-5 py-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <Wallet size={14} className="text-emerald-600" />
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Caja Brand (efectivo)</p>
                 </div>
-                <div className="px-4 py-3 sm:px-5 sm:py-4">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <ArrowDownRight size={12} className="text-red-500" />
-                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Gastos</p>
-                  </div>
-                  <p className="text-lg sm:text-xl font-bold text-red-600">{formatCurrency(data.financials.totalExpenses)}</p>
-                </div>
-                <div className="px-4 py-3 sm:px-5 sm:py-4">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Wallet size={12} className="text-gray-400" />
-                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Beneficio</p>
-                  </div>
-                  <p className={`text-lg sm:text-xl font-bold ${data.financials.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {formatCurrency(data.financials.profit)}
-                  </p>
-                </div>
-                <div className="px-4 py-3 sm:px-5 sm:py-4">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Landmark size={12} className="text-blue-500" />
-                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wide">Saldo Banco</p>
-                  </div>
-                  <p className="text-lg sm:text-xl font-bold text-blue-600">{formatCurrency(data.financials.bankBalance)}</p>
-                </div>
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{formatCurrency((data.financials as any).cajaBrandEfectivo || 0)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Ventas presenciales en efectivo · pendiente depositar</p>
               </div>
-
-              {/* Distribución visual */}
-              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Distribución de ingresos</p>
-                <div className="h-3 rounded-full overflow-hidden flex bg-gray-200">
-                  {analysis.areas.map(a => {
-                    const cfg = MACRO_CONFIG[a.key];
-                    if (a.pctIncome < 1) return null;
-                    return (
-                      <div key={a.key} className={`${cfg.barFill} transition-all duration-500`} style={{ width: `${a.pctIncome}%` }} title={`${cfg.label}: ${a.pctIncome.toFixed(1)}%`} />
-                    );
-                  })}
+              <div className="bg-white rounded-2xl border-2 border-indigo-200 px-5 py-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <Package size={14} className="text-indigo-600" />
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock Brand (PVP)</p>
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                  {analysis.areas.map(a => {
-                    const cfg = MACRO_CONFIG[a.key];
-                    return (
-                      <div key={a.key} className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                        <div className={`w-2 h-2 rounded-full ${cfg.barFill}`} />
-                        <span className="font-medium">{cfg.label}</span>
-                        <span className="text-gray-400">{a.pctIncome.toFixed(0)}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <p className="text-2xl sm:text-3xl font-bold text-indigo-700">{formatCurrency(data.shopify.stockValue)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Valor potencial · Coste {formatCurrency(data.shopify.stockCost)}</p>
               </div>
             </div>
-
-            {/* ══════ STRIPE + STOCK ══════ */}
-            {(data.stripe.available > 0 || data.stripe.pending > 0 || data.shopify.stockValue > 0) && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {data.stripe.available > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <CreditCard size={11} className="text-violet-500" />
-                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stripe Disp.</p>
-                    </div>
-                    <p className="text-base font-bold text-violet-600">{formatCurrency(data.stripe.available)}</p>
-                  </div>
-                )}
-                {data.stripe.pending > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <CreditCard size={11} className="text-amber-500" />
-                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stripe Pend.</p>
-                    </div>
-                    <p className="text-base font-bold text-amber-600">{formatCurrency(data.stripe.pending)}</p>
-                  </div>
-                )}
-                {data.shopify.stockValue > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Package size={11} className="text-indigo-500" />
-                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stock Valor</p>
-                    </div>
-                    <p className="text-base font-bold text-indigo-600">{formatCurrency(data.shopify.stockValue)}</p>
-                  </div>
-                )}
-                {data.shopify.stockCost > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Package size={11} className="text-gray-400" />
-                      <p className="text-[10px] font-medium text-gray-400 uppercase">Stock Coste</p>
-                    </div>
-                    <p className="text-base font-bold text-gray-600">{formatCurrency(data.shopify.stockCost)}</p>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* ══════ P&L POR ÁREA ══════ */}
             <div className="space-y-4">
@@ -317,6 +223,31 @@ export default function DashboardPage() {
                             <span className="text-xs font-semibold text-red-500 w-16 text-right flex-shrink-0">{formatCurrency(group.expenses)}</span>
                           </div>
                         </div>
+
+                        {/* Top categorías VISIBLES sin click — mini desglose */}
+                        {group.tags.length > 0 && !isExpanded && (
+                          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Top categorías</p>
+                            {group.tags
+                              .sort((a, b) => Math.max(b.income, b.expenses) - Math.max(a.income, a.expenses))
+                              .slice(0, 4)
+                              .map(t => (
+                                <div key={t.tag} className="flex items-center justify-between text-[11px] py-0.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${TAG_COLORS[t.tag] || 'bg-gray-400'}`} />
+                                    <span className="text-gray-700 truncate">{t.tag}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {t.income > 0 && <span className="text-emerald-600 font-semibold">+{formatCurrency(t.income)}</span>}
+                                    {t.expenses > 0 && <span className="text-red-500 font-semibold">-{formatCurrency(t.expenses)}</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            {group.tags.length > 4 && (
+                              <p className="text-[10px] text-gray-400 italic pt-1">+ {group.tags.length - 4} categorías más · click para ver todo</p>
+                            )}
+                          </div>
+                        )}
                       </button>
                       {isExpanded && group.tags.length > 0 && (
                         <div className="px-4 sm:px-5 pb-4 border-t border-gray-100 space-y-4">

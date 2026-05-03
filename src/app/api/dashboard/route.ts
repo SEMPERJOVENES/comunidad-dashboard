@@ -65,6 +65,15 @@ export async function GET(request: NextRequest) {
       .limit(1);
     const bankBalance = latestBankTx && latestBankTx.length > 0 ? parseFloat(latestBankTx[0].balance || '0') : 0;
 
+    // Caja Brand (efectivo de ventas presenciales — desde inicio, no por rango)
+    const { data: efectivoVentas } = await supabase
+      .from('ventas_presenciales')
+      .select('total_amount, sale_type, payment_method')
+      .eq('payment_method', 'efectivo');
+    const cajaBrandEfectivo = (efectivoVentas || [])
+      .filter((v: any) => v.sale_type !== 'regalo')
+      .reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+
     // === GROUP BY MACRO CATEGORIES (dynamic from tag_categories table) ===
     const tagMacroMap: Record<string, string> = {};
     for (const tc of (tagCatsResult.data || [])) {
@@ -193,6 +202,7 @@ export async function GET(request: NextRequest) {
         totalExpenses: totalBankExpenses,
         profit: totalBankIncome - totalBankExpenses,
         bankBalance,
+        cajaBrandEfectivo,
       },
       // Macro groups
       macroGroups: {
