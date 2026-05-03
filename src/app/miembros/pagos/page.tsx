@@ -59,21 +59,34 @@ export default function ConciliacionMiembrosPage() {
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'amount'>('amount');
+  const [pairingFor, setPairingFor] = useState<string | null>(null);
+  const [pairSearch, setPairSearch] = useState('');
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({
-          start: selectedRange.startDate.toISOString(),
-          end: selectedRange.endDate.toISOString(),
-        });
-        const res = await fetch(`/api/miembros-pagos?${params}`);
-        if (res.ok) setData(await res.json());
-      } catch {} finally { setLoading(false); }
-    }
-    load();
-  }, [selectedRange]);
+  async function load() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        start: selectedRange.startDate.toISOString(),
+        end: selectedRange.endDate.toISOString(),
+      });
+      const res = await fetch(`/api/miembros-pagos?${params}`);
+      if (res.ok) setData(await res.json());
+    } catch {} finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, [selectedRange]);
+
+  async function handlePair(memberA: string, memberB: string) {
+    const res = await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pair_members', memberA, memberB }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert('Error al vincular: ' + (e.error || res.statusText)); return; }
+    setPairingFor(null); setPairSearch('');
+    await load();
+  }
+  async function handleUnpair(memberId: string) {
+    if (!confirm('¿Desvincular esta pareja?')) return;
+    const res = await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpair_members', memberId }) });
+    if (!res.ok) { alert('Error al desvincular'); return; }
+    await load();
+  }
 
   // Comunidades dinámicas (basadas en miembros existentes)
   const allCommunities = useMemo(() => {
@@ -397,13 +410,27 @@ export default function ConciliacionMiembrosPage() {
                       )}
 
                       {/* Pareja */}
-                      {pair && (
+                      {pair ? (
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-violet-50 border border-violet-100 rounded-lg">
                           <Link2 size={11} className="text-violet-500 flex-shrink-0" />
-                          <p className="text-[11px] text-violet-700 truncate">
+                          <p className="text-[11px] text-violet-700 truncate flex-1">
                             <span className="text-violet-400">↔</span> {pair.apodo || pair.name}
                           </p>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleUnpair(m.id); }}
+                            className="text-violet-400 hover:text-rose-500 flex-shrink-0"
+                            title="Desvincular"
+                          >
+                            <X size={11} />
+                          </button>
                         </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPairingFor(m.id); setPairSearch(''); }}
+                          className="w-full flex items-center justify-center gap-1.5 px-2 py-1 bg-gray-50 hover:bg-violet-50 border border-dashed border-gray-200 hover:border-violet-300 rounded-lg text-[11px] text-gray-500 hover:text-violet-600 transition-colors"
+                        >
+                          <Link2 size={11} /> Vincular pareja
+                        </button>
                       )}
 
                       {/* Mini badges desglose métodos si hay más de uno */}
@@ -467,6 +494,83 @@ export default function ConciliacionMiembrosPage() {
               💡 Cruzado con Stripe API + bank_transactions tag Diezmo · Click en una tarjeta para ver el histórico completo
             </p>
           </>
+        )}
+
+        {/* Modal vincular pareja */}
+        {pairingFor && data?.members && (
+          <div
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => { setPairingFor(null); setPairSearch(''); }}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Link2 size={18} className="text-violet-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Vincular pareja</h3>
+                    <p className="text-[11px] text-gray-500">
+                      {(() => { const m = data.members.find((x: any) => x.id === pairingFor); return m ? (m.apodo || m.name) : ''; })()}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => { setPairingFor(null); setPairSearch(''); }} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-3 border-b border-gray-100">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    autoFocus
+                    value={pairSearch}
+                    onChange={(e) => setPairSearch(e.target.value)}
+                    placeholder="Buscar miembro..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {data.members
+                  .filter((m: any) => m.id !== pairingFor && !m.pairedWith)
+                  .filter((m: any) => {
+                    if (!pairSearch) return true;
+                    const s = pairSearch.toLowerCase();
+                    return m.name.toLowerCase().includes(s) || (m.apodo || '').toLowerCase().includes(s);
+                  })
+                  .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
+                  .map((candidate: any) => {
+                    const cs = COMMUNITY_STYLES[candidate.community] || DEFAULT_COMMUNITY_STYLE;
+                    return (
+                      <button
+                        key={candidate.id}
+                        onClick={() => handlePair(pairingFor, candidate.id)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-violet-50 border-b border-gray-50 transition-colors text-left"
+                      >
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${cs.soft} ${cs.text} font-bold text-sm flex-shrink-0`}>
+                          {getInitials(candidate.apodo || candidate.name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{candidate.apodo || candidate.name}</p>
+                          <p className="text-[11px] text-gray-400 truncate">{candidate.community}</p>
+                        </div>
+                        <Link2 size={14} className="text-violet-400" />
+                      </button>
+                    );
+                  })}
+                {data.members.filter((m: any) => m.id !== pairingFor && !m.pairedWith).length === 0 && (
+                  <p className="p-8 text-center text-sm text-gray-400">No hay miembros sin pareja disponibles</p>
+                )}
+              </div>
+              <div className="p-3 border-t border-gray-100 bg-gray-50">
+                <p className="text-[10px] text-gray-500">
+                  La vinculación es bidireccional. Cuando una persona paga, se marca como pago para los dos.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </DashboardLayout>

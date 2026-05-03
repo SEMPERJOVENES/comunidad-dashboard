@@ -636,8 +636,35 @@ export async function POST(request: import('next/server').NextRequest) {
       if (body.email !== undefined) updates.email = body.email;
       if (body.isActive !== undefined) updates.is_active = body.isActive;
       if (body.paymentFrequency !== undefined) updates.payment_frequency = body.paymentFrequency;
+      if (body.pairedWith !== undefined) updates.paired_with_member_id = body.pairedWith || null;
       const { error } = await supabase.from('diezmos_members').update(updates).eq('id', body.id);
       if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'pair_members') {
+      // Vincular dos miembros bidireccionalmente
+      const { memberA, memberB } = body;
+      if (!memberA || !memberB || memberA === memberB) {
+        return NextResponse.json({ error: 'Se requieren dos miembros distintos' }, { status: 400 });
+      }
+      const { error: e1 } = await supabase.from('diezmos_members').update({ paired_with_member_id: memberB }).eq('id', memberA);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from('diezmos_members').update({ paired_with_member_id: memberA }).eq('id', memberB);
+      if (e2) throw e2;
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === 'unpair_members') {
+      // Desvincular bidireccionalmente
+      const { memberId } = body;
+      const { data: m } = await supabase.from('diezmos_members').select('paired_with_member_id').eq('id', memberId).single();
+      const partnerId = m?.paired_with_member_id;
+      const { error: e1 } = await supabase.from('diezmos_members').update({ paired_with_member_id: null }).eq('id', memberId);
+      if (e1) throw e1;
+      if (partnerId) {
+        await supabase.from('diezmos_members').update({ paired_with_member_id: null }).eq('id', partnerId);
+      }
       return NextResponse.json({ success: true });
     }
 
