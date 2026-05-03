@@ -360,21 +360,6 @@ export default function InventarioPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <Card>
-                <p className="text-xs text-gray-500 font-medium">Stock Total</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{totalStock.toLocaleString('es-ES')}</p>
-              </Card>
-              <Card>
-                <p className="text-xs text-gray-500 font-medium">Stock Bajo (≤5)</p>
-                <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-1">{lowStock}</p>
-              </Card>
-              <Card>
-                <p className="text-xs text-gray-500 font-medium">Agotados</p>
-                <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">{outOfStock}</p>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <Card>
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign size={14} className="text-blue-500" />
                   <p className="text-xs text-gray-500 font-medium">Valor teórico stock (PVP)</p>
@@ -442,16 +427,17 @@ export default function InventarioPage() {
             </div>
           ) : (
             <div className="overflow-x-auto -mx-4 sm:-mx-6">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[1000px]">
                 <thead>
                   <tr className="border-b border-gray-100">
                     <th className="w-8"></th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Producto</th>
-                    <th className="text-center text-xs font-medium text-gray-500 px-3 py-3">Variants</th>
                     <th className="text-center text-xs font-medium text-gray-500 px-3 py-3">Stock</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3">PVP</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3">Coste</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3">Margen</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3">Coste/u</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3">PVP/u</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3 bg-orange-50/50">€ Invertido</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3 bg-blue-50/50">Pot. ingreso</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-3 py-3 bg-emerald-50/50">Beneficio pot.</th>
                     <th className="text-center text-xs font-medium text-gray-500 px-3 py-3">Acciones</th>
                   </tr>
                 </thead>
@@ -497,12 +483,6 @@ export default function InventarioPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-center text-xs text-gray-500">
-                            {product.variants?.length || 0}
-                            {hasOnlyDefault && (
-                              <Badge variant="warning" className="ml-1 text-[9px]">sin tallas</Badge>
-                            )}
-                          </td>
                           <td className="px-3 py-3 text-center">
                             <span className={`text-sm font-semibold px-3 py-1 rounded-lg ${
                               totalInv <= 0 ? 'text-red-600 bg-red-50' :
@@ -511,9 +491,9 @@ export default function InventarioPage() {
                             }`}>
                               {totalInv}
                             </span>
-                          </td>
-                          <td className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
-                            {formatCurrency(price)}
+                            {hasOnlyDefault && (
+                              <Badge variant="warning" className="ml-1 text-[9px]">sin tallas</Badge>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-right">
                             <CostInlineEditor
@@ -536,17 +516,29 @@ export default function InventarioPage() {
                               onSave={() => handleSaveVariantCost(product, null)}
                             />
                           </td>
-                          <td className="px-3 py-3 text-right">
+                          <td className="px-3 py-3 text-right text-sm font-semibold text-gray-700">
+                            {formatCurrency(price)}
+                          </td>
+                          {/* € Invertido = stock × coste */}
+                          <td className="px-3 py-3 text-right bg-orange-50/30">
+                            {costPrice > 0 ? (
+                              <span className="text-sm font-semibold text-orange-700">{formatCurrency(costPrice * totalInv)}</span>
+                            ) : <span className="text-xs text-gray-300">—</span>}
+                          </td>
+                          {/* Pot. ingreso = stock × PVP */}
+                          <td className="px-3 py-3 text-right bg-blue-50/30">
+                            <span className="text-sm font-semibold text-blue-700">{formatCurrency(price * totalInv)}</span>
+                          </td>
+                          {/* Beneficio potencial = (PVP - coste) × stock */}
+                          <td className="px-3 py-3 text-right bg-emerald-50/30">
                             {costPrice > 0 ? (
                               <div>
-                                <span className={`text-sm font-semibold ${margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {formatCurrency(margin)}
+                                <span className={`text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                  {formatCurrency(margin * totalInv)}
                                 </span>
-                                <span className="block text-[10px] text-gray-400">{marginPct.toFixed(0)}%</span>
+                                <span className="block text-[10px] text-gray-400">{marginPct.toFixed(0)}% margen</span>
                               </div>
-                            ) : (
-                              <span className="text-sm text-gray-300">—</span>
-                            )}
+                            ) : <span className="text-xs text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-3 text-center">
                             {hasOnlyDefault && (
@@ -583,7 +575,6 @@ export default function InventarioPage() {
                                   {variant.sku && <span className="ml-2 text-[10px] text-gray-400">SKU:{variant.sku}</span>}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-center text-xs text-gray-400">—</td>
                               <td className="px-3 py-2">
                                 {editingThisStock ? (
                                   <div className="flex items-center justify-center gap-1">
@@ -619,7 +610,6 @@ export default function InventarioPage() {
                                   </button>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-right text-xs text-gray-500">{formatCurrency(vPrice)}</td>
                               <td className="px-3 py-2 text-right">
                                 <CostInlineEditor
                                   variant={variant}
@@ -642,11 +632,18 @@ export default function InventarioPage() {
                                   onSave={() => handleSaveVariantCost(product, variant)}
                                 />
                               </td>
-                              <td className="px-3 py-2 text-right">
+                              <td className="px-3 py-2 text-right text-xs text-gray-500">{formatCurrency(vPrice)}</td>
+                              <td className="px-3 py-2 text-right bg-orange-50/20">
+                                {vCostPrice > 0 ? <span className="text-xs font-semibold text-orange-700">{formatCurrency(vCostPrice * vQty)}</span> : <span className="text-xs text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-right bg-blue-50/20">
+                                <span className="text-xs font-semibold text-blue-700">{formatCurrency(vPrice * vQty)}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right bg-emerald-50/20">
                                 {vCostPrice > 0 ? (
                                   <div>
-                                    <span className={`text-xs font-semibold ${vMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {formatCurrency(vMargin)}
+                                    <span className={`text-xs font-semibold ${vMargin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                      {formatCurrency(vMargin * vQty)}
                                     </span>
                                     <span className="block text-[9px] text-gray-400">{vMarginPct.toFixed(0)}%</span>
                                   </div>
@@ -661,7 +658,7 @@ export default function InventarioPage() {
                   })}
                   {filtered.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-sm text-gray-400">
+                      <td colSpan={9} className="text-center py-8 text-sm text-gray-400">
                         Sin productos{categoryFilter !== 'all' ? ` en categoría "${categoryFilter}"` : ''}
                       </td>
                     </tr>

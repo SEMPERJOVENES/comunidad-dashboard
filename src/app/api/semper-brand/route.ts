@@ -238,18 +238,33 @@ export async function GET(request: NextRequest) {
       }));
 
     // 5. Top productos — combinar Shopify + ventas presenciales, restando refunds
+    // Clave normalizada para agrupar duplicados (ej. "Camiseta GOD LUCK" y "Camiseta GOD Luck" → mismo producto)
+    function normalizeProductKey(title: string): string {
+      return (title || '')
+        .toLowerCase()
+        .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e').replace(/[íìï]/g, 'i')
+        .replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n')
+        .replace(/^camiseta\s+/, '').replace(/^libro\s+/, '')
+        .replace(/^sudadera\s+/, '').replace(/^botella\s+/, '')
+        .replace(/^camiseta\s*"/, '').replace(/"$/, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+
     const productMap = new Map<string, { title: string; revenue: number; units: number; source: { shopify: number; presencial: number } }>();
 
     function ensureProduct(key: string, title: string) {
       if (!productMap.has(key)) {
         productMap.set(key, { title, revenue: 0, units: 0, source: { shopify: 0, presencial: 0 } });
+      } else {
+        // Si ya existe pero el title actual es más "limpio" (sin "Camiseta "), mantener el más corto/canónico
+        const cur = productMap.get(key)!;
+        if (title.length < cur.title.length) cur.title = title;
       }
       return productMap.get(key)!;
     }
 
     // Shopify orders (TODAS, no solo pagadas — restamos refunds después)
     for (const o of orders) {
-      // Mapa de items refundados por line_item_id
       const refundedByLineItem = new Map<number, number>();
       for (const r of (o.refunds || [])) {
         for (const rli of (r.refund_line_items || [])) {
@@ -258,7 +273,7 @@ export async function GET(request: NextRequest) {
         }
       }
       for (const item of (o.line_items || [])) {
-        const key = item.product_id?.toString() || item.title;
+        const key = normalizeProductKey(item.title);
         const refundedQty = refundedByLineItem.get(item.id) || 0;
         const netQty = (item.quantity || 1) - refundedQty;
         if (netQty <= 0) continue;
@@ -273,10 +288,10 @@ export async function GET(request: NextRequest) {
     // Ventas presenciales — items
     for (const v of (ventas || [])) {
       const saleType = v.sale_type || (v.payment_method === 'regalo' ? 'regalo' : 'venta');
-      if (saleType === 'regalo') continue; // regalos no son ingresos
+      if (saleType === 'regalo') continue;
       for (const item of (v.items || [])) {
         const title = item.productTitle || item.title || 'Sin título';
-        const key = `pres_${title}`;
+        const key = normalizeProductKey(title);
         const p = ensureProduct(key, title);
         const qty = item.quantity || 1;
         const revenue = (item.unitPrice || 0) * qty;

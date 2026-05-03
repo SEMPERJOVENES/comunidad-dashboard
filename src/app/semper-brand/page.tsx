@@ -465,6 +465,81 @@ export default function SemperBrandPage() {
               </div>
             )}
 
+            {/* SECCIÓN: Movimientos bancarios Brand (DETALLE) */}
+            <Card className="!p-0 overflow-hidden border-l-4 border-l-amber-500">
+              <div className="bg-gradient-to-r from-amber-50 to-white p-4 border-b border-amber-100">
+                <div className="flex items-center gap-2">
+                  <Landmark size={16} className="text-amber-600" />
+                  <span className="text-sm font-bold text-gray-900 uppercase tracking-wide">Movimientos bancarios — Brand</span>
+                  <span className="ml-auto text-[11px] text-gray-500">Sólo cuentan transacciones del banco etiquetadas como Brand · NO se duplican con Shopify+Presencial arriba</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 divide-x divide-gray-100">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-emerald-700 uppercase">Ingresos al banco (Brand)</p>
+                    <p className="text-lg font-bold text-emerald-700">{formatCurrency(data.income.totalBankIncome)}</p>
+                  </div>
+                  {Object.entries(data.income.bankIncome).length > 0 ? (
+                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                      {Object.entries(data.income.bankIncome).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([tag, amt]) => {
+                        const txs = data.transactions.bankIncome[tag] || [];
+                        return (
+                          <details key={tag} className="border border-emerald-100 rounded-lg overflow-hidden">
+                            <summary className="px-3 py-2 cursor-pointer hover:bg-emerald-50 flex items-center justify-between text-xs">
+                              <span className="font-medium text-gray-700">{tag} <span className="text-gray-400">({txs.length})</span></span>
+                              <span className="font-bold text-emerald-700">{formatCurrency(amt as number)}</span>
+                            </summary>
+                            <div className="px-3 py-2 bg-gray-50/50 max-h-48 overflow-y-auto space-y-0.5">
+                              {txs.slice(0, 30).map((tx, i) => (
+                                <div key={i} className="flex justify-between text-[10px] py-0.5">
+                                  <span className="text-gray-500 truncate max-w-[260px]">{new Date(tx.date).toLocaleDateString('es-ES')} · {tx.concept || tx.description}</span>
+                                  <span className="font-medium">{formatCurrency(tx.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="text-xs text-gray-400">Sin movimientos brand</p>}
+                </div>
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-rose-700 uppercase">Gastos del banco (Brand)</p>
+                    <p className="text-lg font-bold text-rose-700">-{formatCurrency(data.expenses.total)}</p>
+                  </div>
+                  {Object.entries(data.expenses.byTag).length > 0 ? (
+                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                      {Object.entries(data.expenses.byTag).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([tag, amt]) => {
+                        const txs = data.transactions.bankExpense[tag] || [];
+                        return (
+                          <details key={tag} className="border border-rose-100 rounded-lg overflow-hidden">
+                            <summary className="px-3 py-2 cursor-pointer hover:bg-rose-50 flex items-center justify-between text-xs">
+                              <span className="font-medium text-gray-700">{tag} <span className="text-gray-400">({txs.length})</span></span>
+                              <span className="font-bold text-rose-700">-{formatCurrency(amt as number)}</span>
+                            </summary>
+                            <div className="px-3 py-2 bg-gray-50/50 max-h-48 overflow-y-auto space-y-0.5">
+                              {txs.slice(0, 30).map((tx, i) => (
+                                <div key={i} className="flex justify-between text-[10px] py-0.5">
+                                  <span className="text-gray-500 truncate max-w-[260px]">{new Date(tx.date).toLocaleDateString('es-ES')} · {tx.concept || tx.description}</span>
+                                  <span className="font-medium">-{formatCurrency(tx.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="text-xs text-gray-400">Sin gastos brand</p>}
+                </div>
+              </div>
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-600 flex items-center justify-between">
+                <span>Neto banco brand: <strong className={`${(data.income.totalBankIncome - data.expenses.total) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatCurrency(data.income.totalBankIncome - data.expenses.total)}</strong></span>
+                <span className="text-gray-400">Verificar la cifra de inversión Rockwear (lote BAC 26 ≈ 1.816 €) aparece en gastos arriba</span>
+              </div>
+            </Card>
+
             {/* Flujo de Comisiones Stripe */}
             {data.expenses.stripeGross > 0 && (
               <div className="bg-gradient-to-r from-purple-50 to-white rounded-xl border border-purple-100 p-4">
