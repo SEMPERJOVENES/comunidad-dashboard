@@ -33,22 +33,34 @@ function getSurnames(name: string): string[] {
     .filter(w => !COMMON_NAMES.has(w));
 }
 
+function getFirstName(name: string): string | null {
+  // Primer token significativo (el nombre de pila, aunque sea com\u00fan)
+  const tokens = normalize(name).split(' ').filter(w => w.length > 2);
+  return tokens.length > 0 ? tokens[0] : null;
+}
+
 /**
- * Match MUY estricto: exige que TODOS los apellidos no-comunes del miembro
- * est\u00e9n presentes en el otro texto. Esto evita confundir
- *  "Menc\u00eda P\u00e9rez de Leza" con "Garv\u00eda P\u00e9rez Gonzalo" (ambos comparten "p\u00e9rez"
- *  pero solo Menc\u00eda tiene "leza").
+ * Match MUY estricto:
+ *  - Si tiene 2+ apellidos no comunes: exigir TODOS los apellidos.
+ *  - Si tiene 1 apellido no com\u00fan: exigir APELLIDO + NOMBRE DE PILA (aunque el
+ *    nombre sea com\u00fan). Esto distingue Patricia Hidalgo de Blanca Hidalgo (ambas
+ *    son hermanas con apellido "Hidalgo"), o Paula S\u00e1nchez de Agust\u00edn S\u00e1nchez.
+ *  - Sin apellidos no comunes: exige nombre completo contenido.
  */
 function fuzzyNameMatch(memberName: string, candidateText: string): boolean {
   if (!memberName || !candidateText) return false;
   const memberSurnames = getSurnames(memberName);
   const candidateTokens = new Set(normalize(candidateText).split(' ').filter(w => w.length > 2));
 
-  if (memberSurnames.length >= 1) {
-    // TODOS los apellidos del miembro deben estar en el texto candidato
+  if (memberSurnames.length >= 2) {
     return memberSurnames.every(s => candidateTokens.has(s));
   }
-  // Sin apellidos: exige nombre completo contenido
+  if (memberSurnames.length === 1) {
+    const firstName = getFirstName(memberName);
+    if (!firstName) return false;
+    // Exigir apellido + nombre de pila simult\u00e1neamente
+    return candidateTokens.has(memberSurnames[0]) && candidateTokens.has(firstName);
+  }
   const fullNorm = normalize(memberName);
   return normalize(candidateText).includes(fullNorm);
 }

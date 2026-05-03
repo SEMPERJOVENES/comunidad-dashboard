@@ -88,21 +88,30 @@ export async function GET(request: NextRequest) {
         .filter(w => !COMMON_NAMES.has(w));
     }
 
+    function getFirstName(name: string): string | null {
+      const tokens = normalize(name).split(' ').filter(w => w.length > 2);
+      return tokens.length > 0 ? tokens[0] : null;
+    }
+
     /**
-     * Match MUY estricto: TODOS los apellidos no-comunes del miembro deben
-     * estar en el concepto. Evita confundir Mencía Pérez de Leza con
-     * Garvía Pérez Gonzalo.
+     * Match MUY estricto:
+     *  - 2+ apellidos no-comunes: TODOS deben estar.
+     *  - 1 apellido: APELLIDO + NOMBRE DE PILA (distingue hermanos: Patricia/Blanca Hidalgo).
+     *  - 0 apellidos: nombre completo contenido.
      */
     function fuzzy(memberName: string, conceptText: string): boolean {
       if (!memberName || !conceptText) return false;
       const memberSurnames = getSurnames(memberName);
       const conceptTokens = new Set(normalize(conceptText).split(' ').filter(w => w.length > 2));
 
-      if (memberSurnames.length >= 1) {
-        // TODOS los apellidos deben estar
+      if (memberSurnames.length >= 2) {
         return memberSurnames.every(s => conceptTokens.has(s));
       }
-
+      if (memberSurnames.length === 1) {
+        const firstName = getFirstName(memberName);
+        if (!firstName) return false;
+        return conceptTokens.has(memberSurnames[0]) && conceptTokens.has(firstName);
+      }
       const fullNorm = normalize(memberName);
       const conceptNorm = normalize(conceptText);
       return conceptNorm.includes(fullNorm);
@@ -215,6 +224,58 @@ export async function GET(request: NextRequest) {
         history: allEntries,
       };
     });
+
+    // ── SPLIT 50/50 entre parejas vinculadas ────────────────────────
+    // Si Salvador paga 50€ y está vinculado con Patricia, ambos quedan con 25€
+    const splitDone = new Set<string>();
+    const resultById: Record<string, any> = {};
+    for (const r of result) resultById[r.id] = r;
+    for (const m of result) {
+      if (!m.pairedWith || !resultById[m.pairedWith]) continue;
+      const pairKey = [m.id, m.pairedWith].sort().join('|');
+      if (splitDone.has(pairKey)) continue;
+      splitDone.add(pairKey);
+      const partner = resultById[m.pairedWith];
+
+      // Sumar y repartir totales
+      const combinedTotal = m.totalPaid + partner.totalPaid;
+      const half = combinedTotal / 2;
+      m.totalPaid = half;
+      partner.totalPaid = half;
+
+      // Repartir methods totales
+      for (const method of ['stripe', 'bizum', 'transferencia'] as const) {
+        const sumTotal = (m.methods[method].total || 0) + (partner.methods[method].total || 0);
+        const sumCount = (m.methods[method].count || 0) + (partner.methods[method].count || 0);
+        m.methods[method].total = sumTotal / 2;
+        partner.methods[method].total = sumTotal / 2;
+        m.methods[method].count = sumCount;
+        partner.methods[method].count = sumCount;
+      }
+
+      // Fusionar histories (cada uno ve los pagos de ambos con amount/2)
+      const mergedHistory = [...m.history, ...partner.history]
+        .map(h => ({ ...h, amount: h.amount / 2, _splitPair: true }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      m.history = mergedHistory;
+      partner.history = mergedHistory.slice();
+
+      // El partner hereda Stripe sub status si no la tenía
+      if (m.methods.stripe.subscriptionActive && !partner.methods.stripe.subscriptionActive) {
+        partner.methods.stripe.subscriptionActive = true;
+        partner.methods.stripe.subscriptionAmount = (m.methods.stripe.subscriptionAmount || 0) / 2;
+        partner.methods.stripe.subscriptionInterval = m.methods.stripe.subscriptionInterval;
+        m.methods.stripe.subscriptionAmount = (m.methods.stripe.subscriptionAmount || 0) / 2;
+      } else if (partner.methods.stripe.subscriptionActive && !m.methods.stripe.subscriptionActive) {
+        m.methods.stripe.subscriptionActive = true;
+        m.methods.stripe.subscriptionAmount = (partner.methods.stripe.subscriptionAmount || 0) / 2;
+        m.methods.stripe.subscriptionInterval = partner.methods.stripe.subscriptionInterval;
+        partner.methods.stripe.subscriptionAmount = (partner.methods.stripe.subscriptionAmount || 0) / 2;
+      }
+
+      m.paymentCount = mergedHistory.length;
+      partner.paymentCount = mergedHistory.length;
+    }
 
     // Agregados por comunidad
     const byCommunity = new Map<string, { members: number; totalPaid: number; paying: number }>();

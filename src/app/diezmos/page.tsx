@@ -232,10 +232,19 @@ export default function ConciliacionMiembrosPage() {
               <p className="text-xs sm:text-sm text-gray-500 truncate">Quién paga, cómo y cuánto · banco + Stripe</p>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex gap-2 flex-shrink-0 flex-wrap">
             <a href="/miembros" className="text-xs px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium whitespace-nowrap">← Miembros</a>
-            <a href="/informe" className="text-xs px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-bold flex items-center gap-1.5 whitespace-nowrap">
-              📄 PDF
+            <a
+              href={`/informe?type=diezmos&start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
+              className="text-xs px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-bold flex items-center gap-1.5 whitespace-nowrap"
+            >
+              📄 PDF Diezmos
+            </a>
+            <a
+              href={`/informe?type=completo&start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
+              className="text-xs px-3 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-800 font-bold flex items-center gap-1.5 whitespace-nowrap"
+            >
+              📊 PDF Completo
             </a>
           </div>
         </div>

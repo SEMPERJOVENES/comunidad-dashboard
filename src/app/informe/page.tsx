@@ -26,16 +26,41 @@ function getInitials(name: string) {
 
 export default function InformePage() {
   const [data, setData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [brandData, setBrandData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [reportType, setReportType] = useState<'diezmos' | 'completo'>('diezmos');
+  const [rangeStart, setRangeStart] = useState<Date | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Leer query params
+    const params = new URL(window.location.href).searchParams;
+    const type = params.get('type') === 'completo' ? 'completo' : 'diezmos';
+    setReportType(type);
+    const startParam = params.get('start');
+    const endParam = params.get('end');
+    const start = startParam ? new Date(startParam) : new Date(2026, 0, 1);
+    const end = endParam ? new Date(endParam) : new Date();
+    setRangeStart(start);
+    setRangeEnd(end);
+
     async function load() {
       setLoading(true);
       try {
-        const start = new Date(2026, 0, 1).toISOString();
-        const end = new Date().toISOString();
-        const res = await fetch(`/api/miembros-pagos?start=${start}&end=${end}`);
-        if (res.ok) setData(await res.json());
+        const sStr = start.toISOString();
+        const eStr = end.toISOString();
+        const promises: Promise<any>[] = [
+          fetch(`/api/miembros-pagos?start=${sStr}&end=${eStr}`).then(r => r.ok ? r.json() : null),
+        ];
+        if (type === 'completo') {
+          promises.push(fetch(`/api/dashboard?start=${sStr}&end=${eStr}`).then(r => r.ok ? r.json() : null));
+          promises.push(fetch(`/api/semper-brand?start=${sStr}&end=${eStr}`).then(r => r.ok ? r.json() : null));
+        }
+        const [d, dash, brand] = await Promise.all(promises);
+        setData(d);
+        setDashboardData(dash || null);
+        setBrandData(brand || null);
       } finally { setLoading(false); }
     }
     load();
@@ -116,11 +141,17 @@ export default function InformePage() {
               <Church size={28} color="white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Informe de Diezmos</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {reportType === 'completo' ? 'Informe Completo' : 'Informe de Diezmos'}
+              </h1>
               <p className="text-sm text-gray-500">Semper Jóvenes · {fechaImpresion}</p>
             </div>
           </div>
-          <p className="text-xs text-gray-500">Período: enero {currentYear} → {MONTHS_FULL[currentMonth - 1]} {currentYear}</p>
+          <p className="text-xs text-gray-500">
+            Período: {rangeStart ? rangeStart.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '?'}
+            {' → '}
+            {rangeEnd ? rangeEnd.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '?'}
+          </p>
         </div>
 
         {/* KPIs globales */}
@@ -270,6 +301,23 @@ export default function InformePage() {
           );
         })}
 
+        {/* === SECCIONES EXTRA SI TYPE=COMPLETO === */}
+        {reportType === 'completo' && dashboardData && (
+          <DesgloseSection
+            title="Semper Brand"
+            color="#3b82f6"
+            macroGroup={dashboardData.macroGroups?.brand}
+            extra={brandData}
+          />
+        )}
+        {reportType === 'completo' && dashboardData && (
+          <DesgloseSection
+            title="Otros (no clasificados)"
+            color="#64748b"
+            macroGroup={dashboardData.macroGroups?.otros}
+          />
+        )}
+
         {/* Leyenda final */}
         <div className="mt-8 pt-4 border-t border-gray-200 grid grid-cols-2 gap-3 text-[10px] text-gray-600">
           <div>
@@ -299,6 +347,104 @@ export default function InformePage() {
           .page-break-inside-avoid { page-break-inside: avoid; }
         }
       `}</style>
+    </div>
+  );
+}
+
+function DesgloseSection({ title, color, macroGroup, extra }: { title: string; color: string; macroGroup: any; extra?: any }) {
+  if (!macroGroup) return null;
+  const ingresos = macroGroup.income || 0;
+  const gastos = macroGroup.expenses || 0;
+  const neto = ingresos - gastos;
+  const tags = macroGroup.tags || [];
+  // Sort tags por neto absoluto (más significativos primero)
+  tags.sort((a: any, b: any) => Math.abs(b.net) - Math.abs(a.net));
+
+  return (
+    <div className="mt-8 pt-6 border-t-2" style={{ borderColor: color + '40' }}>
+      {/* Header sección */}
+      <div className="flex items-center gap-3 mb-4 page-break-inside-avoid">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: color }}>
+          <span className="text-white text-xs font-bold">{title.charAt(0)}</span>
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+          <p className="text-xs text-gray-500">Detalle de ingresos y gastos · agrupado por etiqueta</p>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="rounded-xl border-2 p-3 bg-emerald-50/40" style={{ borderColor: '#a7f3d0' }}>
+          <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Ingresos</p>
+          <p className="text-xl font-bold text-emerald-700 mt-1">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+        </div>
+        <div className="rounded-xl border-2 p-3 bg-rose-50/40" style={{ borderColor: '#fecaca' }}>
+          <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wide">Gastos</p>
+          <p className="text-xl font-bold text-rose-700 mt-1">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+        </div>
+        <div className="rounded-xl border-2 p-3" style={{ borderColor: neto >= 0 ? '#a7f3d0' : '#fecaca', backgroundColor: neto >= 0 ? '#ecfdf5' : '#fef2f2' }}>
+          <p className="text-[10px] uppercase font-bold tracking-wide" style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>Neto</p>
+          <p className="text-xl font-bold mt-1" style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
+            {neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+          </p>
+        </div>
+      </div>
+
+      {/* Tags / categorías */}
+      {tags.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Por categoría</h3>
+          {tags.map((tag: any) => (
+            <div key={tag.tag} className="rounded-xl border border-gray-200 p-3 page-break-inside-avoid">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-gray-900">{tag.tag}</p>
+                <div className="flex gap-3 text-[11px]">
+                  {tag.income > 0 && <span className="text-emerald-700 font-semibold">+{tag.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                  {tag.expenses > 0 && <span className="text-rose-700 font-semibold">-{tag.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                  <span className="font-bold" style={{ color: tag.net >= 0 ? '#065f46' : '#991b1b' }}>
+                    Neto: {tag.net.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  </span>
+                </div>
+              </div>
+              {/* Movimientos detalle (concepto entero) */}
+              {tag.transactions && tag.transactions.length > 0 && (
+                <div className="space-y-0.5 mt-2 pt-2 border-t border-gray-100">
+                  {tag.transactions.sort((a: any, b: any) => b.date.localeCompare(a.date)).map((tx: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-[10px] py-0.5">
+                      <span className="text-gray-400 w-16 flex-shrink-0">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                      <span className="flex-1 text-gray-700 break-words leading-snug">{tx.description}</span>
+                      <span className={`font-semibold flex-shrink-0 ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Extra para Brand: stock + top productos */}
+      {extra && extra.stockValuation && (
+        <div className="mt-5 grid grid-cols-2 gap-3 page-break-inside-avoid">
+          <div className="rounded-xl border border-gray-200 p-3 bg-blue-50/30">
+            <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide mb-1">Stock valoración</p>
+            <p className="text-sm">PVP: <span className="font-bold">{(extra.stockValuation.stockValue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
+            <p className="text-sm">Coste: <span className="font-bold">{(extra.stockValuation.stockCost || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
+            <p className="text-[10px] text-gray-500">{extra.stockValuation.totalUnits || 0} unidades · {extra.stockValuation.productCount || 0} productos</p>
+          </div>
+          {extra.topProducts && extra.topProducts.length > 0 && (
+            <div className="rounded-xl border border-gray-200 p-3">
+              <p className="text-[10px] uppercase font-bold text-gray-700 tracking-wide mb-1">Top productos</p>
+              {extra.topProducts.slice(0, 5).map((p: any, i: number) => (
+                <p key={i} className="text-[10px] truncate"><span className="font-semibold">{p.title}</span> · {(p.revenue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
