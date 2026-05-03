@@ -48,7 +48,6 @@ export const BIRTHDAYS: Birthday[] = [
   { name: 'David Serrano',                  community: 'San Ignacio', month: 9,  day: 25 },
   { name: 'Marta Carrascosa',               community: 'San Ignacio', month: 4,  day: 5  },
   { name: 'Manuel López López',             community: 'San Ignacio', month: 7,  day: 3  },
-  { name: 'Jacobo Bascon',                  community: 'San Ignacio', month: 7,  day: 4  },
   { name: 'Alfonso Montero',                community: 'San Ignacio', month: 2,  day: 25 },
   { name: 'Beltrán Egaña',                  community: 'San Ignacio', month: 3,  day: 25 },
   { name: 'Lucía Mazón',                    community: 'San Ignacio', month: 2,  day: 3  },

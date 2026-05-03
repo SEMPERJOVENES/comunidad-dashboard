@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
         totalPaid,
         paymentCount: allEntries.length,
         lastPayment: lastEntry ? { date: lastEntry.date, amount: lastEntry.amount, method: lastEntry.method } : null,
-        history: allEntries.slice(0, 50),
+        history: allEntries,
       };
     });
 

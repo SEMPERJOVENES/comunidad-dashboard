@@ -222,15 +222,22 @@ export default function ConciliacionMiembrosPage() {
     <DashboardLayout selectedRange={selectedRange} onRangeChange={setSelectedRange}>
       <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center">
-            <Church size={22} className="text-amber-600" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Church size={22} className="text-amber-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Diezmos</h1>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Quién paga, cómo y cuánto · banco + Stripe</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Diezmos</h1>
-            <p className="text-sm text-gray-500">Quién paga, cómo y cuánto · cruzado con banco + Stripe</p>
+          <div className="flex gap-2 flex-shrink-0">
+            <a href="/miembros" className="text-xs px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium whitespace-nowrap">← Miembros</a>
+            <a href="/informe" className="text-xs px-3 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-bold flex items-center gap-1.5 whitespace-nowrap">
+              📄 PDF
+            </a>
           </div>
-          <a href="/miembros" className="text-xs px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">← Miembros</a>
         </div>
 
         {loading ? (
@@ -616,20 +623,20 @@ export default function ConciliacionMiembrosPage() {
                         );
                       })()}
 
-                      {/* Histórico expandible — muestra el concepto entero, sin truncar */}
+                      {/* Histórico expandible — TODOS los movimientos sin truncar */}
                       {isOpen && m.history.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2">Histórico ({m.history.length})</p>
-                          <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-2 sticky top-0 bg-white py-1">Histórico completo ({m.history.length} movimientos)</p>
+                          <div className="space-y-1.5">
                             {m.history.map((h: any, i: number) => {
                               const Ico = METHOD_ICON[h.method] || Landmark;
                               const cl = METHOD_COLORS[h.method] || METHOD_COLORS.otro;
                               return (
-                                <div key={i} className="flex items-start gap-1.5 text-[11px] py-1.5 px-2 bg-gray-50/60 rounded">
-                                  <Ico size={11} className={cl.text + ' flex-shrink-0 mt-0.5'} />
-                                  <span className="text-gray-400 w-16 flex-shrink-0 mt-0.5">{new Date(h.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
-                                  <span className="flex-1 text-gray-700 text-[10.5px] break-words whitespace-normal leading-snug">{h.concept || '—'}</span>
-                                  <span className="font-semibold text-gray-900 ml-2 flex-shrink-0 mt-0.5">{formatCurrency(h.amount)}</span>
+                                <div key={i} className="flex items-start gap-1.5 text-[11px] py-2 px-2 bg-gray-50 rounded-lg">
+                                  <Ico size={12} className={cl.text + ' flex-shrink-0 mt-0.5'} />
+                                  <span className="text-gray-500 w-16 flex-shrink-0 mt-0.5 font-medium">{new Date(h.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                                  <span className="flex-1 text-gray-700 text-[11px] break-words whitespace-normal leading-snug">{h.concept || '—'}</span>
+                                  <span className="font-bold text-gray-900 ml-2 flex-shrink-0 mt-0.5">{formatCurrency(h.amount)}</span>
                                 </div>
                               );
                             })}
