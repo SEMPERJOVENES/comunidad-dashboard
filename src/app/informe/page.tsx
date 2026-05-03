@@ -8,7 +8,22 @@ import { Printer, Loader2, FileText, ArrowLeft } from 'lucide-react';
 const MNAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 export default function InformePage() {
-  const [range, setRange] = useState<DateRange>(getDefaultRange('Desde siempre'));
+  // Leer rango de la URL si viene del dashboard, sino default
+  const [range, setRange] = useState<DateRange>(() => {
+    if (typeof window !== 'undefined') {
+      const u = new URL(window.location.href);
+      const start = u.searchParams.get('start');
+      const end = u.searchParams.get('end');
+      if (start && end) {
+        return {
+          label: 'Personalizado',
+          startDate: new Date(start),
+          endDate: new Date(end),
+        };
+      }
+    }
+    return getDefaultRange('Últimos 3 meses');
+  });
   const [dashboard, setDashboard] = useState<any>(null);
   const [brand, setBrand] = useState<any>(null);
   const [conciliacion, setConciliacion] = useState<any>(null);
