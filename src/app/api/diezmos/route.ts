@@ -147,9 +147,11 @@ export async function GET(request: import('next/server').NextRequest) {
       return {
         id: m.id,
         name: m.name,
-        nickname: m.nickname || null,
+        nickname: m.apodo || null,
         community: m.community,
         email: m.email,
+        phone: m.phone || null,
+        fechaNacimiento: m.fecha_nacimiento || null,
         isActive: m.is_active,
         stripeCustomerId: m.stripe_customer_id || null,
         stripeCustomerEmail: m.stripe_customer_email || null,
@@ -664,9 +666,11 @@ export async function POST(request: import('next/server').NextRequest) {
       const row: any = {
         id,
         name: body.name.trim(),
-        nickname: body.nickname?.trim() || null,
+        apodo: body.nickname?.trim() || null,
         community: body.community || 'San Pablo',
         email: body.email || null,
+        phone: body.phone || null,
+        fecha_nacimiento: body.fechaNacimiento || null,
         is_active: true,
       };
       if (body.paymentFrequency) row.payment_frequency = body.paymentFrequency;
@@ -687,9 +691,11 @@ export async function POST(request: import('next/server').NextRequest) {
     if (body.action === 'update_member') {
       const updates: any = {};
       if (body.name !== undefined) updates.name = body.name;
-      if (body.nickname !== undefined) updates.nickname = body.nickname || null;
+      if (body.nickname !== undefined) updates.apodo = body.nickname || null;
       if (body.community !== undefined) updates.community = body.community;
       if (body.email !== undefined) updates.email = body.email;
+      if (body.phone !== undefined) updates.phone = body.phone || null;
+      if (body.fechaNacimiento !== undefined) updates.fecha_nacimiento = body.fechaNacimiento || null;
       if (body.isActive !== undefined) updates.is_active = body.isActive;
       if (body.paymentFrequency !== undefined) updates.payment_frequency = body.paymentFrequency;
       if (body.pairedWith !== undefined) updates.paired_with_member_id = body.pairedWith || null;

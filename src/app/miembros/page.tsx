@@ -64,6 +64,7 @@ export default function MiembrosPage() {
   const [newCommunity, setNewCommunity] = useState('San Pablo');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newBirthday, setNewBirthday] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const birthdays = useMemo(() => getBirthdaysThisMonth(), []);
@@ -85,9 +86,9 @@ export default function MiembrosPage() {
   async function handleAdd() {
     if (!newName.trim()) return;
     const res = await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add_member', name: newName, nickname: newApodo || null, community: newCommunity, email: newEmail || null, phone: newPhone || null }) });
+      body: JSON.stringify({ action: 'add_member', name: newName, nickname: newApodo || null, community: newCommunity, email: newEmail || null, phone: newPhone || null, fechaNacimiento: newBirthday || null }) });
     if (!res.ok) { alert('Error al añadir'); return; }
-    setNewName(''); setNewApodo(''); setNewEmail(''); setNewPhone(''); setShowAddForm(false); await load();
+    setNewName(''); setNewApodo(''); setNewEmail(''); setNewPhone(''); setNewBirthday(''); setShowAddForm(false); await load();
   }
   async function handleSave(id: string) {
     await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -225,7 +226,9 @@ export default function MiembrosPage() {
               <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email"
                 className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none" />
               <input type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="Teléfono"
-                className="sm:col-span-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none" />
+                className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none" />
+              <input type="date" value={newBirthday} onChange={e => setNewBirthday(e.target.value)} placeholder="Cumpleaños"
+                className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none" />
             </div>
             <button onClick={handleAdd} disabled={!newName.trim()}
               className="w-full mt-3 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50">
@@ -269,6 +272,13 @@ export default function MiembrosPage() {
                         className="w-full text-xs border border-gray-200 rounded px-2 py-1 bg-white">
                         {(allCommunities.length > 0 ? allCommunities : communities).map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      <input type="tel" value={editForm.phone ?? (m.phone || '')} onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                        className="w-full text-xs border border-gray-200 rounded px-2 py-1" placeholder="Teléfono" />
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase font-bold ml-1">Cumpleaños</label>
+                        <input type="date" value={editForm.fechaNacimiento ?? (m.fechaNacimiento || '')} onChange={e => setEditForm({...editForm, fechaNacimiento: e.target.value})}
+                          className="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                      </div>
                       <div className="flex gap-1 mt-2">
                         <button onClick={() => handleSave(m.id)} className="flex-1 px-2 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 flex items-center justify-center gap-1">
                           <Save size={10} /> Guardar
@@ -290,17 +300,10 @@ export default function MiembrosPage() {
                       className="p-1.5 bg-white/90 backdrop-blur shadow-sm hover:bg-violet-100 rounded-lg" title="Editar">
                       <Edit3 size={11} className="text-gray-600" />
                     </button>
-                    {isDeleting ? (
-                      <div className="flex gap-0.5">
-                        <button onClick={() => handleDelete(m.id)} className="p-1.5 bg-rose-500 text-white rounded-lg" title="Confirmar borrar"><Trash2 size={11} /></button>
-                        <button onClick={() => setDeletingId(null)} className="p-1.5 bg-white/90 backdrop-blur shadow-sm rounded-lg"><X size={11} /></button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setDeletingId(m.id)}
-                        className="p-1.5 bg-white/90 backdrop-blur shadow-sm hover:bg-rose-100 rounded-lg" title="Eliminar">
-                        <Trash2 size={11} className="text-rose-500" />
-                      </button>
-                    )}
+                    <button onClick={() => setDeletingId(m.id)}
+                      className="p-1.5 bg-white/90 backdrop-blur shadow-sm hover:bg-rose-100 rounded-lg" title="Eliminar">
+                      <Trash2 size={11} className="text-rose-500" />
+                    </button>
                   </div>
 
                   {/* Avatar grande con gradiente */}
@@ -334,9 +337,19 @@ export default function MiembrosPage() {
                       )}
                     </div>
 
-                    {hasBday && (
-                      <span className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full">
-                        <Cake size={9} /> Cumple este mes
+                    {/* Cumpleaños */}
+                    {m.fechaNacimiento ? (
+                      <span className={`mt-2 inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full ${hasBday ? 'bg-amber-100 text-amber-700' : 'bg-gray-50 text-gray-500'}`}>
+                        <Cake size={9} className={hasBday ? 'text-amber-500' : 'text-gray-400'} />
+                        {(() => {
+                          const d = new Date(m.fechaNacimiento);
+                          if (isNaN(d.getTime())) return 'Sin cumpleaños';
+                          return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+                        })()}
+                      </span>
+                    ) : (
+                      <span className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 text-gray-400 text-[9px] font-medium rounded-full italic">
+                        Sin cumpleaños
                       </span>
                     )}
                   </div>
@@ -351,6 +364,44 @@ export default function MiembrosPage() {
           💡 Para gestionar diezmos, Stripe y conciliación de pagos: ir a <a href="/diezmos" className="text-violet-600 underline">/diezmos</a>
         </p>
       </div>
+
+      {/* Modal confirmación borrar */}
+      {deletingId && (() => {
+        const member = members.find((m: any) => m.id === deletingId);
+        if (!member) return null;
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeletingId(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 size={22} className="text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">¿Eliminar miembro?</h3>
+                  <p className="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 mb-4">
+                <p className="text-sm font-semibold text-gray-900">{displayName(member)}</p>
+                <p className="text-xs text-gray-500">{member.community}{member.email ? ` · ${member.email}` : ''}</p>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                Se borrarán todos los pagos vinculados, reglas bancarias y la pareja se desvinculará automáticamente.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setDeletingId(null)}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200">
+                  Cancelar
+                </button>
+                <button onClick={() => handleDelete(deletingId)}
+                  className="flex-1 px-4 py-2.5 bg-rose-600 text-white text-sm font-bold rounded-xl hover:bg-rose-700 flex items-center justify-center gap-2">
+                  <Trash2 size={14} /> Sí, eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </DashboardLayout>
   );
 }
