@@ -175,7 +175,38 @@ export default function ConciliacionMiembrosPage() {
       arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
 
-    return arr;
+    // Combinar parejas: dejar solo UNO de los dos por pareja (el que tiene más datos / más pagos)
+    const seenInPair = new Set<string>();
+    const combined: any[] = [];
+    for (const m of arr) {
+      if (seenInPair.has(m.id)) continue;
+      if (m.pairedWith) {
+        seenInPair.add(m.id);
+        seenInPair.add(m.pairedWith);
+        // Buscar la pareja en TODOS los members (puede estar en otra comunidad o filtrada fuera)
+        const pair = data.members.find((x: any) => x.id === m.pairedWith);
+        if (pair) {
+          // Elegir el "principal": el que tiene Stripe sub, o más pagos, o el de menor nombre
+          const main = (m.methods.stripe.subscriptionActive ? m
+            : pair.methods.stripe.subscriptionActive ? pair
+            : m.totalPaid >= pair.totalPaid ? m : pair);
+          const partner = main.id === m.id ? pair : m;
+          // Combinamos sumando totales y fusionando histórico
+          combined.push({
+            ...main,
+            _isPair: true,
+            _partner: partner,
+            _combinedName: `${main.apodo || main.name} ↔ ${partner.apodo || partner.name}`,
+          });
+        } else {
+          combined.push(m);
+        }
+      } else {
+        combined.push(m);
+      }
+    }
+
+    return combined;
   }, [data, communityTab, search, statusFilter, methodFilter, sortBy]);
 
   // Resolver pareja para mostrar
@@ -440,14 +471,36 @@ export default function ConciliacionMiembrosPage() {
                       <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${paga ? 'bg-emerald-500' : 'bg-rose-400'}`} />
 
                       <div className="flex items-start gap-3 mb-3">
-                        {/* Avatar inicial */}
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0
-                          ${paga ? methodColor.soft + ' ' + methodColor.text : 'bg-rose-50 text-rose-500'}`}>
-                          {getInitials(m.apodo || m.name)}
-                        </div>
+                        {/* Avatar (con icono pareja si aplica) */}
+                        {m._isPair ? (
+                          <div className="relative w-12 h-12 flex-shrink-0">
+                            <div className={`absolute top-0 left-0 w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold ${paga ? methodColor.soft + ' ' + methodColor.text : 'bg-rose-50 text-rose-500'}`}>
+                              {getInitials(m.apodo || m.name)}
+                            </div>
+                            <div className={`absolute bottom-0 right-0 w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold border-2 border-white ${paga ? 'bg-violet-100 text-violet-700' : 'bg-rose-100 text-rose-500'}`}>
+                              {getInitials(m._partner?.apodo || m._partner?.name || '')}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0
+                            ${paga ? methodColor.soft + ' ' + methodColor.text : 'bg-rose-50 text-rose-500'}`}>
+                            {getInitials(m.apodo || m.name)}
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-gray-900 truncate">{m.apodo || m.name}</p>
-                          {m.apodo && <p className="text-[10px] text-gray-400 truncate">{m.name}</p>}
+                          {m._isPair ? (
+                            <>
+                              <p className="text-sm font-bold text-gray-900 truncate">{m.apodo || m.name} <span className="text-violet-400">↔</span> {m._partner.apodo || m._partner.name}</p>
+                              <p className="text-[10px] text-violet-500 font-semibold flex items-center gap-1 mt-0.5">
+                                <Link2 size={9} /> Pareja vinculada
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm font-bold text-gray-900 truncate">{m.apodo || m.name}</p>
+                              {m.apodo && <p className="text-[10px] text-gray-400 truncate">{m.name}</p>}
+                            </>
+                          )}
                           {m.methods.stripe.subscriptionActive && (
                             <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded">
                               <Zap size={8} /> SUB ACTIVA
@@ -497,22 +550,32 @@ export default function ConciliacionMiembrosPage() {
                         </div>
                       )}
 
-                      {/* Tags meses pagados Ene/Feb/Mar/Abr/May 2026 */}
+                      {/* Tags meses Ene/Feb/Mar/Abr/May 2026 — verde pagó, rojo no pagó (mes pasado), gris futuro */}
                       {(() => {
                         const monthsToShow = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'];
                         const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May'];
-                        // Reconstruir pagos por mes desde history
+                        const now = new Date();
+                        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                        // Pagos por mes desde history (incluye charges Stripe + bank txs)
                         const paidMonths = new Set<string>();
                         for (const h of m.history || []) {
-                          const monthKey = h.date.slice(0, 7);
-                          if (monthsToShow.includes(monthKey)) paidMonths.add(monthKey);
+                          paidMonths.add(h.date.slice(0, 7));
                         }
                         return (
                           <div className="flex gap-1 mt-2">
                             {monthsToShow.map((mk, i) => {
                               const paid = paidMonths.has(mk);
+                              const isPast = mk < currentMonthKey;
+                              const isCurrent = mk === currentMonthKey;
+                              const cls = paid
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : isPast
+                                  ? 'bg-rose-100 text-rose-600'
+                                  : isCurrent
+                                    ? 'bg-amber-50 text-amber-600'
+                                    : 'bg-gray-100 text-gray-300';
                               return (
-                                <span key={mk} className={`flex-1 text-center text-[9px] font-bold py-1 rounded ${paid ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-300'}`}>
+                                <span key={mk} className={`flex-1 text-center text-[9px] font-bold py-1 rounded ${cls}`} title={paid ? 'Pagado' : isPast ? 'No pagó' : isCurrent ? 'Mes en curso' : 'Futuro'}>
                                   {monthLabels[i]}
                                 </span>
                               );
@@ -520,6 +583,14 @@ export default function ConciliacionMiembrosPage() {
                           </div>
                         );
                       })()}
+
+                      {/* Próximo pago Stripe (si hay sub activa) */}
+                      {m.methods.stripe.subscriptionActive && m.methods.stripe.subscriptionNextPayment && (
+                        <p className="text-[10px] text-purple-600 mt-1.5 flex items-center gap-1">
+                          <CreditCard size={9} />
+                          Próximo cobro: {new Date(m.methods.stripe.subscriptionNextPayment).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                        </p>
+                      )}
 
                       {/* Mini badges desglose métodos si hay más de uno */}
                       {(() => {

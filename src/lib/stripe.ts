@@ -237,8 +237,14 @@ export async function getSubscriptions(params: { status?: string; limit?: number
   });
   return subs.data.map((s) => {
     const customer = s.customer as Stripe.Customer;
+    // Sumar TODOS los items × quantity (no solo el primero)
+    let totalCents = 0;
+    for (const item of s.items.data) {
+      const unit = item?.price?.unit_amount || 0;
+      const qty = item.quantity || 1;
+      totalCents += unit * qty;
+    }
     const item = s.items.data[0];
-    const priceAmount = item?.price?.unit_amount || 0;
     const interval = item?.price?.recurring?.interval || 'month';
     const product = item?.price?.product;
     const productName = typeof product === 'object' && product !== null
@@ -250,7 +256,7 @@ export async function getSubscriptions(params: { status?: string; limit?: number
       customerName: customer.name || customer.email || 'Anónimo',
       customerEmail: customer.email || null,
       customerId: customer.id,
-      amount: priceAmount / 100,
+      amount: totalCents / 100,
       currency: item?.price?.currency || 'eur',
       interval,
       productName,

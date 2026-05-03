@@ -201,6 +201,7 @@ export async function GET(request: NextRequest) {
             subscriptionActive: !!stripeSub,
             subscriptionAmount: stripeSub?.amount || m.stripe_amount || null,
             subscriptionInterval: stripeSub?.interval || m.stripe_interval || null,
+            subscriptionNextPayment: (stripeSub as any)?.currentPeriodEnd || null,
             email: stripeSub?.customerEmail || m.stripe_customer_email,
           },
           bizum: { count: byMethod.bizum.count, total: byMethod.bizum.total },
