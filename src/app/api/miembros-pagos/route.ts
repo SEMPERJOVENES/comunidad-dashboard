@@ -29,13 +29,14 @@ export async function GET(request: NextRequest) {
     const endDate = end.split('T')[0];
 
     // 1. Miembros + payments + bank txs Diezmo + Stripe subs
-    const [membersRes, paymentsRes, bankTxsRes, stripeSubs, stripeCharges] = await Promise.all([
+    const [membersRes, paymentsRes, bankTxsRes, bankRulesRes, stripeSubs, stripeCharges] = await Promise.all([
       supabase.from('diezmos_members').select('*').order('name'),
       supabase.from('diezmos_payments').select('*'),
       supabase.from('bank_transactions').select('*')
         .gte('date', startDate).lte('date', endDate)
         .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo')
         .order('date', { ascending: false }),
+      supabase.from('diezmos_bank_rules').select('*'),
       getSubscriptions({ status: 'active', limit: 100 }).catch(() => []),
       getAllCharges({
         created: {
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
     const members = membersRes.data || [];
     const allPayments = paymentsRes.data || [];
     const bankTxs = bankTxsRes.data || [];
+    const bankRules = bankRulesRes.data || [];
 
     // Normalización correcta (rango unicode escapado)
     function normalize(s: string) {
@@ -84,21 +86,20 @@ export async function GET(request: NextRequest) {
     }
 
     /**
-     * Match estricto: requiere AL MENOS UN APELLIDO específico del miembro
-     * presente en el concepto. Si el miembro tiene apellidos, exige uno.
-     * Si solo tiene nombre de pila, exige el nombre completo coincidente.
+     * Match MUY estricto: TODOS los apellidos no-comunes del miembro deben
+     * estar en el concepto. Evita confundir Mencía Pérez de Leza con
+     * Garvía Pérez Gonzalo.
      */
     function fuzzy(memberName: string, conceptText: string): boolean {
       if (!memberName || !conceptText) return false;
       const memberSurnames = getSurnames(memberName);
       const conceptTokens = new Set(normalize(conceptText).split(' ').filter(w => w.length > 2));
 
-      // Si tiene apellidos identificadores: exigir al menos UNO
       if (memberSurnames.length >= 1) {
-        return memberSurnames.some(s => conceptTokens.has(s));
+        // TODOS los apellidos deben estar
+        return memberSurnames.every(s => conceptTokens.has(s));
       }
 
-      // Sin apellidos (caso raro): exigir el nombre completo
       const fullNorm = normalize(memberName);
       const conceptNorm = normalize(conceptText);
       return conceptNorm.includes(fullNorm);
@@ -257,11 +258,77 @@ export async function GET(request: NextRequest) {
       amount: parseFloat(tx.amount),
     }));
 
+    // Para la TABLA DE MATCHING: recolectar todos los nombres bancarios distintos
+    // que aparecen en transacciones diezmo (para el lookup manual)
+    const distinctBankNames = new Map<string, { name: string; count: number; lastDate: string; sample: string }>();
+    for (const tx of bankTxs) {
+      if (parseFloat(tx.amount) <= 0) continue;
+      const concept = (tx.concept || '').replace(/\s+/g, ' ').trim();
+      // Extraer nombre del tipo "Transferencia De X Y, Concepto..." o "Bizum De X Y Concepto..."
+      const match = concept.match(/(?:transferencia\s+de|bizum\s+de)\s+([^,.]+?)(?:\s+concepto|\s+nº|,|$)/i);
+      if (!match) continue;
+      const personName = match[1].trim();
+      if (personName.toLowerCase().includes('stripe')) continue;
+      const key = personName.toLowerCase();
+      const existing = distinctBankNames.get(key);
+      if (existing) {
+        existing.count++;
+        if (tx.date > existing.lastDate) existing.lastDate = tx.date;
+      } else {
+        distinctBankNames.set(key, { name: personName, count: 1, lastDate: tx.date, sample: concept.slice(0, 100) });
+      }
+    }
+    const bankNamesList = Array.from(distinctBankNames.values()).sort((a, b) => b.count - a.count);
+
+    // Customers Stripe distintos (con sus charges agregados)
+    const distinctStripeCustomers = new Map<string, { customerId: string | null; customerName: string; customerEmail: string | null; chargeCount: number; total: number; subscriptionId?: string; isSubscription?: boolean }>();
+    for (const c of stripeCharges as any[]) {
+      if (!c.paid || c.refunded) continue;
+      const key = c.customerEmail || c.customerName || 'unknown';
+      const existing = distinctStripeCustomers.get(key);
+      if (existing) {
+        existing.chargeCount++;
+        existing.total += (c.amount - (c.amountRefunded || 0));
+      } else {
+        distinctStripeCustomers.set(key, {
+          customerId: c.customerId || null,
+          customerName: c.customerName || 'Invitado',
+          customerEmail: c.customerEmail || null,
+          chargeCount: 1,
+          total: c.amount - (c.amountRefunded || 0),
+          isSubscription: !!c.isSubscription,
+        });
+      }
+    }
+    // Añadir subs activas que quizá no tienen charges en el rango
+    for (const s of stripeSubs) {
+      const key = s.customerEmail || s.customerName || s.id;
+      if (!distinctStripeCustomers.has(key)) {
+        distinctStripeCustomers.set(key, {
+          customerId: s.customerId || null,
+          customerName: s.customerName || 'Invitado',
+          customerEmail: s.customerEmail || null,
+          chargeCount: 0,
+          total: 0,
+          subscriptionId: s.id,
+          isSubscription: true,
+        });
+      } else {
+        const e = distinctStripeCustomers.get(key)!;
+        e.subscriptionId = s.id;
+        e.isSubscription = true;
+      }
+    }
+    const stripeCustomersList = Array.from(distinctStripeCustomers.values()).sort((a, b) => b.total - a.total);
+
     return NextResponse.json({
       members: result,
       byCommunity: Array.from(byCommunity.entries()).map(([name, data]) => ({ community: name, ...data })),
       unmatchedSubs,
       unmatchedBank,
+      bankRules,
+      bankNamesList,
+      stripeCustomersList,
       totals: {
         members: result.length,
         paying: result.filter(r => r.totalPaid > 0).length,

@@ -61,6 +61,7 @@ export default function ConciliacionMiembrosPage() {
   const [sortBy, setSortBy] = useState<'name' | 'amount'>('amount');
   const [pairingFor, setPairingFor] = useState<string | null>(null);
   const [pairSearch, setPairSearch] = useState('');
+  const [showMatching, setShowMatching] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -85,6 +86,28 @@ export default function ConciliacionMiembrosPage() {
     if (!confirm('¿Desvincular esta pareja?')) return;
     const res = await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unpair_members', memberId }) });
     if (!res.ok) { alert('Error al desvincular'); return; }
+    await load();
+  }
+
+  async function handleLinkStripe(memberId: string, sub: any) {
+    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'link_stripe', memberId, customerId: sub.customerId, customerEmail: sub.customerEmail, subscriptionId: sub.subscriptionId || sub.subscriptionId, amount: sub.amount, interval: sub.interval }) });
+    await load();
+  }
+  async function handleUnlinkStripe(memberId: string) {
+    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'unlink_stripe', memberId }) });
+    await load();
+  }
+  async function handleAddBankRule(memberId: string, pattern: string) {
+    if (!pattern.trim()) return;
+    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create_bank_rule', memberId, pattern: pattern.toLowerCase().trim() }) });
+    await load();
+  }
+  async function handleDeleteBankRule(ruleId: string) {
+    await fetch('/api/diezmos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_bank_rule', ruleId }) });
     await load();
   }
 
@@ -249,6 +272,36 @@ export default function ConciliacionMiembrosPage() {
                 </div>
               </Card>
             )}
+
+            {/* TABLA DE MATCHING — Stripe ↔ Comunidad ↔ Banco */}
+            <Card className="!p-0 overflow-hidden">
+              <button
+                onClick={() => setShowMatching(!showMatching)}
+                className="w-full flex items-center gap-3 p-4 hover:bg-violet-50/50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+                  <ArrowDownUp size={18} className="text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900">Tabla de Matching</p>
+                  <p className="text-[11px] text-gray-500">Asocia manualmente: Stripe ↔ Miembro comunidad ↔ Concepto banco</p>
+                </div>
+                <ChevronRight size={18} className={`text-gray-400 transition-transform ${showMatching ? 'rotate-90' : ''}`} />
+              </button>
+              {showMatching && (
+                <MatchingTable
+                  members={data.members || []}
+                  bankRules={data.bankRules || []}
+                  bankNames={data.bankNamesList || []}
+                  stripeCustomers={data.stripeCustomersList || []}
+                  unmatchedSubs={data.unmatchedSubs || []}
+                  onLinkStripe={handleLinkStripe}
+                  onUnlinkStripe={handleUnlinkStripe}
+                  onAddBankRule={handleAddBankRule}
+                  onDeleteBankRule={handleDeleteBankRule}
+                />
+              )}
+            </Card>
 
             {/* Tabs de comunidad - GRANDES y visuales */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -652,6 +705,161 @@ function UnmatchedBankRow({ tx, members, onLinked }: { tx: any; members: any[]; 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MatchingTable({ members, bankRules, bankNames, stripeCustomers, unmatchedSubs, onLinkStripe, onUnlinkStripe, onAddBankRule, onDeleteBankRule }: any) {
+  const [search, setSearch] = useState('');
+  const [editingStripeFor, setEditingStripeFor] = useState<string | null>(null);
+  const [editingBankFor, setEditingBankFor] = useState<string | null>(null);
+  const [bankPattern, setBankPattern] = useState('');
+
+  // Index bank rules por miembro
+  const rulesByMember: Record<string, any[]> = {};
+  for (const r of bankRules) {
+    if (!rulesByMember[r.member_id]) rulesByMember[r.member_id] = [];
+    rulesByMember[r.member_id].push(r);
+  }
+
+  const filteredMembers = members.filter((m: any) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return m.name.toLowerCase().includes(s) || (m.apodo || '').toLowerCase().includes(s);
+  });
+
+  // Subs/customers Stripe libres (sin vincular a miembro)
+  const linkedCustomerIds = new Set(members.filter((m: any) => m.methods?.stripe?.subscriptionActive).map((m: any) => (m.methods.stripe.email || '').toLowerCase()));
+  const availableStripe = [
+    ...unmatchedSubs.map((s: any) => ({ ...s, kind: 'sub' })),
+    ...stripeCustomers.filter((c: any) => !c.isSubscription && c.customerEmail && !linkedCustomerIds.has(c.customerEmail.toLowerCase())).map((c: any) => ({ ...c, kind: 'charge' })),
+  ];
+
+  return (
+    <div className="border-t border-gray-200 bg-gray-50/50">
+      <div className="p-3 bg-white border-b border-gray-100">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar miembro..."
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500" />
+        </div>
+        <p className="text-[11px] text-gray-500 mt-2">
+          Cada miembro puede tener: <span className="text-purple-600 font-semibold">1 Stripe</span> + <span className="text-emerald-600 font-semibold">N patrones bancarios</span>. Los patrones bancarios son texto que debe aparecer en el concepto del banco para asignar el pago a este miembro.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[800px]">
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-200">
+              <th className="text-left text-[10px] font-bold text-gray-600 uppercase tracking-wide px-3 py-2.5">Miembro</th>
+              <th className="text-left text-[10px] font-bold text-purple-700 uppercase tracking-wide px-3 py-2.5 bg-purple-50">💳 Stripe vinculado</th>
+              <th className="text-left text-[10px] font-bold text-emerald-700 uppercase tracking-wide px-3 py-2.5 bg-emerald-50">🏦 Patrones bancarios</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMembers.map((m: any) => {
+              const memberRules = rulesByMember[m.id] || [];
+              const stripeLinked = m.methods?.stripe?.subscriptionActive || (m.methods?.stripe?.count > 0);
+              return (
+                <tr key={m.id} className="border-b border-gray-100 hover:bg-white">
+                  <td className="px-3 py-2.5 align-top w-1/4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                        {getInitials(m.apodo || m.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-900 truncate">{m.apodo || m.name}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{m.community}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 align-top w-2/5 bg-purple-50/30">
+                    {stripeLinked ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-semibold rounded">
+                          <CreditCard size={9} />
+                          {m.methods.stripe.email || 'vinculado'}
+                          <button onClick={() => onUnlinkStripe(m.id)} className="ml-1 hover:text-rose-600" title="Desvincular">
+                            <X size={9} />
+                          </button>
+                        </span>
+                      </div>
+                    ) : editingStripeFor === m.id ? (
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {availableStripe.length === 0 ? (
+                          <p className="text-[10px] text-gray-400 italic">No hay Stripe libres</p>
+                        ) : (
+                          availableStripe.slice(0, 8).map((s: any, i: number) => (
+                            <button
+                              key={s.subscriptionId || s.customerId || i}
+                              onClick={() => { onLinkStripe(m.id, s); setEditingStripeFor(null); }}
+                              className="w-full text-left flex items-center gap-1 px-2 py-1 text-[10px] bg-white hover:bg-purple-50 border border-purple-100 rounded"
+                            >
+                              <Link2 size={9} className="text-purple-500" />
+                              <span className="font-medium truncate">{s.customerName}</span>
+                              <span className="text-gray-400 truncate">{s.customerEmail}</span>
+                            </button>
+                          ))
+                        )}
+                        <button onClick={() => setEditingStripeFor(null)} className="text-[10px] text-gray-500 hover:text-gray-700 px-2">cancelar</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setEditingStripeFor(m.id)} className="text-[10px] text-purple-600 hover:bg-purple-50 px-2 py-0.5 rounded border border-dashed border-purple-300">
+                        + Vincular Stripe
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 align-top bg-emerald-50/30">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {memberRules.map((r: any) => (
+                        <span key={r.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded">
+                          <Landmark size={9} />
+                          {r.pattern}
+                          <button onClick={() => onDeleteBankRule(r.id)} className="ml-1 hover:text-rose-600" title="Borrar regla">
+                            <X size={9} />
+                          </button>
+                        </span>
+                      ))}
+                      {editingBankFor === m.id ? (
+                        <div className="flex items-center gap-1 w-full mt-1">
+                          <input
+                            autoFocus
+                            value={bankPattern}
+                            onChange={(e) => setBankPattern(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { onAddBankRule(m.id, bankPattern); setBankPattern(''); setEditingBankFor(null); } if (e.key === 'Escape') { setEditingBankFor(null); setBankPattern(''); } }}
+                            placeholder="Texto del concepto banco..."
+                            className="flex-1 text-[10px] border border-emerald-300 rounded px-2 py-0.5 outline-none focus:ring-1 focus:ring-emerald-400"
+                          />
+                          <button onClick={() => { onAddBankRule(m.id, bankPattern); setBankPattern(''); setEditingBankFor(null); }} className="text-emerald-600 hover:bg-emerald-50 p-0.5 rounded"><Check size={11} /></button>
+                          <button onClick={() => { setEditingBankFor(null); setBankPattern(''); }} className="text-gray-400 p-0.5"><X size={11} /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setEditingBankFor(m.id)} className="text-[10px] text-emerald-600 hover:bg-emerald-50 px-2 py-0.5 rounded border border-dashed border-emerald-300">
+                          + Patrón
+                        </button>
+                      )}
+                    </div>
+                    {bankNames.length > 0 && editingBankFor === m.id && (
+                      <div className="mt-1.5 max-h-24 overflow-y-auto">
+                        <p className="text-[9px] text-gray-400 px-1 mb-0.5">Sugerencias del banco:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {bankNames.slice(0, 8).map((bn: any) => (
+                            <button key={bn.name}
+                              onClick={() => { onAddBankRule(m.id, bn.name); setEditingBankFor(null); setBankPattern(''); }}
+                              className="text-[9px] px-1.5 py-0.5 bg-white hover:bg-emerald-50 border border-emerald-100 rounded flex items-center gap-1">
+                              {bn.name} <span className="text-emerald-400">({bn.count})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

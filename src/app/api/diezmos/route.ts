@@ -34,9 +34,10 @@ function getSurnames(name: string): string[] {
 }
 
 /**
- * Match estricto: exige al menos un APELLIDO espec\u00edfico del miembro
- * presente en el otro texto. Si el miembro no tiene apellidos identificadores,
- * exige que el nombre completo aparezca contenido literalmente.
+ * Match MUY estricto: exige que TODOS los apellidos no-comunes del miembro
+ * est\u00e9n presentes en el otro texto. Esto evita confundir
+ *  "Menc\u00eda P\u00e9rez de Leza" con "Garv\u00eda P\u00e9rez Gonzalo" (ambos comparten "p\u00e9rez"
+ *  pero solo Menc\u00eda tiene "leza").
  */
 function fuzzyNameMatch(memberName: string, candidateText: string): boolean {
   if (!memberName || !candidateText) return false;
@@ -44,7 +45,8 @@ function fuzzyNameMatch(memberName: string, candidateText: string): boolean {
   const candidateTokens = new Set(normalize(candidateText).split(' ').filter(w => w.length > 2));
 
   if (memberSurnames.length >= 1) {
-    return memberSurnames.some(s => candidateTokens.has(s));
+    // TODOS los apellidos del miembro deben estar en el texto candidato
+    return memberSurnames.every(s => candidateTokens.has(s));
   }
   // Sin apellidos: exige nombre completo contenido
   const fullNorm = normalize(memberName);
