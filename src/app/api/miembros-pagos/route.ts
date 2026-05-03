@@ -22,7 +22,10 @@ import { getSubscriptions, getAllCharges } from '@/lib/stripe';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const start = searchParams.get('start') || '2024-01-01T00:00:00Z';
+    // Corte mínimo absoluto: 2026-01-01 (enero 2026 es el primer mes contado)
+    const ABSOLUTE_MIN_DATE = '2026-01-01T00:00:00Z';
+    const requestedStart = searchParams.get('start') || ABSOLUTE_MIN_DATE;
+    const start = new Date(requestedStart) > new Date(ABSOLUTE_MIN_DATE) ? requestedStart : ABSOLUTE_MIN_DATE;
     const end = searchParams.get('end') || new Date().toISOString();
 
     const startDate = start.split('T')[0];

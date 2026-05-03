@@ -67,16 +67,22 @@ export async function GET(request: import('next/server').NextRequest) {
     const startDate = startParam ? new Date(startParam).toISOString().split('T')[0] : null;
     const endDate = endParam ? new Date(endParam).toISOString().split('T')[0] : null;
 
-    const stripeStartTs = startParam ? Math.floor(new Date(startParam).getTime() / 1000) : Math.floor(new Date('2020-01-01').getTime() / 1000);
+    // Corte mínimo absoluto: 2026-01-01. No procesamos pagos previos.
+    const ABSOLUTE_MIN_DATE = '2026-01-01';
+    const ABSOLUTE_MIN_TS = Math.floor(new Date(ABSOLUTE_MIN_DATE).getTime() / 1000);
+    const requestedStartTs = startParam ? Math.floor(new Date(startParam).getTime() / 1000) : ABSOLUTE_MIN_TS;
+    const stripeStartTs = Math.max(requestedStartTs, ABSOLUTE_MIN_TS);
     const stripeEndTs = endParam ? Math.floor(new Date(endParam).getTime() / 1000) : Math.floor(Date.now() / 1000);
+
+    const effectiveStartDate = startDate && startDate > ABSOLUTE_MIN_DATE ? startDate : ABSOLUTE_MIN_DATE;
 
     // Build bank diezmo query (need to prepare before Promise.all)
     let bankDiezmosQuery = supabase
       .from('bank_transactions')
       .select('*')
       .or('is_diezmo.eq.true,manual_tag.eq.Diezmo,auto_tag.eq.Diezmo')
-      .not('concept', 'ilike', '%stripe%');
-    if (startDate) bankDiezmosQuery = bankDiezmosQuery.gte('date', startDate);
+      .not('concept', 'ilike', '%stripe%')
+      .gte('date', effectiveStartDate);
     if (endDate) bankDiezmosQuery = bankDiezmosQuery.lte('date', endDate);
 
     // ══════════════════════════════════════════════════════════════════

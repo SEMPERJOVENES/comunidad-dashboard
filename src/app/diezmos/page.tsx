@@ -480,8 +480,8 @@ export default function ConciliacionMiembrosPage() {
                         </div>
                       )}
 
-                      {/* Pareja */}
-                      {pair ? (
+                      {/* Pareja (solo se muestra si ya está vinculada) */}
+                      {pair && (
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-violet-50 border border-violet-100 rounded-lg">
                           <Link2 size={11} className="text-violet-500 flex-shrink-0" />
                           <p className="text-[11px] text-violet-700 truncate flex-1">
@@ -495,14 +495,31 @@ export default function ConciliacionMiembrosPage() {
                             <X size={11} />
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setPairingFor(m.id); setPairSearch(''); }}
-                          className="w-full flex items-center justify-center gap-1.5 px-2 py-1 bg-gray-50 hover:bg-violet-50 border border-dashed border-gray-200 hover:border-violet-300 rounded-lg text-[11px] text-gray-500 hover:text-violet-600 transition-colors"
-                        >
-                          <Link2 size={11} /> Vincular pareja
-                        </button>
                       )}
+
+                      {/* Tags meses pagados Ene/Feb/Mar/Abr/May 2026 */}
+                      {(() => {
+                        const monthsToShow = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'];
+                        const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May'];
+                        // Reconstruir pagos por mes desde history
+                        const paidMonths = new Set<string>();
+                        for (const h of m.history || []) {
+                          const monthKey = h.date.slice(0, 7);
+                          if (monthsToShow.includes(monthKey)) paidMonths.add(monthKey);
+                        }
+                        return (
+                          <div className="flex gap-1 mt-2">
+                            {monthsToShow.map((mk, i) => {
+                              const paid = paidMonths.has(mk);
+                              return (
+                                <span key={mk} className={`flex-1 text-center text-[9px] font-bold py-1 rounded ${paid ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-300'}`}>
+                                  {monthLabels[i]}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       {/* Mini badges desglose métodos si hay más de uno */}
                       {(() => {
