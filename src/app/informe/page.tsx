@@ -215,36 +215,46 @@ export default function InformePage() {
               </div>
             </div>
 
-            {/* Stock Brand Potencial — usa /api/semper-brand (excluye preventa/sin coste) */}
+            {/* Stock Brand Potencial */}
             {(() => {
               const sv = brandData?.stockValuation;
-              const stockValue = sv?.retailValue ?? dashboardData.shopify?.stockValue ?? 0;
-              const stockCost = sv?.costValue ?? dashboardData.shopify?.stockCost ?? 0;
-              const margen = sv?.potentialProfit ?? (stockValue - stockCost);
-              const pctMargen = sv?.potentialMargin ?? (stockValue > 0 ? (margen / stockValue) * 100 : 0);
+              const stockValue = sv?.retailValue ?? 0;
+              const stockCost = sv?.costValue ?? 0;
+              const margen = sv?.potentialProfit ?? 0;
+              const productsWithoutCost = sv?.productsWithoutCost ?? 0;
+              const productsWithCost = sv?.productsWithCost ?? 0;
               return (
                 <div className="rounded-2xl border-2 mb-8 overflow-hidden" style={{ borderColor: '#bfdbfe' }}>
                   <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }}>
-                    <p className="text-sm font-bold text-white flex items-center gap-1.5">📦 Stock Brand · Potencial</p>
-                    <p className="text-[11px] text-blue-100">Valoración del inventario actual de productos Brand</p>
+                    <p className="text-sm font-bold text-white flex items-center gap-1.5"><Package size={14} /> Inventario Brand · Ingresos potenciales</p>
+                    <p className="text-[11px] text-blue-100">Valor de venta del stock disponible · {sv?.units || 0} unidades en {productsWithCost + productsWithoutCost} productos</p>
                   </div>
                   <div className="grid grid-cols-3 gap-0 divide-x divide-gray-100" style={{ background: '#f8fafc' }}>
                     <div className="p-4">
-                      <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Valor teórico stock (PVP)</p>
+                      <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Ingresos potenciales (PVP)</p>
                       <p className="text-2xl font-bold mt-1" style={{ color: '#1e40af' }}>{stockValue.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[10px] text-blue-600 mt-1">Si vendiéramos todo a precio venta</p>
+                      <p className="text-[10px] text-blue-600 mt-1">Si vendiéramos todo el stock</p>
                     </div>
                     <div className="p-4">
-                      <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wide">Coste stock</p>
+                      <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wide">Coste registrado</p>
                       <p className="text-2xl font-bold mt-1" style={{ color: '#9f1239' }}>{stockCost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[10px] text-rose-600 mt-1">€ invertidos · capital atrapado</p>
+                      <p className="text-[10px] text-rose-600 mt-1">solo {productsWithCost} productos con coste</p>
                     </div>
                     <div className="p-4">
                       <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Margen potencial</p>
                       <p className="text-2xl font-bold mt-1" style={{ color: '#065f46' }}>{margen.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[10px] text-emerald-600 mt-1">{pctMargen.toFixed(1)}% margen</p>
+                      <p className="text-[10px] text-emerald-600 mt-1">si vendemos a precio actual</p>
                     </div>
                   </div>
+                  {productsWithoutCost > 0 && (
+                    <div className="px-4 py-2.5 border-t flex items-start gap-2" style={{ borderColor: '#dbeafe', background: '#fef9c3' }}>
+                      <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-amber-900 leading-snug">
+                        <strong>Nota:</strong> {productsWithoutCost} productos del stock (libros, packs, material legacy) NO tienen coste registrado porque se compraron en años anteriores.
+                        Su <strong>coste no se refleja en este informe</strong>, pero podemos beneficiarnos de venderlos hoy. El margen real sería superior al mostrado.
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -429,6 +439,11 @@ export default function InformePage() {
         {/* === DESGLOSE INGRESOS / GASTOS BRAND === */}
         {reportType === 'completo' && brandData && (
           <BrandBreakdown brand={brandData} />
+        )}
+
+        {/* === BRAND · TRAZABILIDAD POR COLECCIÓN === */}
+        {reportType === 'completo' && brandData && dashboardData && (
+          <BrandTrazabilidad brand={brandData} dashboard={dashboardData} />
         )}
 
         {/* === DESGLOSE DETALLADO POR ÁREA === */}
@@ -916,3 +931,190 @@ function SectionHeader({ number, title, subtitle, color }: { number: number; tit
     </div>
   );
 }
+
+function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any }) {
+  const sv = brand?.stockValuation;
+  if (!sv?.topByValue) return null;
+
+  // Identificar las 2 colecciones con trazabilidad completa (BAC 26)
+  const matchPinguino = (t: string) => /ping[üu]ino/i.test(t || '');
+  const matchGodLuck = (t: string) => /god\s*luck|good\s*luck/i.test(t || '');
+
+  // Buscar revenue ya generado por producto desde topProducts
+  const revenueByTitle: Record<string, number> = {};
+  for (const p of (dashboard?.topProducts || [])) {
+    revenueByTitle[(p.title || '').toLowerCase().trim()] = p.revenue || 0;
+  }
+  const findRevenue = (title: string) => {
+    const norm = title.toLowerCase().trim();
+    let total = 0;
+    for (const [k, v] of Object.entries(revenueByTitle)) {
+      if (matchPinguino(title) && matchPinguino(k)) total += v;
+      else if (matchGodLuck(title) && matchGodLuck(k)) total += v;
+      else if (k === norm) total += v;
+    }
+    return total;
+  };
+
+  const pinguino = sv.topByValue.find((p: any) => matchPinguino(p.title));
+  const godLuck = sv.topByValue.find((p: any) => matchGodLuck(p.title));
+  const trazables = [pinguino, godLuck].filter(Boolean);
+  const otrosConCoste = sv.topByValue.filter((p: any) => !matchPinguino(p.title) && !matchGodLuck(p.title) && p.cost > 0);
+  const sinCoste = sv.topByValue.filter((p: any) => p.cost === 0);
+
+  return (
+    <div className="mt-10 mb-8 section-break">
+      <SectionHeader number={9} title="Brand · Trazabilidad por colección" subtitle="Inversión, retorno y break-even por producto" color="#3b82f6" />
+
+      {/* Cards de trazabilidad completa (BAC 26) */}
+      {trazables.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700">
+              ✓ Trazabilidad completa BAC 26
+            </span>
+            <p className="text-[11px] text-gray-500">Producción registrada · seguimiento de inversión y retorno</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {trazables.map((p: any) => {
+              const stockActual = p.units;
+              const costUnit = stockActual > 0 ? p.cost / stockActual : 0;
+              // Asumimos PVP unitario
+              const pvpUnit = stockActual > 0 ? p.retail / stockActual : 0;
+              const margenUnit = pvpUnit - costUnit;
+              const inversionStockActual = p.cost; // capital atrapado
+              const ingresoYaGenerado = findRevenue(p.title);
+              // Break-even: cuántas más vender al margen actual para cubrir inversión inicial
+              // Inversión inicial estimada = cost actual (capital atrapado) — cifra conservadora
+              // Si ya generó ingreso, restar
+              const yaCubierto = ingresoYaGenerado;
+              const faltaCubrir = Math.max(0, inversionStockActual - yaCubierto);
+              const unidadesBE = margenUnit > 0 ? Math.ceil(faltaCubrir / margenUnit) : 0;
+              const isPinguino = matchPinguino(p.title);
+
+              return (
+                <div key={p.title} className="rounded-2xl overflow-hidden border-2 page-break-inside-avoid" style={{ borderColor: isPinguino ? '#fbcfe8' : '#fde68a' }}>
+                  <div className="px-4 py-3" style={{ background: isPinguino ? 'linear-gradient(135deg, #f9a8d4 0%, #ec4899 100%)' : 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%)' }}>
+                    <p className="text-sm font-bold text-white">{p.title}</p>
+                    <p className="text-[10px] text-white/80">{stockActual} uds en stock · PVP {pvpUnit.toFixed(2)}€/u · coste {costUnit.toFixed(2)}€/u</p>
+                  </div>
+                  <div className="bg-white p-3 grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-rose-50 rounded-lg p-2">
+                      <p className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">Capital atrapado</p>
+                      <p className="text-base font-bold text-rose-700">{inversionStockActual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">{stockActual} × {costUnit.toFixed(2)}€</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-2">
+                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Ingreso ya generado</p>
+                      <p className="text-base font-bold text-emerald-700">{ingresoYaGenerado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">ventas Shopify {currentYearVar()}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">Si vendemos todo</p>
+                      <p className="text-base font-bold text-blue-700">+{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">{p.retail.toLocaleString('es-ES')}€ retail total</p>
+                    </div>
+                    <div className="bg-violet-50 rounded-lg p-2">
+                      <p className="text-[9px] uppercase font-bold text-violet-700 tracking-wider">Para break-even</p>
+                      <p className="text-base font-bold text-violet-700">+{unidadesBE} uds</p>
+                      <p className="text-[9px] text-gray-500">a {margenUnit.toFixed(2)}€ margen/u</p>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 px-3 py-2 border-t border-gray-100">
+                    <p className="text-[10px] text-gray-600">
+                      Margen potencial total: <strong className="text-emerald-700">{p.potentialProfit.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</strong> ({((p.potentialProfit / p.retail) * 100).toFixed(1)}%)
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Resto inventario con coste */}
+      {otrosConCoste.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+              · Otros productos con coste
+            </span>
+            <p className="text-[11px] text-gray-500">Coste unitario calculado · sin trazabilidad de inversión inicial</p>
+          </div>
+          <div className="rounded-2xl border bg-white overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead style={{ background: '#f8fafc' }}>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left px-3 py-2 font-bold text-gray-600">Producto</th>
+                  <th className="text-right px-2 py-2 font-bold text-gray-600">Stock</th>
+                  <th className="text-right px-2 py-2 font-bold text-gray-600">PVP total</th>
+                  <th className="text-right px-2 py-2 font-bold text-gray-600">Coste total</th>
+                  <th className="text-right px-2 py-2 font-bold text-gray-600">Margen pot.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {otrosConCoste.map((p: any) => (
+                  <tr key={p.title} className="border-b border-gray-50">
+                    <td className="px-3 py-2 text-gray-800">{p.title}</td>
+                    <td className="px-2 py-2 text-right text-gray-600">{p.units}</td>
+                    <td className="px-2 py-2 text-right font-semibold text-blue-700">{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
+                    <td className="px-2 py-2 text-right font-semibold text-rose-700">{p.cost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
+                    <td className="px-2 py-2 text-right font-bold text-emerald-700">{p.potentialProfit.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Productos sin coste registrado */}
+      {sinCoste.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
+              ⚠ Sin coste registrado (legacy)
+            </span>
+            <p className="text-[11px] text-gray-500">Stock comprado en años anteriores · 100% margen al venderse hoy</p>
+          </div>
+          <div className="rounded-2xl border bg-white overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead style={{ background: '#fffbeb' }}>
+                <tr className="border-b border-amber-100">
+                  <th className="text-left px-3 py-2 font-bold text-amber-800">Producto</th>
+                  <th className="text-right px-2 py-2 font-bold text-amber-800">Stock</th>
+                  <th className="text-right px-2 py-2 font-bold text-amber-800">PVP unitario</th>
+                  <th className="text-right px-2 py-2 font-bold text-amber-800">Ingreso potencial</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sinCoste.map((p: any) => (
+                  <tr key={p.title} className="border-b border-gray-50">
+                    <td className="px-3 py-2 text-gray-800">{p.title}</td>
+                    <td className="px-2 py-2 text-right text-gray-600">{p.units}</td>
+                    <td className="px-2 py-2 text-right text-gray-600">{p.units > 0 ? (p.retail / p.units).toFixed(2) : 0}€</td>
+                    <td className="px-2 py-2 text-right font-bold text-amber-700">{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
+                  </tr>
+                ))}
+                <tr className="font-bold bg-amber-50">
+                  <td className="px-3 py-2 text-amber-900">TOTAL</td>
+                  <td className="px-2 py-2 text-right text-amber-900">{sinCoste.reduce((s: number, p: any) => s + p.units, 0)}</td>
+                  <td></td>
+                  <td className="px-2 py-2 text-right text-amber-900">{sinCoste.reduce((s: number, p: any) => s + p.retail, 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-gray-500 italic mt-2">
+            💡 Estos productos no tienen coste registrado porque se compraron en ejercicios anteriores. Al venderlos hoy, todo el ingreso es ganancia neta para el ejercicio actual.
+          </p>
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-400 italic mt-4">
+        Datos actualizados en tiempo real desde Shopify Admin API + Supabase. Cada vez que descargues este informe se recalcularán los valores.
+      </p>
+    </div>
+  );
+}
+function currentYearVar() { return new Date().getFullYear(); }
