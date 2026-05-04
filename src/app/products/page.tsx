@@ -281,18 +281,20 @@ export default function InventarioPage() {
     const cost = getCost(p.id);
     return (cost?.category || 'inventario') === categoryFilter;
   }).sort((a, b) => {
-    // Calcular beneficio potencial = stock × (PVP - coste)
+    // 1) Preventa siempre al final (independientemente del importe)
+    const catA = getCost(a.id)?.category || 'inventario';
+    const catB = getCost(b.id)?.category || 'inventario';
+    const isPreA = catA === 'preproduccion';
+    const isPreB = catB === 'preproduccion';
+    if (isPreA !== isPreB) return isPreA ? 1 : -1; // los preventa van al final
+    // 2) Ordenar por POTENCIAL INGRESO = stock × PVP, descendente
     const stockA = a.variants?.reduce((s: number, v: any) => s + (v.inventory_quantity || 0), 0) || 0;
     const stockB = b.variants?.reduce((s: number, v: any) => s + (v.inventory_quantity || 0), 0) || 0;
     const pvpA = parseFloat(a.variants?.[0]?.price || '0');
     const pvpB = parseFloat(b.variants?.[0]?.price || '0');
-    const costA = getCost(a.id);
-    const costB = getCost(b.id);
-    const costPriceA = costA ? parseFloat(String(costA.cost_price || 0)) : 0;
-    const costPriceB = costB ? parseFloat(String(costB.cost_price || 0)) : 0;
-    const profitA = stockA * (pvpA - costPriceA);
-    const profitB = stockB * (pvpB - costPriceB);
-    return profitB - profitA; // Mayor beneficio primero
+    const ingresoA = stockA * pvpA;
+    const ingresoB = stockB * pvpB;
+    return ingresoB - ingresoA;
   });
 
   // ============ MÉTRICAS ============
