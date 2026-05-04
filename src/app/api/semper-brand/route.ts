@@ -554,7 +554,7 @@ export async function GET(request: NextRequest) {
         supabase.from('product_costs').select('*'),
       ]);
 
-      const costMap: Record<string, { cost_price: number; category: string }> = {};
+      const costMap: Record<string, { cost_price: number; category: string; pvp_override: number | null }> = {};
       for (const row of (costsResult.data || [])) {
         const key = row.shopify_variant_id
           ? `${row.shopify_product_id}_${row.shopify_variant_id}`
@@ -562,6 +562,7 @@ export async function GET(request: NextRequest) {
         costMap[key] = {
           cost_price: parseFloat(row.cost_price) || 0,
           category: row.category || 'inventario',
+          pvp_override: row.pvp_override != null ? parseFloat(row.pvp_override) : null,
         };
       }
 
@@ -570,12 +571,13 @@ export async function GET(request: NextRequest) {
         let hasCost = false;
         for (const v of (p.variants || [])) {
           const qty = v.inventory_quantity || 0;
-          const price = parseFloat(v.price || '0');
           const variantKey = `${p.id}_${v.id}`;
           const productKey = `${p.id}`;
           const cost = costMap[variantKey] || costMap[productKey];
           const cat = cost?.category || 'inventario';
           if (cat === 'inmovilizado' || cat === 'preproduccion' || cat === 'archivado') continue; // excluir inmovilizado, preventa y archivados
+          // Usar PVP override si existe (precio actualizado fuera de Shopify)
+          const price = cost?.pvp_override != null ? cost.pvp_override : parseFloat(v.price || '0');
 
           prodUnits += qty;
           prodRetail += price * qty;
