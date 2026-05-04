@@ -801,44 +801,32 @@ function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: 
         </div>
       </div>
 
-      {/* CÁLCULO BREAK-EVEN */}
-      {(() => {
-        // Para calcular break-even consideramos solo el GASTO mensual a cubrir,
-        // independientemente del estado actual (positivo o negativo).
-        const diezmos5 = Math.ceil(gastoMensual / 5);
-        const diezmos10 = Math.ceil(gastoMensual / 10);
-        const isPositivo = neto >= 0;
+      {/* CÁLCULO BREAK-EVEN — solo si la comunidad está en déficit */}
+      {neto < 0 && (() => {
+        const diezmos5 = Math.ceil(Math.abs(netoMensual) / 5);
+        const diezmos10 = Math.ceil(Math.abs(netoMensual) / 10);
         return (
-          <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a', background: isPositivo ? 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' }}>
+          <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: '#fde68a', background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' }}>
             <div className="px-5 py-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: isPositivo ? '#10b981' : '#f59e0b' }}>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#f59e0b' }}>
                   <Scale size={18} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-base font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Break-even mensual de gastos</p>
-                  <p className="text-[11px]" style={{ color: isPositivo ? '#047857' : '#b45309' }}>
-                    Cuántos diezmos hacen falta para cubrir los gastos comunitarios (misas, jóvenes, etc.)
-                  </p>
+                  <p className="text-base font-bold text-amber-900">Cuántos diezmos faltan para cubrir el déficit</p>
+                  <p className="text-[11px] text-amber-700">Déficit mensual de {Math.abs(netoMensual).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a' }}>
-                  <p className="text-[10px] uppercase font-bold tracking-wide mb-1" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Si diezman 10€/mes</p>
-                  <p className="text-3xl font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>{diezmos10} diezmos</p>
-                  <p className="text-[10px] text-gray-600 mt-1">cubrirían el gasto mensual de {gastoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
+                  <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Si diezman 10€/mes</p>
+                  <p className="text-3xl font-bold text-amber-900">+{diezmos10} diezmos</p>
                 </div>
-                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a' }}>
-                  <p className="text-[10px] uppercase font-bold tracking-wide mb-1" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Si diezman 5€/mes</p>
-                  <p className="text-3xl font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>{diezmos5} diezmos</p>
-                  <p className="text-[10px] text-gray-600 mt-1">cubrirían el gasto mensual de {gastoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
+                  <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Si diezman 5€/mes</p>
+                  <p className="text-3xl font-bold text-amber-900">+{diezmos5} diezmos</p>
                 </div>
               </div>
-              {isPositivo && (
-                <p className="text-[11px] font-semibold mt-3" style={{ color: '#065f46' }}>
-                  ✓ Actualmente la comunidad cubre sus gastos ({neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} de superávit en {meses} {meses === 1 ? 'mes' : 'meses'}).
-                </p>
-              )}
             </div>
           </div>
         );
