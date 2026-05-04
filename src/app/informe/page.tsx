@@ -154,29 +154,91 @@ export default function InformePage() {
           </p>
         </div>
 
-        {/* KPIs globales */}
+        {/* KPIs Diezmos */}
+        <div className="mb-3">
+          <h2 className="text-xs uppercase font-bold text-gray-400 tracking-widest">Diezmos · Resumen</h2>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8 print:grid-cols-4">
-          <div className="rounded-2xl p-4 border-2" style={{ borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}>
+          <div className="rounded-2xl p-4 border" style={{ borderColor: '#dbeafe', backgroundColor: '#eff6ff' }}>
             <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Miembros</p>
             <p className="text-2xl font-bold text-blue-700 mt-1">{totalMembers}</p>
             <p className="text-[10px] text-blue-600">Total comunidad</p>
           </div>
-          <div className="rounded-2xl p-4 border-2" style={{ borderColor: '#a7f3d0', backgroundColor: '#ecfdf5' }}>
+          <div className="rounded-2xl p-4 border" style={{ borderColor: '#d1fae5', backgroundColor: '#ecfdf5' }}>
             <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Pagan</p>
             <p className="text-2xl font-bold text-emerald-700 mt-1">{totalPaying}</p>
             <p className="text-[10px] text-emerald-600">{totalMembers > 0 ? Math.round((totalPaying / totalMembers) * 100) : 0}% participación</p>
           </div>
-          <div className="rounded-2xl p-4 border-2" style={{ borderColor: '#ddd6fe', backgroundColor: '#f5f3ff' }}>
+          <div className="rounded-2xl p-4 border" style={{ borderColor: '#e9d5ff', backgroundColor: '#faf5ff' }}>
             <p className="text-[10px] uppercase font-bold text-purple-700 tracking-wide">Stripe activos</p>
             <p className="text-2xl font-bold text-purple-700 mt-1">{stripeActive}</p>
             <p className="text-[10px] text-purple-600">Suscripciones</p>
           </div>
-          <div className="rounded-2xl p-4 border-2" style={{ borderColor: '#fde68a', backgroundColor: '#fef3c7' }}>
+          <div className="rounded-2xl p-4 border" style={{ borderColor: '#fde68a', backgroundColor: '#fef9c3' }}>
             <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide">Recaudado</p>
             <p className="text-2xl font-bold text-amber-700 mt-1">{formatCurrency(totalRecaudado)}</p>
             <p className="text-[10px] text-amber-600">Total {currentYear}</p>
           </div>
         </div>
+
+        {/* SALDOS (solo informe completo) */}
+        {reportType === 'completo' && dashboardData?.financials && (
+          <>
+            <div className="mb-3">
+              <h2 className="text-xs uppercase font-bold text-gray-400 tracking-widest">Saldos actuales</h2>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-8">
+              <div className="rounded-2xl p-4 border" style={{ borderColor: '#bbf7d0', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' }}>
+                <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide flex items-center gap-1.5">🏦 Saldo Banco</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: '#065f46' }}>{(dashboardData.financials.bankBalance || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                <p className="text-[10px] text-emerald-600">Última transacción registrada</p>
+              </div>
+              <div className="rounded-2xl p-4 border" style={{ borderColor: '#fed7aa', background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)' }}>
+                <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wide flex items-center gap-1.5">💵 Caja Brand (efectivo)</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: '#9a3412' }}>{(dashboardData.financials.cajaBrandEfectivo || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                <p className="text-[10px] text-orange-600">Ventas presenciales · pendiente depositar</p>
+              </div>
+              <div className="rounded-2xl p-4 border" style={{ borderColor: '#bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)' }}>
+                <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide flex items-center gap-1.5">📦 Stock Brand (PVP)</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: '#1e40af' }}>{(dashboardData.shopify?.stockValue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                <p className="text-[10px] text-blue-600">Coste {(dashboardData.shopify?.stockCost || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* TRANSFERENCIAS SIN VINCULAR — alerta destacada */}
+        {data?.unmatchedBank && data.unmatchedBank.length > 0 && (
+          <div className="mb-8 rounded-2xl border-2 page-break-inside-avoid" style={{ borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
+            <div className="p-4 border-b" style={{ borderColor: '#fde68a' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f59e0b' }}>
+                  <span className="text-white text-lg font-bold">!</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold" style={{ color: '#92400e' }}>{data.unmatchedBank.length} transferencia(s) bancaria(s) sin vincular</h2>
+                  <p className="text-xs" style={{ color: '#b45309' }}>Marcadas como Diezmo pero sin miembro asignado · Pendiente asignar manualmente en /diezmos</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 space-y-2">
+              {data.unmatchedBank.map((tx: any) => (
+                <div key={tx.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border" style={{ borderColor: '#fde68a' }}>
+                  <span className="text-[11px] font-bold w-16 flex-shrink-0" style={{ color: '#92400e' }}>
+                    {new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                  </span>
+                  <span className="flex-1 text-[11px] text-gray-700 break-words leading-snug">{tx.concept}</span>
+                  <span className="text-sm font-bold flex-shrink-0" style={{ color: '#92400e' }}>
+                    {(tx.amount).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="px-4 pb-3 text-[10px]" style={{ color: '#b45309' }}>
+              💡 Para asignar: ir a economia.semperjovenes.com/diezmos → "Transferencias sin vincular" → click → seleccionar miembro
+            </p>
+          </div>
+        )}
 
         {/* SECCIONES POR COMUNIDAD */}
         {allCommunities.map((community, idx) => {
@@ -301,10 +363,27 @@ export default function InformePage() {
           );
         })}
 
-        {/* === SECCIONES EXTRA SI TYPE=COMPLETO === */}
+        {/* === P&L POR ÁREA (consolidado) === */}
+        {reportType === 'completo' && dashboardData?.macroGroups && (
+          <PnLAreaSummary macroGroups={dashboardData.macroGroups} />
+        )}
+
+        {/* === DESGLOSE INGRESOS / GASTOS BRAND === */}
+        {reportType === 'completo' && brandData && (
+          <BrandBreakdown brand={brandData} />
+        )}
+
+        {/* === DESGLOSE DETALLADO POR ÁREA === */}
         {reportType === 'completo' && dashboardData && (
           <DesgloseSection
-            title="Semper Brand"
+            title="Comunidad — detalle"
+            color="#8b5cf6"
+            macroGroup={dashboardData.macroGroups?.diezmos}
+          />
+        )}
+        {reportType === 'completo' && dashboardData && (
+          <DesgloseSection
+            title="Semper Brand — detalle"
             color="#3b82f6"
             macroGroup={dashboardData.macroGroups?.brand}
             extra={brandData}
@@ -312,7 +391,7 @@ export default function InformePage() {
         )}
         {reportType === 'completo' && dashboardData && (
           <DesgloseSection
-            title="Otros (no clasificados)"
+            title="Otros — detalle"
             color="#64748b"
             macroGroup={dashboardData.macroGroups?.otros}
           />
@@ -445,6 +524,129 @@ function DesgloseSection({ title, color, macroGroup, extra }: { title: string; c
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function PnLAreaSummary({ macroGroups }: { macroGroups: any; financials?: any }) {
+  const areas = [
+    { key: 'diezmos', label: 'Comunidad', color: '#8b5cf6', soft: '#ede9fe', borderColor: '#ddd6fe' },
+    { key: 'brand', label: 'Semper Brand', color: '#3b82f6', soft: '#eff6ff', borderColor: '#bfdbfe' },
+    { key: 'otros', label: 'Otros', color: '#64748b', soft: '#f1f5f9', borderColor: '#cbd5e1' },
+  ];
+  return (
+    <div className="mt-8 mb-8 page-break-inside-avoid">
+      <h2 className="text-xl font-bold text-gray-900 mb-3">P&L por Área</h2>
+      <div className="grid grid-cols-3 gap-3">
+        {areas.map(a => {
+          const g = macroGroups[a.key];
+          if (!g) return null;
+          const ingresos = g.income || 0;
+          const gastos = g.expenses || 0;
+          const neto = ingresos - gastos;
+          const tags = (g.tags || []).slice().sort((x: any, y: any) => Math.abs(y.net || 0) - Math.abs(x.net || 0)).slice(0, 4);
+          return (
+            <div key={a.key} className="rounded-2xl border-2 p-4" style={{ borderColor: a.borderColor, backgroundColor: a.soft }}>
+              <p className="text-base font-bold mb-2" style={{ color: a.color }}>{a.label}</p>
+              <p className={`text-xl font-bold mb-3`} style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
+                {neto >= 0 ? '+' : ''}{neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })}
+              </p>
+              <div className="space-y-1 mb-3">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-600">Ingreso</span>
+                  <span className="font-semibold text-emerald-700">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-600">Gasto</span>
+                  <span className="font-semibold text-rose-700">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                </div>
+              </div>
+              {tags.length > 0 && (
+                <div className="border-t pt-2" style={{ borderColor: a.borderColor }}>
+                  <p className="text-[9px] uppercase font-bold mb-1.5 tracking-wide" style={{ color: a.color }}>Top categorías</p>
+                  <div className="space-y-1">
+                    {tags.map((t: any) => (
+                      <div key={t.tag} className="flex items-start justify-between gap-2 text-[10px]">
+                        <span className="text-gray-800 font-medium leading-tight flex-1">{t.tag}</span>
+                        <div className="flex flex-col items-end flex-shrink-0">
+                          {t.income > 0 && <span className="text-emerald-700 font-semibold">+{t.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                          {t.expenses > 0 && <span className="text-rose-700 font-semibold">-{t.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BrandBreakdown({ brand }: { brand: any }) {
+  // brand puede tener distintas estructuras dependiendo del endpoint /api/semper-brand
+  const ingresoTotal = brand?.income?.total || brand?.totalIncome || 0;
+  const gastoTotal = brand?.expenses?.total || brand?.totalExpenses || 0;
+  if (ingresoTotal === 0 && gastoTotal === 0) return null;
+
+  // Construir desglose ingresos
+  const ingresoItems: { label: string; value: number; meta?: string }[] = [];
+  if (brand?.income?.totalRevenue) ingresoItems.push({ label: 'Brand', value: brand.income.totalRevenue, meta: `${brand.income.totalCount || ''} movimientos`.trim() });
+  if (brand?.income?.presencial) ingresoItems.push({ label: 'Ventas Presenciales', value: brand.income.presencial, meta: `${brand.income.presencialCount || ''} ventas`.trim() });
+  if (brand?.income?.shopify) ingresoItems.push({ label: 'Shopify', value: brand.income.shopify, meta: `${brand.income.shopifyCount || ''} pedidos`.trim() });
+
+  // Construir desglose gastos
+  const gastoItems: { label: string; value: number }[] = [];
+  if (brand?.expenses?.brand) gastoItems.push({ label: 'Brand', value: brand.expenses.brand });
+  if (brand?.giftLoss) gastoItems.push({ label: '🎁 Regalos (coste prod.)', value: brand.giftLoss });
+  if (brand?.expenses?.shopifyRefunds) gastoItems.push({ label: '↩️ Devoluciones Shopify', value: brand.expenses.shopifyRefunds });
+  if (brand?.expenses?.stripeFees) gastoItems.push({ label: '💳 Comisión Stripe', value: brand.expenses.stripeFees });
+
+  const renderBar = (items: { label: string; value: number; meta?: string }[], total: number, color: string) => {
+    if (items.length === 0) return null;
+    return items
+      .filter(i => i.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .map(i => {
+        const pct = total > 0 ? (i.value / total) * 100 : 0;
+        return (
+          <div key={i.label} className="mb-2">
+            <div className="flex items-baseline justify-between mb-0.5">
+              <span className="text-[11px] font-semibold text-gray-800">{i.label} {i.meta && <span className="text-[9px] text-gray-500 font-normal">{i.meta}</span>}</span>
+              <span className="text-[11px] font-bold" style={{ color }}>{i.value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} <span className="text-[9px] text-gray-500 font-normal">({pct.toFixed(1)}%)</span></span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#f1f5f9' }}>
+              <div className="h-full rounded-full" style={{ background: color, width: `${Math.max(pct, 2)}%` }} />
+            </div>
+          </div>
+        );
+      });
+  };
+
+  return (
+    <div className="mt-8 mb-8 page-break-inside-avoid">
+      <h2 className="text-xl font-bold text-gray-900 mb-3">Desglose Brand</h2>
+      <div className="grid grid-cols-2 gap-4">
+        {/* Ingresos */}
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Desglose Ingresos</p>
+            <p className="text-lg font-bold text-emerald-700">{ingresoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          <div>{renderBar(ingresoItems, ingresoTotal, '#10b981')}</div>
+        </div>
+
+        {/* Gastos */}
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#fecaca', backgroundColor: '#fef2f2' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-sm font-bold text-rose-700 uppercase tracking-wide">Desglose Gastos</p>
+            <p className="text-lg font-bold text-rose-700">{gastoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          <div>{renderBar(gastoItems, gastoTotal, '#ef4444')}</div>
+        </div>
+      </div>
     </div>
   );
 }
