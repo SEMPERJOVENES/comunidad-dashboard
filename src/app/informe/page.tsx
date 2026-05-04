@@ -741,16 +741,21 @@ function BrandBreakdown({ brand }: { brand: any }) {
   if ((ch.stripePending || 0) > 0) ingresoItems.push({ label: 'Stripe pendiente', value: ch.stripePending, meta: 'no liquidado al banco' });
   if ((ch.cajaEfectivo || 0) > 0) ingresoItems.push({ label: 'Efectivo (caja POS)', value: ch.cajaEfectivo, meta: 'pendiente depositar' });
 
-  // Desglose Inversión (proveedores, lotes producción)
-  const inversionItems: { label: string; value: number }[] = [];
+  // Desglose Inversión NETA (proveedores − coste regalos)
+  const inversionItems: { label: string; value: number; meta?: string }[] = [];
   const inversionTotal = brand?.expenses?.inversionTotal || 0;
-  if (inversionTotal > 0) inversionItems.push({ label: 'Compras a proveedores (Rockwear, lotes)', value: inversionTotal });
+  const inversionBruto = brand?.expenses?.inversionTotalBruto || inversionTotal;
+  const regalosCoste = brand?.giftLoss || brand?.expenses?.regalosCoste || 0;
+  if (inversionTotal > 0) inversionItems.push({ label: 'Stock activo (proveedores)', value: inversionTotal, meta: `lote ${inversionBruto.toFixed(0)}€ − ${regalosCoste.toFixed(0)}€ regalos` });
 
-  // Desglose Gastos operativos (no inversión)
+  // Regalos como categoría INDEPENDIENTE (no es operativo, donativo)
+  const regaloItems: { label: string; value: number }[] = [];
+  if (regalosCoste > 0) regaloItems.push({ label: `Regalos (${(brand?.giftDetail || []).length} uds)`, value: regalosCoste });
+
+  // Desglose Gastos operativos (sin regalos)
   const gastoItems: { label: string; value: number }[] = [];
   const gastoOpBank = brand?.expenses?.gastoOperativoTotal || 0;
   if (gastoOpBank > 0) gastoItems.push({ label: 'Gasto operativo banco (Shopify, apps)', value: gastoOpBank });
-  if (brand?.giftLoss > 0) gastoItems.push({ label: 'Regalos (coste prod.)', value: brand.giftLoss });
   if (brand?.expenses?.shopifyRefunds > 0) gastoItems.push({ label: `Devoluciones Shopify (${brand.expenses.shopifyRefundCount || 0})`, value: brand.expenses.shopifyRefunds });
   if (brand?.expenses?.stripeFees > 0) gastoItems.push({ label: 'Comisión Stripe', value: brand.expenses.stripeFees });
 
@@ -779,13 +784,13 @@ function BrandBreakdown({ brand }: { brand: any }) {
 
   return (
     <div className="mt-10 mb-8 section-break">
-      <SectionHeader number={8} title="Desglose Brand" subtitle="Ingresos · Inversión · Gastos operativos" color="#3b82f6" />
-      <div className="grid grid-cols-3 gap-4">
+      <SectionHeader number={8} title="Desglose Brand" subtitle="Ingresos · Inversión · Regalos · Gastos operativos" color="#3b82f6" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Ingresos */}
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
           <div className="flex items-baseline justify-between mb-3">
             <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Ingresos</p>
-            <p className="text-base font-bold text-emerald-700">{ingresoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            <p className="text-sm font-bold text-emerald-700">{ingresoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
           <div>{renderBar(ingresoItems, ingresoTotal, '#10b981')}</div>
         </div>
@@ -794,21 +799,35 @@ function BrandBreakdown({ brand }: { brand: any }) {
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}>
           <div className="flex items-baseline justify-between mb-3">
             <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Inversión</p>
-            <p className="text-base font-bold text-blue-700">{inversionTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            <p className="text-sm font-bold text-blue-700">{inversionTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
           {inversionItems.length > 0 ? (
             <div>{renderBar(inversionItems, inversionTotal, '#3b82f6')}</div>
           ) : (
-            <p className="text-[10px] text-gray-400 italic">Sin inversiones identificadas en el periodo</p>
+            <p className="text-[10px] text-gray-400 italic">Sin inversiones</p>
           )}
-          <p className="text-[9px] text-blue-600 mt-2 italic">Compras a proveedores y lotes de producción (capitalizable como stock)</p>
+          <p className="text-[9px] text-blue-600 mt-2 italic">Stock activo (capitalizable, recuperable al vender)</p>
+        </div>
+
+        {/* Regalos */}
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#fde68a', backgroundColor: '#fffbeb' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">🎁 Regalos</p>
+            <p className="text-sm font-bold text-amber-700">{regalosCoste.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          {regaloItems.length > 0 ? (
+            <div>{renderBar(regaloItems, regalosCoste, '#f59e0b')}</div>
+          ) : (
+            <p className="text-[10px] text-gray-400 italic">Sin regalos</p>
+          )}
+          <p className="text-[9px] text-amber-600 mt-2 italic">Donativo en especie (coste asumido del lote)</p>
         </div>
 
         {/* Gastos operativos */}
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#fecaca', backgroundColor: '#fef2f2' }}>
           <div className="flex items-baseline justify-between mb-3">
             <p className="text-xs font-bold text-rose-700 uppercase tracking-wide">Gastos operativos</p>
-            <p className="text-base font-bold text-rose-700">{totalGastosOp.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            <p className="text-sm font-bold text-rose-700">{totalGastosOp.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
           <div>{renderBar(gastoItems, totalGastosOp, '#ef4444')}</div>
           <p className="text-[9px] text-rose-600 mt-2 italic">Comisiones, refunds, suscripciones (no se recuperan)</p>

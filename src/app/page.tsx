@@ -414,16 +414,18 @@ export default function DashboardPage() {
                             );
                           })()}
 
-                          {/* INVERSIÓN (solo Brand, naranja) */}
+                          {/* INVERSIÓN (solo Brand, naranja) — neta sin regalos */}
                           {key === 'brand' && (() => {
                             const fin = data.financials as any;
-                            const inversionTotal = fin.brandInversionTotal || 0;
+                            const inversionTotal = fin.brandInversionTotal || 0; // ya neta de regalos
+                            const inversionBruto = fin.brandInversionTotalBruto || 0;
+                            const regalosCoste = fin.brandRegalosCoste || 0;
                             const inversionDetail = fin.brandInversionDetail || [];
                             if (inversionTotal === 0) return null;
                             return (
                               <div className="mb-3">
                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-orange-100">
-                                  <p className="text-[11px] font-bold text-orange-700 uppercase tracking-wider">↘ Inversión</p>
+                                  <p className="text-[11px] font-bold text-orange-700 uppercase tracking-wider">↘ Inversión (stock activo)</p>
                                   <p className="text-sm font-bold text-orange-700">-{formatCurrency(inversionTotal)}</p>
                                 </div>
                                 <div className="space-y-0.5">
@@ -437,7 +439,25 @@ export default function DashboardPage() {
                                     </div>
                                   ))}
                                 </div>
-                                <p className="text-[10px] text-orange-600 mt-2 italic px-2">Capitalizable como stock (recuperable al vender)</p>
+                                <p className="text-[10px] text-orange-600 mt-2 italic px-2">
+                                  Lote {formatCurrency(inversionBruto)} − {formatCurrency(regalosCoste)} regalos · capitalizable, recuperable al vender
+                                </p>
+                              </div>
+                            );
+                          })()}
+
+                          {/* REGALOS (solo Brand, ámbar) */}
+                          {key === 'brand' && (() => {
+                            const fin = data.financials as any;
+                            const regalosCoste = fin.brandRegalosCoste || 0;
+                            if (regalosCoste === 0) return null;
+                            return (
+                              <div className="mb-3">
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-amber-100">
+                                  <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">🎁 Regalos</p>
+                                  <p className="text-sm font-bold text-amber-700">-{formatCurrency(regalosCoste)}</p>
+                                </div>
+                                <p className="text-[10px] text-amber-600 italic px-2">Donativo en especie (coste asumido, no recuperable)</p>
                               </div>
                             );
                           })()}
@@ -446,10 +466,10 @@ export default function DashboardPage() {
                           {(() => {
                             const expenseTags = group.tags.filter(t => t.expenses > 0).sort((a, b) => b.expenses - a.expenses);
                             if (expenseTags.length === 0) return null;
-                            // Para Brand: filtrar gastos para excluir los que ya son Inversión
+                            // Para Brand: filtrar gastos para excluir Inversión bruta y regalos
                             const fin = data.financials as any;
-                            const inversionTotal = key === 'brand' ? (fin.brandInversionTotal || 0) : 0;
-                            const expensesShown = group.expenses - inversionTotal;
+                            const inversionBruto = key === 'brand' ? (fin.brandInversionTotalBruto || 0) : 0;
+                            const expensesShown = group.expenses - inversionBruto;
                             if (expensesShown <= 0) return null;
                             return (
                               <div>

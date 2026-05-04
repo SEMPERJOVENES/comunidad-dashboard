@@ -734,10 +734,14 @@ export async function GET(request: NextRequest) {
         byTag: expensesByTag,
         total: totalBankExpenses,
         // Desglose Inversión vs Gasto operativo
-        inversionTotal: brandInversionTotal,
+        // Inversión proveedor NETA = lote total − coste regalos (los regalos salieron del mismo lote)
+        inversionTotal: Math.max(0, brandInversionTotal - giftLoss),
+        inversionTotalBruto: brandInversionTotal, // referencia
         inversionDetail: brandInversionDetail,
         gastoOperativoTotal: brandGastoOperativoTotal,
         gastoOperativoDetail: brandGastoOperativoDetail,
+        // Regalos como categoría separada (donativo, no recuperable)
+        regalosCoste: giftLoss,
         stripeFees: netStripeFees,
         stripeGross,
         stripeNet,

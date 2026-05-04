@@ -73,6 +73,13 @@ export async function GET(request: NextRequest) {
     const efectivoNoRegalo = (efectivoVentas || []).filter((v: any) => v.sale_type !== 'regalo' && v.sale_type !== 'pendiente_pago');
     const cajaBrandEfectivo = efectivoNoRegalo.reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
 
+    // Coste regalos (cost_loss de ventas tipo regalo) — para descontar de inversión proveedor
+    const { data: regalosVentas } = await supabase
+      .from('ventas_presenciales')
+      .select('cost_loss')
+      .or('sale_type.eq.regalo,payment_method.eq.regalo');
+    const brandRegalosCoste = (regalosVentas || []).reduce((s: number, v: any) => s + parseFloat(v.cost_loss || '0'), 0);
+
     // Desglose por producto
     const cajaBrandEfectivoByProduct: Record<string, { total: number; count: number; items: Array<{ date: string; customer: string; variant: string; amount: number; notes: string }> }> = {};
     for (const v of efectivoNoRegalo) {
@@ -265,10 +272,13 @@ export async function GET(request: NextRequest) {
         cajaBrandEfectivo,
         cajaBrandEfectivoByProduct,
         brandByChannel,
-        brandInversionTotal,
+        // Inversión proveedor NETA = lote total − coste regalos
+        brandInversionTotal: Math.max(0, brandInversionTotal - brandRegalosCoste),
+        brandInversionTotalBruto: brandInversionTotal,
         brandInversionDetail,
         brandGastoOperativoTotal,
         brandGastoOperativoDetail,
+        brandRegalosCoste,
       },
       // Macro groups
       macroGroups: {
