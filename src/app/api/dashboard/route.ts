@@ -125,6 +125,12 @@ export async function GET(request: NextRequest) {
       otro: 0,
     };
 
+    // Brand expenses desglosados: Inversión vs Gasto operativo
+    let brandInversionTotal = 0;
+    let brandGastoOperativoTotal = 0;
+    const brandInversionDetail: Array<{ date: string; concept: string; amount: number }> = [];
+    const brandGastoOperativoDetail: Array<{ date: string; concept: string; amount: number }> = [];
+
     for (const tx of bankTxs) {
       const macro = getMacroCategory(tx);
       if (macro === 'excluido') continue; // Skip "No contabilizar"
@@ -144,6 +150,19 @@ export async function GET(request: NextRequest) {
         else if (concept.includes('transferencia de stripe') && concept.includes('shopify')) brandByChannel.stripeShopify += amt;
         else if (concept.includes('transferencia')) brandByChannel.transferencia += amt;
         else brandByChannel.otro += amt;
+      }
+
+      // Si es Brand y es gasto, separar Inversión vs Gasto operativo
+      if (macro === 'brand' && amt < 0) {
+        const isInvestment = /rockwear|lote|produc|imprenta|tela|fabric|proveedor/.test(concept);
+        const detail = { date: tx.date, concept: tx.concept || '', amount: Math.abs(amt) };
+        if (isInvestment) {
+          brandInversionTotal += Math.abs(amt);
+          brandInversionDetail.push(detail);
+        } else {
+          brandGastoOperativoTotal += Math.abs(amt);
+          brandGastoOperativoDetail.push(detail);
+        }
       }
 
       if (!macroGroups[macro].tags[tag]) {
@@ -246,6 +265,10 @@ export async function GET(request: NextRequest) {
         cajaBrandEfectivo,
         cajaBrandEfectivoByProduct,
         brandByChannel,
+        brandInversionTotal,
+        brandInversionDetail,
+        brandGastoOperativoTotal,
+        brandGastoOperativoDetail,
       },
       // Macro groups
       macroGroups: {

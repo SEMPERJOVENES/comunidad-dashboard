@@ -202,7 +202,7 @@ export default function SemperBrandPage() {
   const shopifyRefunds = data?.expenses.shopifyRefunds || 0;
   const giftLoss = data?.giftLoss || 0;
   const totalExpenses = (data?.expenses.total || 0) + totalManualCosts + stripeFees + shopifyRefunds + giftLoss;
-  const totalIncome = data?.income.total || 0;
+  const totalIncome = (data?.income as any)?.realBrandTotal || data?.income.total || 0;
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
   const stockVal = data?.stockValuation;
@@ -210,17 +210,32 @@ export default function SemperBrandPage() {
   const incomeBreakdown = useMemo(() => {
     if (!data) return [];
     const items: { key: string; label: string; amount: number; icon: any; color: string; bg: string; detail: string; transactions: TransactionDetail[] }[] = [];
-    if (data.income.shopify > 0) {
-      const shopifyTxs = data.orders.map(o => ({ date: o.date, description: `${o.name} — ${o.customer}`, amount: o.total }));
-      items.push({ key: 'shopify', label: 'Shopify', amount: data.income.shopify, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50', detail: `${data.income.shopifyOrders} pedidos`, transactions: shopifyTxs });
+    const inc: any = data.income;
+
+    // 1. Bizums tag Brand banco
+    if ((inc.realBrandByChannel?.bankBizum || 0) > 0) {
+      items.push({ key: 'ch-bizum', label: 'Bizum (banco · tag Brand)', amount: inc.realBrandByChannel.bankBizum, icon: Landmark, color: 'text-cyan-600', bg: 'bg-cyan-50', detail: 'Bizums recibidos', transactions: [] });
     }
-    if (data.income.ventasPresenciales > 0) {
-      items.push({ key: 'ventas', label: 'Ventas Presenciales', amount: data.income.ventasPresenciales, icon: Store, color: 'text-emerald-600', bg: 'bg-emerald-50', detail: `${data.income.ventasCount} ventas`, transactions: data.transactions.ventas });
+    // 2. Transferencias Brand (no Stripe)
+    if ((inc.realBrandByChannel?.bankTransferencia || 0) > 0) {
+      items.push({ key: 'ch-trans', label: 'Transferencia (banco · tag Brand)', amount: inc.realBrandByChannel.bankTransferencia, icon: Landmark, color: 'text-violet-600', bg: 'bg-violet-50', detail: 'Transferencias directas', transactions: [] });
     }
-    Object.entries(data.income.bankIncome).forEach(([tag, amount]) => {
-      const txs = (data.transactions.bankIncome[tag] || []).map(t => ({ date: t.date, description: t.concept || t.description, amount: t.amount }));
-      items.push({ key: `bank-${tag}`, label: tag, amount, icon: Landmark, color: 'text-blue-600', bg: 'bg-blue-50', detail: `${txs.length} movimientos`, transactions: txs });
-    });
+    // 3. Stripe payouts Shopify (online)
+    if ((inc.realBrandByChannel?.bankStripePayoutShopify || 0) > 0) {
+      items.push({ key: 'ch-shopify', label: 'Shopify online (Stripe payouts)', amount: inc.realBrandByChannel.bankStripePayoutShopify, icon: ShoppingCart, color: 'text-emerald-600', bg: 'bg-emerald-50', detail: `${inc.shopifyOrders || 0} pedidos web`, transactions: [] });
+    }
+    // 4. Stripe one-time mixed (auto-split de payouts tag Diezmo)
+    if ((inc.realBrandByChannel?.stripePayoutsOneTimeMixed || 0) > 0) {
+      items.push({ key: 'ch-stripe-mixed', label: 'Stripe one-time (mezclado en payouts)', amount: inc.realBrandByChannel.stripePayoutsOneTimeMixed, icon: ShoppingCart, color: 'text-amber-600', bg: 'bg-amber-50', detail: 'Auto-split via Stripe API', transactions: [] });
+    }
+    // 5. Stripe pendiente (no liquidado)
+    if ((inc.realBrandByChannel?.stripePending || 0) > 0) {
+      items.push({ key: 'ch-stripe-pending', label: 'Stripe pendiente (no liquidado)', amount: inc.realBrandByChannel.stripePending, icon: ShoppingCart, color: 'text-blue-600', bg: 'bg-blue-50', detail: 'Aún en saldo Stripe', transactions: [] });
+    }
+    // 6. Caja efectivo POS
+    if ((inc.realBrandByChannel?.cajaEfectivo || 0) > 0) {
+      items.push({ key: 'ch-cash', label: 'Efectivo (caja POS)', amount: inc.realBrandByChannel.cajaEfectivo, icon: Store, color: 'text-orange-600', bg: 'bg-orange-50', detail: 'Pendiente depositar', transactions: [] });
+    }
     return items.sort((a, b) => b.amount - a.amount);
   }, [data]);
 
