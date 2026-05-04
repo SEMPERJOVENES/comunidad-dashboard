@@ -89,9 +89,24 @@ export default function DashboardPage() {
           start: selectedRange.startDate.toISOString(),
           end: selectedRange.endDate.toISOString(),
         });
-        const res = await fetch(`/api/dashboard?${params}`);
-        if (!res.ok) throw new Error('Error al cargar datos');
-        setData(await res.json());
+        const [resDash, resBrand] = await Promise.all([
+          fetch(`/api/dashboard?${params}`),
+          fetch(`/api/semper-brand?${params}`),
+        ]);
+        if (!resDash.ok) throw new Error('Error al cargar datos');
+        const dash = await resDash.json();
+        const brand = resBrand.ok ? await resBrand.json() : null;
+        // Sobrescribir stockValue/stockCost con los del endpoint de brand
+        // (excluye preventa y productos sin coste)
+        if (brand?.stockValuation) {
+          dash.shopify = {
+            ...dash.shopify,
+            stockValue: brand.stockValuation.retailValue ?? dash.shopify.stockValue,
+            stockCost: brand.stockValuation.costValue ?? dash.shopify.stockCost,
+            totalUnits: brand.stockValuation.units ?? dash.shopify.totalUnits,
+          };
+        }
+        setData(dash);
       } catch (err: any) {
         setError(err.message);
       } finally {
