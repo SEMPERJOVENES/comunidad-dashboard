@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils';
-import { Printer, Loader2, ArrowLeft, CreditCard, Smartphone, Landmark, Check, X, Cake, Church, Repeat } from 'lucide-react';
+import { Printer, Loader2, ArrowLeft, CreditCard, Smartphone, Landmark, Check, X, Cake, Church, Repeat, Wallet, Banknote, Package, Scale, ArrowUp, ArrowDown, AlertCircle } from 'lucide-react';
 import { findBirthday } from '@/lib/birthdays';
 
 const MONTHS_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -134,24 +134,39 @@ export default function InformePage() {
 
       {/* CONTENIDO IMPRIMIBLE */}
       <div className="max-w-[210mm] mx-auto p-8 print:p-6">
-        {/* Portada */}
-        <div className="mb-8 pb-6 border-b-2 border-violet-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
-              <Church size={28} color="white" />
+        {/* PORTADA HERO */}
+        <div className="mb-10 -mx-8 -mt-8 px-8 pt-10 pb-8 text-white relative overflow-hidden print:-mx-6 print:-mt-6 print:px-6"
+             style={{ background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #a855f7 100%)' }}>
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, white 0%, transparent 40%)' }} />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <Church size={16} className="text-white/80" />
+              <p className="text-[10px] uppercase tracking-[0.3em] text-white/70 font-semibold">Semper Jóvenes</p>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {reportType === 'completo' ? 'Informe Completo' : 'Informe de Diezmos'}
-              </h1>
-              <p className="text-sm text-gray-500">Semper Jóvenes · {fechaImpresion}</p>
+            <h1 className="text-5xl font-black leading-none tracking-tight">
+              {reportType === 'completo' ? 'Informe Completo' : 'Diezmos'}
+            </h1>
+            <p className="text-2xl font-light mt-3 text-white/90">
+              {rangeStart ? rangeStart.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : '?'}
+              {' → '}
+              {rangeEnd ? rangeEnd.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : '?'}
+            </p>
+            <div className="grid grid-cols-3 gap-6 mt-6 pt-5 border-t border-white/20">
+              <div>
+                <p className="text-3xl font-black leading-none">{totalMembers}</p>
+                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Miembros</p>
+              </div>
+              <div>
+                <p className="text-3xl font-black leading-none">{totalMembers > 0 ? Math.round((totalPaying / totalMembers) * 100) : 0}%</p>
+                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Participación</p>
+              </div>
+              <div>
+                <p className="text-3xl font-black leading-none">{formatCurrency(totalRecaudado)}</p>
+                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Recaudado</p>
+              </div>
             </div>
+            <p className="text-[10px] text-white/60 mt-4">Generado el {fechaImpresion}</p>
           </div>
-          <p className="text-xs text-gray-500">
-            Período: {rangeStart ? rangeStart.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '?'}
-            {' → '}
-            {rangeEnd ? rangeEnd.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '?'}
-          </p>
         </div>
 
         {/* KPIs Diezmos */}
@@ -353,21 +368,26 @@ export default function InformePage() {
                         </div>
                       </div>
 
-                      {/* Tags 12 meses (verde si pagado, rojo si pasado sin pagar, gris futuro/actual sin pagar) */}
+                      {/* Tags 12 meses con icono check/X — heatmap legible */}
                       <div className="flex gap-0.5">
                         {Array.from({ length: 12 }, (_, i) => {
                           const mk = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
                           const monthPaid = paidMonths.has(mk);
                           const isPast = mk < currentMonthKey;
                           const isCurrent = mk === currentMonthKey;
-                          let bg = '#f3f4f6'; // gris futuro
+                          let bg = '#f3f4f6';
                           let color = '#9ca3af';
                           if (monthPaid) { bg = '#10b981'; color = 'white'; }
                           else if (isPast) { bg = '#fecaca'; color = '#991b1b'; }
                           else if (isCurrent) { bg = '#fef3c7'; color = '#92400e'; }
                           return (
-                            <span key={i} className="flex-1 text-center text-[9px] sm:text-[8px] print:text-[7px] font-bold py-1 print:py-0.5 rounded" style={{ background: bg, color }}>
-                              {MONTH_LABELS_SHORT[i]}
+                            <span key={i} className="flex-1 flex flex-col items-center justify-center rounded py-1 print:py-0.5"
+                                  style={{ background: bg, color }}>
+                              <span className="flex items-center justify-center" style={{ minHeight: 10 }}>
+                                {monthPaid && <Check size={9} strokeWidth={3.5} />}
+                                {!monthPaid && isPast && <X size={9} strokeWidth={3} />}
+                              </span>
+                              <span className="text-[8px] print:text-[7px] font-bold leading-none mt-0.5">{MONTH_LABELS_SHORT[i]}</span>
                             </span>
                           );
                         })}
@@ -461,7 +481,9 @@ export default function InformePage() {
         @media print {
           body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
           @page { size: A4; margin: 12mm; }
-          .page-break-inside-avoid { page-break-inside: avoid; }
+          .page-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
+          .section-break { page-break-before: always; break-before: page; }
+          .section-header-h2 { page-break-after: avoid; break-after: avoid; }
         }
       `}</style>
     </div>
@@ -591,9 +613,8 @@ const AREA_CONFIG: Record<string, { label: string; bg: string; iconBg: string; i
 function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
   const order = ['diezmos', 'brand', 'otros'];
   return (
-    <div className="mt-8 mb-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-1">P&L por Área</h2>
-      <p className="text-xs text-gray-500 mb-4">Resumen de ingresos y gastos por categoría macro</p>
+    <div className="mt-10 mb-8 section-break">
+      <SectionHeader number={6} title="P&L por Área" subtitle="Resumen de ingresos y gastos por categoría macro" color="#7c3aed" />
       <div className="grid grid-cols-3 gap-3">
         {order.map(key => {
           const g = macroGroups[key];
@@ -693,8 +714,8 @@ function BrandBreakdown({ brand }: { brand: any }) {
   };
 
   return (
-    <div className="mt-8 mb-8 page-break-inside-avoid">
-      <h2 className="text-xl font-bold text-gray-900 mb-3">Desglose Brand</h2>
+    <div className="mt-10 mb-8 section-break">
+      <SectionHeader number={8} title="Desglose Brand" subtitle="Ingresos y gastos detallados con porcentajes" color="#3b82f6" />
       <div className="grid grid-cols-2 gap-4">
         {/* Ingresos */}
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
@@ -740,9 +761,8 @@ function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: 
   const expenseTags = tags.filter((t: any) => t.expenses > 0).sort((a: any, b: any) => b.expenses - a.expenses);
 
   return (
-    <div className="mt-8 mb-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Comunidad · Análisis</h2>
-      <p className="text-xs text-gray-500 mb-4">Diezmos vs gastos comunitarios · cálculo break-even</p>
+    <div className="mt-10 mb-8 section-break">
+      <SectionHeader number={7} title="Comunidad · Análisis" subtitle="Diezmos vs gastos comunitarios · cálculo break-even" color="#8b5cf6" />
 
       {/* KPI principal con neto + meses */}
       <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: neto < 0 ? '#fecaca' : '#bbf7d0' }}>
@@ -860,6 +880,20 @@ function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: 
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SectionHeader({ number, title, subtitle, color }: { number: number; title: string; subtitle?: string; color: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-4 mt-2 section-header-h2">
+      <div className="w-1 h-12 rounded-full flex-shrink-0" style={{ background: color }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[9px] uppercase tracking-[0.25em] text-gray-400 font-bold">Sección {String(number).padStart(2, '0')}</p>
+        <h2 className="text-xl font-black text-gray-900 leading-tight">{title}</h2>
+        {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+      </div>
+      <span className="text-5xl font-black opacity-10 leading-none" style={{ color }}>{String(number).padStart(2, '0')}</span>
     </div>
   );
 }
