@@ -128,11 +128,24 @@ export async function getPayoutBreakdown(payoutId: string) {
   };
 }
 
+// Cache en memoria de breakdowns lite (TTL 5 min)
+const _payoutCache = new Map<string, { data: { payoutId: string; subsAmount: number; oneTimeAmount: number }; ts: number }>();
+const _CACHE_TTL = 5 * 60 * 1000;
+
 /**
  * Versión LIGERA de getPayoutBreakdown — solo separa subs vs one-time
  * sin expandir customer. Mucho más rápido para análisis agregados.
+ * Cacheado en memoria 5 min.
  */
 export async function getPayoutBreakdownLite(payoutId: string) {
+  const cached = _payoutCache.get(payoutId);
+  if (cached && Date.now() - cached.ts < _CACHE_TTL) return cached.data;
+  const data = await _getPayoutBreakdownLiteUncached(payoutId);
+  _payoutCache.set(payoutId, { data, ts: Date.now() });
+  return data;
+}
+
+async function _getPayoutBreakdownLiteUncached(payoutId: string) {
   const allTxs: Stripe.BalanceTransaction[] = [];
   let hasMore = true;
   let startingAfter: string | undefined;
@@ -225,8 +238,15 @@ export async function getBalanceTransactions(params: { limit?: number; created?:
   return txs.data.map(mapBalanceTx);
 }
 
-// Fetch ALL balance transactions with auto-pagination
+// Cache en memoria de balance txs por rango (TTL 5 min)
+const _balanceTxCache = new Map<string, { data: any[]; ts: number }>();
+
+// Fetch ALL balance transactions with auto-pagination (cacheado)
 export async function getAllBalanceTransactions(params: { created?: { gte?: number; lte?: number }; type?: string } = {}) {
+  const key = JSON.stringify(params);
+  const cached = _balanceTxCache.get(key);
+  if (cached && Date.now() - cached.ts < _CACHE_TTL) return cached.data;
+
   const all: ReturnType<typeof mapBalanceTx>[] = [];
   let hasMore = true;
   let startingAfter: string | undefined;
@@ -244,6 +264,7 @@ export async function getAllBalanceTransactions(params: { created?: { gte?: numb
       startingAfter = txs.data[txs.data.length - 1].id;
     }
   }
+  _balanceTxCache.set(key, { data: all, ts: Date.now() });
   return all;
 }
 

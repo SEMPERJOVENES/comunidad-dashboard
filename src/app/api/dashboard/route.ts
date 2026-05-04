@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, getStockValuation } from '@/lib/shopify';
-import { getPaymentVolume, getBalance, getAllCharges } from '@/lib/stripe';
+import { getPaymentVolume, getBalance } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -161,22 +161,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // === STRIPE one-time charges del periodo (Brand) ===
-    // Charges sin invoice = Brand. Los con invoice = Diezmo (suscripciones).
-    let stripeOneTimeBrand = 0;
-    try {
-      const stripeCharges = await getAllCharges({ created: { gte: startTs, lte: endTs } });
-      for (const c of stripeCharges) {
-        if (!c.paid) continue;
-        if (c.isSubscription) continue; // saltar diezmos
-        if (c.refunded) continue;
-        stripeOneTimeBrand += c.amount;
-      }
-    } catch { /* skip */ }
-
-    // Reasignar Brand: sumar Stripe one-time + efectivo, restar Stripe one-time de Diezmos
-    macroGroups.brand.income += stripeOneTimeBrand + cajaBrandEfectivo;
-    macroGroups.diezmos.income = Math.max(0, macroGroups.diezmos.income - stripeOneTimeBrand);
+    // Sumar caja efectivo al Brand (Stripe one-time se calcula en el frontend con fetch paralelo)
+    macroGroups.brand.income += cajaBrandEfectivo;
 
     // === CAJA: Balance breakdown by category from ALL bank transactions ===
     // Get ALL transactions for "caja" (not date-filtered) — con paginación

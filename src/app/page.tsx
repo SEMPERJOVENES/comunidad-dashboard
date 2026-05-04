@@ -107,6 +107,14 @@ export default function DashboardPage() {
             totalUnits: brand.stockValuation.units ?? dash.shopify.totalUnits,
           };
         }
+        // Sobrescribir Brand income con el TOTAL REAL (banco + Stripe one-time + efectivo)
+        if (brand?.income?.realBrandTotal != null) {
+          const realTotal = brand.income.realBrandTotal;
+          const stripeOneTime = brand.income.stripeOneTime || 0;
+          dash.macroGroups.brand.income = realTotal;
+          // Restar Stripe one-time de Diezmos (estaba mezclado en payouts tag Diezmo)
+          dash.macroGroups.diezmos.income = Math.max(0, dash.macroGroups.diezmos.income - stripeOneTime);
+        }
         setData(dash);
       } catch (err: any) {
         setError(err.message);
@@ -398,7 +406,7 @@ export default function DashboardPage() {
                             return (
                               <div>
                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-100">
-                                  <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ {key === 'brand' ? 'Inversión' : 'Gastos'}</p>
+                                  <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ Gastos</p>
                                   <p className="text-sm font-bold text-rose-700">-{formatCurrency(group.expenses)}</p>
                                 </div>
                                 <div className="space-y-0.5">
