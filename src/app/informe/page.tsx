@@ -674,23 +674,24 @@ function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
 }
 
 function BrandBreakdown({ brand }: { brand: any }) {
-  // brand puede tener distintas estructuras dependiendo del endpoint /api/semper-brand
-  const ingresoTotal = brand?.income?.total || brand?.totalIncome || 0;
-  const gastoTotal = brand?.expenses?.total || brand?.totalExpenses || 0;
+  const ingresoTotal = brand?.income?.total || 0;
+  const gastoTotal = brand?.expenses?.total || 0;
   if (ingresoTotal === 0 && gastoTotal === 0) return null;
 
-  // Construir desglose ingresos
+  // Desglose ingresos: Brand (banco), Ventas Presenciales, Shopify
   const ingresoItems: { label: string; value: number; meta?: string }[] = [];
-  if (brand?.income?.totalRevenue) ingresoItems.push({ label: 'Brand', value: brand.income.totalRevenue, meta: `${brand.income.totalCount || ''} movimientos`.trim() });
-  if (brand?.income?.presencial) ingresoItems.push({ label: 'Ventas Presenciales', value: brand.income.presencial, meta: `${brand.income.presencialCount || ''} ventas`.trim() });
-  if (brand?.income?.shopify) ingresoItems.push({ label: 'Shopify', value: brand.income.shopify, meta: `${brand.income.shopifyCount || ''} pedidos`.trim() });
+  const brandBank = brand?.income?.bankIncome?.Brand || brand?.income?.totalBankIncome || 0;
+  if (brandBank > 0) ingresoItems.push({ label: 'Brand (banco)', value: brandBank, meta: 'transferencias/bizums Brand' });
+  if (brand?.income?.ventasPresenciales > 0) ingresoItems.push({ label: 'Ventas Presenciales', value: brand.income.ventasPresenciales, meta: `${brand.income.ventasCount || 0} ventas` });
+  if (brand?.income?.shopify > 0) ingresoItems.push({ label: 'Shopify', value: brand.income.shopify, meta: `${brand.income.shopifyOrders || 0} pedidos` });
 
-  // Construir desglose gastos
+  // Desglose gastos
   const gastoItems: { label: string; value: number }[] = [];
-  if (brand?.expenses?.brand) gastoItems.push({ label: 'Brand', value: brand.expenses.brand });
-  if (brand?.giftLoss) gastoItems.push({ label: '🎁 Regalos (coste prod.)', value: brand.giftLoss });
-  if (brand?.expenses?.shopifyRefunds) gastoItems.push({ label: '↩️ Devoluciones Shopify', value: brand.expenses.shopifyRefunds });
-  if (brand?.expenses?.stripeFees) gastoItems.push({ label: '💳 Comisión Stripe', value: brand.expenses.stripeFees });
+  const brandExp = brand?.expenses?.byTag?.Brand || 0;
+  if (brandExp > 0) gastoItems.push({ label: 'Brand (gastos producción)', value: brandExp });
+  if (brand?.giftLoss > 0) gastoItems.push({ label: 'Regalos (coste prod.)', value: brand.giftLoss });
+  if (brand?.expenses?.shopifyRefunds > 0) gastoItems.push({ label: `Devoluciones Shopify (${brand.expenses.shopifyRefundCount || 0})`, value: brand.expenses.shopifyRefunds });
+  if (brand?.expenses?.stripeFees > 0) gastoItems.push({ label: 'Comisión Stripe', value: brand.expenses.stripeFees });
 
   const renderBar = (items: { label: string; value: number; meta?: string }[], total: number, color: string) => {
     if (items.length === 0) return null;
@@ -745,9 +746,16 @@ function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: 
   const neto = ingresos - gastos;
   const tags = (macroGroup.tags || []);
 
-  // Calcular meses del rango
-  const ms = (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-  const meses = Math.max(1, Math.round(ms));
+  // Calcular meses CALENDARIO completos del rango (ene-abr = 4 meses)
+  const startY = rangeStart.getFullYear();
+  const startM = rangeStart.getMonth();
+  const endY = rangeEnd.getFullYear();
+  const endM = rangeEnd.getMonth();
+  const dayEnd = rangeEnd.getDate();
+  let meses = (endY - startY) * 12 + (endM - startM);
+  // Si el último mes está a >= 28 del mes, contar también ese mes
+  if (dayEnd >= 28) meses += 1;
+  meses = Math.max(1, meses);
   const netoMensual = neto / meses;
   const gastoMensual = gastos / meses;
   const ingresoMensual = ingresos / meses;
@@ -793,36 +801,47 @@ function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: 
       </div>
 
       {/* CÁLCULO BREAK-EVEN */}
-      {neto < 0 && (
-        <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: '#fde68a', background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' }}>
-          <div className="px-5 py-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#f59e0b' }}>
-                <span className="text-white text-base">⚖️</span>
+      {(() => {
+        // Para calcular break-even consideramos solo el GASTO mensual a cubrir,
+        // independientemente del estado actual (positivo o negativo).
+        const diezmos5 = Math.ceil(gastoMensual / 5);
+        const diezmos10 = Math.ceil(gastoMensual / 10);
+        const isPositivo = neto >= 0;
+        return (
+          <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a', background: isPositivo ? 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' }}>
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: isPositivo ? '#10b981' : '#f59e0b' }}>
+                  <Scale size={18} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-base font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Break-even mensual de gastos</p>
+                  <p className="text-[11px]" style={{ color: isPositivo ? '#047857' : '#b45309' }}>
+                    Cuántos diezmos hacen falta para cubrir los gastos comunitarios (misas, jóvenes, etc.)
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-base font-bold text-amber-900">Cálculo Break-even</p>
-                <p className="text-[11px] text-amber-700">¿Cuántos diezmos faltan para cubrir el déficit?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a' }}>
+                  <p className="text-[10px] uppercase font-bold tracking-wide mb-1" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Si diezman 10€/mes</p>
+                  <p className="text-3xl font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>{diezmos10} diezmos</p>
+                  <p className="text-[10px] text-gray-600 mt-1">cubrirían el gasto mensual de {gastoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                </div>
+                <div className="bg-white rounded-xl p-3 border" style={{ borderColor: isPositivo ? '#a7f3d0' : '#fde68a' }}>
+                  <p className="text-[10px] uppercase font-bold tracking-wide mb-1" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>Si diezman 5€/mes</p>
+                  <p className="text-3xl font-bold" style={{ color: isPositivo ? '#065f46' : '#92400e' }}>{diezmos5} diezmos</p>
+                  <p className="text-[10px] text-gray-600 mt-1">cubrirían el gasto mensual de {gastoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                </div>
               </div>
+              {isPositivo && (
+                <p className="text-[11px] font-semibold mt-3" style={{ color: '#065f46' }}>
+                  ✓ Actualmente la comunidad cubre sus gastos ({neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} de superávit en {meses} {meses === 1 ? 'mes' : 'meses'}).
+                </p>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
-                <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Para break-even mensual</p>
-                <p className="text-3xl font-bold text-amber-900">+{diezmosFaltantesMensuales} diezmos</p>
-                <p className="text-[10px] text-gray-600 mt-1">de {DIEZMO_BASE}€/mes para cubrir el déficit mensual de {Math.abs(netoMensual).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-              </div>
-              <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
-                <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Para cubrir déficit acumulado</p>
-                <p className="text-3xl font-bold text-amber-900">+{diezmosCubrirDeficit} diezmos</p>
-                <p className="text-[10px] text-gray-600 mt-1">pagos puntuales de {DIEZMO_BASE}€ para recuperar los {Math.abs(neto).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} del agujero acumulado</p>
-              </div>
-            </div>
-            <p className="text-[10px] text-amber-700 mt-3 italic">
-              💡 Cálculo: déficit ÷ {DIEZMO_BASE}€ (diezmo base mensual). Si el diezmo medio fuese mayor (ej. 10€), harían falta la mitad.
-            </p>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Desglose Ingresos / Gastos con barras de % (estilo Brand) */}
       <div className="grid grid-cols-2 gap-4">

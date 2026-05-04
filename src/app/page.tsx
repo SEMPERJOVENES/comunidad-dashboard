@@ -58,7 +58,7 @@ const MNAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto
 const MSHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 export default function DashboardPage() {
-  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Últimos 3 meses'));
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Este año'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);

@@ -50,7 +50,7 @@ function getInitials(name: string) {
 }
 
 export default function ConciliacionMiembrosPage() {
-  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Desde siempre'));
+  const [selectedRange, setSelectedRange] = useState<DateRange>(getDefaultRange('Este año'));
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
