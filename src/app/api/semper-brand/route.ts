@@ -353,6 +353,36 @@ export async function GET(request: NextRequest) {
       .filter((v: any) => v.sale_type === 'regalo' || v.payment_method === 'regalo')
       .reduce((s: number, v: any) => s + parseFloat(v.cost_loss || '0'), 0);
 
+    // Detalle de regalos: por cada venta tipo regalo, listar items con coste
+    const giftDetail: Array<{ date: string; description: string; productTitle: string; quantity: number; costLoss: number }> = [];
+    for (const v of (ventas || [])) {
+      const isGift = v.sale_type === 'regalo' || v.payment_method === 'regalo';
+      if (!isGift) continue;
+      const items = v.items || [];
+      const totalCostLoss = parseFloat(v.cost_loss || '0');
+      const totalQty = items.reduce((s: number, it: any) => s + (it.quantity || 1), 0) || 1;
+      for (const it of items) {
+        const qty = it.quantity || 1;
+        const allocCost = totalQty > 0 ? (totalCostLoss * qty) / totalQty : 0;
+        giftDetail.push({
+          date: v.date,
+          description: v.customer_name || v.notes || 'Regalo',
+          productTitle: it.productTitle || it.title || 'Sin título',
+          quantity: qty,
+          costLoss: allocCost,
+        });
+      }
+      if (items.length === 0) {
+        giftDetail.push({
+          date: v.date,
+          description: v.customer_name || v.notes || 'Regalo',
+          productTitle: 'Sin detalle',
+          quantity: 1,
+          costLoss: totalCostLoss,
+        });
+      }
+    }
+
     // ============================================================
     // STOCK VALUATION — usando costes manuales de Supabase
     // ============================================================
@@ -449,6 +479,7 @@ export async function GET(request: NextRequest) {
       profit,
       margin,
       giftLoss,
+      giftDetail,
       monthlyBreakdown,
       topProducts,
       orders: allOrders,

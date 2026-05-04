@@ -906,7 +906,7 @@ function SectionHeader({ number, title, subtitle, color }: { number: number; tit
   );
 }
 
-function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any }) {
+function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
   const sv = brand?.stockValuation;
   if (!sv?.topByValue) return null;
 
@@ -914,20 +914,24 @@ function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any })
   const matchPinguino = (t: string) => /ping[üu]ino/i.test(t || '');
   const matchGodLuck = (t: string) => /god\s*luck|good\s*luck/i.test(t || '');
 
-  // Buscar revenue ya generado por producto desde topProducts
-  const revenueByTitle: Record<string, number> = {};
-  for (const p of (dashboard?.topProducts || [])) {
-    revenueByTitle[(p.title || '').toLowerCase().trim()] = p.revenue || 0;
-  }
-  const findRevenue = (title: string) => {
-    const norm = title.toLowerCase().trim();
-    let total = 0;
-    for (const [k, v] of Object.entries(revenueByTitle)) {
-      if (matchPinguino(title) && matchPinguino(k)) total += v;
-      else if (matchGodLuck(title) && matchGodLuck(k)) total += v;
-      else if (k === norm) total += v;
+  // brand.topProducts ya combina Shopify + ventas presenciales (es lo correcto)
+  const findRevenueAndUnits = (matchFn: (t: string) => boolean) => {
+    let revenue = 0, units = 0;
+    for (const p of (brand?.topProducts || [])) {
+      if (matchFn(p.title || '')) {
+        revenue += p.revenue || 0;
+        units += p.units || 0;
+      }
     }
-    return total;
+    return { revenue, units };
+  };
+
+  // Regalos por colección
+  const findGifts = (matchFn: (t: string) => boolean) => {
+    const list = (brand?.giftDetail || []).filter((g: any) => matchFn(g.productTitle || ''));
+    const totalUnits = list.reduce((s: number, g: any) => s + (g.quantity || 1), 0);
+    const totalCost = list.reduce((s: number, g: any) => s + (g.costLoss || 0), 0);
+    return { list, totalUnits, totalCost };
   };
 
   const pinguino = sv.topByValue.find((p: any) => matchPinguino(p.title));
@@ -953,18 +957,19 @@ function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any })
             {trazables.map((p: any) => {
               const stockActual = p.units;
               const costUnit = stockActual > 0 ? p.cost / stockActual : 0;
-              // Asumimos PVP unitario
               const pvpUnit = stockActual > 0 ? p.retail / stockActual : 0;
               const margenUnit = pvpUnit - costUnit;
-              const inversionStockActual = p.cost; // capital atrapado
-              const ingresoYaGenerado = findRevenue(p.title);
-              // Break-even: cuántas más vender al margen actual para cubrir inversión inicial
-              // Inversión inicial estimada = cost actual (capital atrapado) — cifra conservadora
-              // Si ya generó ingreso, restar
+              const inversionStockActual = p.cost;
+              const isPinguino = matchPinguino(p.title);
+              const matchFn = isPinguino ? matchPinguino : matchGodLuck;
+              // Ventas TOTAL: shopify + presencial (ya combinado en brand.topProducts)
+              const { revenue: ingresoYaGenerado, units: vendidasUnits } = findRevenueAndUnits(matchFn);
+              // Regalos
+              const gifts = findGifts(matchFn);
+
               const yaCubierto = ingresoYaGenerado;
               const faltaCubrir = Math.max(0, inversionStockActual - yaCubierto);
               const unidadesBE = margenUnit > 0 ? Math.ceil(faltaCubrir / margenUnit) : 0;
-              const isPinguino = matchPinguino(p.title);
 
               return (
                 <div key={p.title} className="rounded-2xl overflow-hidden border-2 page-break-inside-avoid" style={{ borderColor: isPinguino ? '#fbcfe8' : '#fde68a' }}>
@@ -979,9 +984,9 @@ function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any })
                       <p className="text-[9px] text-gray-500">{stockActual} × {costUnit.toFixed(2)}€</p>
                     </div>
                     <div className="bg-emerald-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Ingreso ya generado</p>
+                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Ya vendido</p>
                       <p className="text-base font-bold text-emerald-700">{ingresoYaGenerado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">ventas Shopify {currentYearVar()}</p>
+                      <p className="text-[9px] text-gray-500">{vendidasUnits} uds (online + presencial)</p>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-2">
                       <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">Si vendemos todo</p>
@@ -994,9 +999,28 @@ function BrandTrazabilidad({ brand, dashboard }: { brand: any; dashboard: any })
                       <p className="text-[9px] text-gray-500">a {margenUnit.toFixed(2)}€ margen/u</p>
                     </div>
                   </div>
+
+                  {/* Regalos por colección */}
+                  {gifts.totalUnits > 0 && (
+                    <div className="px-3 py-2 border-t" style={{ background: '#fef3c7', borderColor: '#fde68a' }}>
+                      <div className="flex items-baseline justify-between mb-1">
+                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🎁 Regalados</p>
+                        <p className="text-[11px] font-bold text-amber-900">{gifts.totalUnits} uds · {gifts.totalCost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} de coste</p>
+                      </div>
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                        {gifts.list.map((g: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] text-amber-900">
+                            <span className="truncate">{g.description} · {new Date(g.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                            <span className="font-semibold flex-shrink-0">−{g.costLoss.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-gray-50 px-3 py-2 border-t border-gray-100">
                     <p className="text-[10px] text-gray-600">
-                      Margen potencial total: <strong className="text-emerald-700">{p.potentialProfit.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</strong> ({((p.potentialProfit / p.retail) * 100).toFixed(1)}%)
+                      Margen potencial restante: <strong className="text-emerald-700">{p.potentialProfit.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</strong> ({((p.potentialProfit / p.retail) * 100).toFixed(1)}%)
                     </p>
                   </div>
                 </div>
