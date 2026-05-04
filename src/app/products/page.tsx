@@ -277,9 +277,11 @@ export default function InventarioPage() {
   const filtered = products.filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
+    // Excluir productos archivados (independientemente del filtro)
+    const cat = getCost(p.id)?.category || 'inventario';
+    if (cat === 'archivado') return false;
     if (categoryFilter === 'all') return true;
-    const cost = getCost(p.id);
-    return (cost?.category || 'inventario') === categoryFilter;
+    return cat === categoryFilter;
   }).sort((a, b) => {
     // 1) Preventa siempre al final (independientemente del importe)
     const catA = getCost(a.id)?.category || 'inventario';

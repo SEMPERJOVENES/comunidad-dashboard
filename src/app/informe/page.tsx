@@ -432,6 +432,11 @@ export default function InformePage() {
           <BrandTrazabilidad brand={brandData} dashboard={dashboardData} />
         )}
 
+        {/* === CONCILIACIÓN POS ↔ BANCO === */}
+        {reportType === 'completo' && brandData && (
+          <ConciliacionPOSBanco brand={brandData} />
+        )}
+
         {/* === DESGLOSE DETALLADO POR ÁREA === */}
         {reportType === 'completo' && dashboardData && (
           <DesgloseSection
@@ -972,26 +977,51 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
             {trazables.map((p: any) => {
               const stockActual = p.units;
               const costUnit = stockActual > 0 ? p.cost / stockActual : 0;
-              const pvpUnit = stockActual > 0 ? p.retail / stockActual : 0;
-              const margenUnit = pvpUnit - costUnit;
+              const pvpShopify = stockActual > 0 ? p.retail / stockActual : 0; // PVP teórico Shopify
               const inversionStockActual = p.cost;
               const isPinguino = matchPinguino(p.title);
               const matchFn = isPinguino ? matchPinguino : matchGodLuck;
               // Ventas TOTAL: shopify + presencial (ya combinado en brand.topProducts)
               const { revenue: ingresoYaGenerado, units: vendidasUnits } = findRevenueAndUnits(matchFn);
+              // Precio REAL promedio de venta (efectivo)
+              const pvpReal = vendidasUnits > 0 ? ingresoYaGenerado / vendidasUnits : pvpShopify;
+              const margenRealUnit = pvpReal - costUnit;
+              const margenRealPct = pvpReal > 0 ? (margenRealUnit / pvpReal) * 100 : 0;
               // Regalos
               const gifts = findGifts(matchFn);
 
+              // Break-even basado en precio REAL de venta
               const yaCubierto = ingresoYaGenerado;
               const faltaCubrir = Math.max(0, inversionStockActual - yaCubierto);
-              const unidadesBE = margenUnit > 0 ? Math.ceil(faltaCubrir / margenUnit) : 0;
+              const unidadesBE = margenRealUnit > 0 ? Math.ceil(faltaCubrir / margenRealUnit) : 0;
+              // Proyección si vendemos todo el stock al precio REAL
+              const ingresoSiVendemosTodo = stockActual * pvpReal;
+              // El coste de regalos lo asume el proveedor (no es pérdida nuestra)
+              const beneficioFinal = ingresoYaGenerado + ingresoSiVendemosTodo - inversionStockActual;
 
               return (
                 <div key={p.title} className="rounded-2xl overflow-hidden border-2 page-break-inside-avoid" style={{ borderColor: isPinguino ? '#fbcfe8' : '#fde68a' }}>
                   <div className="px-4 py-3" style={{ background: isPinguino ? 'linear-gradient(135deg, #f9a8d4 0%, #ec4899 100%)' : 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%)' }}>
                     <p className="text-sm font-bold text-white">{p.title}</p>
-                    <p className="text-[10px] text-white/80">{stockActual} uds en stock · PVP {pvpUnit.toFixed(2)}€/u · coste {costUnit.toFixed(2)}€/u</p>
+                    <p className="text-[10px] text-white/80">{stockActual} uds en stock · coste {costUnit.toFixed(2)}€/u</p>
                   </div>
+
+                  {/* COMPARATIVA PVP Shopify vs PVP Real */}
+                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-100">
+                    <div className="flex justify-between items-baseline text-[11px]">
+                      <span className="text-gray-500">PVP Shopify (teórico)</span>
+                      <span className="font-semibold text-gray-700">{pvpShopify.toFixed(2)}€/u</span>
+                    </div>
+                    <div className="flex justify-between items-baseline text-[11px] mt-1">
+                      <span className="text-gray-500">PVP real promedio venta</span>
+                      <span className="font-bold text-blue-700">{pvpReal.toFixed(2)}€/u {vendidasUnits > 0 && pvpReal < pvpShopify && <span className="text-rose-500 text-[9px]">(↓ {((1 - pvpReal/pvpShopify) * 100).toFixed(0)}%)</span>}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline text-[11px] mt-1">
+                      <span className="text-gray-500">Margen real (PVPreal - coste)</span>
+                      <span className={`font-bold ${margenRealUnit < 3 ? 'text-rose-700' : 'text-emerald-700'}`}>{margenRealUnit.toFixed(2)}€/u <span className="text-[9px] text-gray-500">({margenRealPct.toFixed(0)}%)</span></span>
+                    </div>
+                  </div>
+
                   <div className="bg-white p-3 grid grid-cols-2 gap-2 text-[11px]">
                     <div className="bg-rose-50 rounded-lg p-2">
                       <p className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">Capital atrapado</p>
@@ -1001,26 +1031,37 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
                     <div className="bg-emerald-50 rounded-lg p-2">
                       <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Ya vendido</p>
                       <p className="text-base font-bold text-emerald-700">{ingresoYaGenerado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">{vendidasUnits} uds (online + presencial)</p>
+                      <p className="text-[9px] text-gray-500">{vendidasUnits} uds · {pvpReal.toFixed(2)}€/u</p>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">Si vendemos todo</p>
-                      <p className="text-base font-bold text-blue-700">+{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">{p.retail.toLocaleString('es-ES')}€ retail total</p>
+                      <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">Si vendemos resto a PVP real</p>
+                      <p className="text-base font-bold text-blue-700">+{ingresoSiVendemosTodo.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">{stockActual} uds × {pvpReal.toFixed(2)}€</p>
                     </div>
                     <div className="bg-violet-50 rounded-lg p-2">
                       <p className="text-[9px] uppercase font-bold text-violet-700 tracking-wider">Para break-even</p>
                       <p className="text-base font-bold text-violet-700">+{unidadesBE} uds</p>
-                      <p className="text-[9px] text-gray-500">a {margenUnit.toFixed(2)}€ margen/u</p>
+                      <p className="text-[9px] text-gray-500">a {margenRealUnit.toFixed(2)}€ margen real/u</p>
                     </div>
+                  </div>
+
+                  {/* Resultado proyectado */}
+                  <div className="px-3 py-2 border-t" style={{ background: beneficioFinal >= 0 ? '#f0fdf4' : '#fef2f2', borderColor: beneficioFinal >= 0 ? '#bbf7d0' : '#fecaca' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: beneficioFinal >= 0 ? '#065f46' : '#991b1b' }}>
+                      Si vendemos todo al precio real → Beneficio final
+                    </p>
+                    <p className="text-base font-bold" style={{ color: beneficioFinal >= 0 ? '#065f46' : '#991b1b' }}>
+                      {beneficioFinal >= 0 ? '+' : ''}{beneficioFinal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                    </p>
+                    <p className="text-[9px] text-gray-500">= ya vendido {ingresoYaGenerado.toFixed(0)}€ + restante {ingresoSiVendemosTodo.toFixed(0)}€ − inversión {inversionStockActual.toFixed(0)}€</p>
                   </div>
 
                   {/* Regalos por colección */}
                   {gifts.totalUnits > 0 && (
                     <div className="px-3 py-2 border-t" style={{ background: '#fef3c7', borderColor: '#fde68a' }}>
                       <div className="flex items-baseline justify-between mb-1">
-                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🎁 Regalados</p>
-                        <p className="text-[11px] font-bold text-amber-900">{gifts.totalUnits} uds · {gifts.totalCost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} de coste</p>
+                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🎁 Regalados ({gifts.totalUnits} uds)</p>
+                        <p className="text-[10px] text-amber-700 italic">Coste asumido por proveedor</p>
                       </div>
                       <div className="space-y-0.5 max-h-32 overflow-y-auto print:max-h-none print:overflow-visible">
                         {gifts.list.map((g: any, i: number) => (
@@ -1068,7 +1109,16 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
               <tbody>
                 {otrosConCoste.map((p: any) => (
                   <tr key={p.title} className="border-b border-gray-50">
-                    <td className="px-3 py-2 text-gray-800">{p.title}</td>
+                    <td className="px-3 py-2 text-gray-800">
+                      <div className="flex items-center gap-2">
+                        {p.image ? (
+                          <img src={p.image} alt={p.title} className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded flex-shrink-0" />
+                        )}
+                        <span>{p.title}</span>
+                      </div>
+                    </td>
                     <td className="px-2 py-2 text-right text-gray-600">{p.units}</td>
                     <td className="px-2 py-2 text-right font-semibold text-blue-700">{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
                     <td className="px-2 py-2 text-right font-semibold text-rose-700">{p.cost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
@@ -1103,7 +1153,16 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
               <tbody>
                 {sinCoste.map((p: any) => (
                   <tr key={p.title} className="border-b border-gray-50">
-                    <td className="px-3 py-2 text-gray-800">{p.title}</td>
+                    <td className="px-3 py-2 text-gray-800">
+                      <div className="flex items-center gap-2">
+                        {p.image ? (
+                          <img src={p.image} alt={p.title} className="w-10 h-10 object-cover rounded border border-amber-200 flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 bg-amber-50 rounded flex-shrink-0" />
+                        )}
+                        <span>{p.title}</span>
+                      </div>
+                    </td>
                     <td className="px-2 py-2 text-right text-gray-600">{p.units}</td>
                     <td className="px-2 py-2 text-right text-gray-600">{p.units > 0 ? (p.retail / p.units).toFixed(2) : 0}€</td>
                     <td className="px-2 py-2 text-right font-bold text-amber-700">{p.retail.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
@@ -1131,3 +1190,66 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
   );
 }
 function currentYearVar() { return new Date().getFullYear(); }
+
+function ConciliacionPOSBanco({ brand }: { brand: any }) {
+  const ventasPresenciales = brand?.income?.ventasPresenciales || 0;
+  const shopify = brand?.income?.shopify || 0;
+  const bankBrand = brand?.income?.totalBankIncome || 0;
+  const teorico = brand?.income?.teorico || (ventasPresenciales + shopify);
+  const dif = brand?.income?.conciliacionDif ?? (bankBrand - teorico);
+  return (
+    <div className="mt-10 mb-8 section-break">
+      <SectionHeader number={10} title="Conciliación POS ↔ Banco" subtitle="¿Cuadran las ventas registradas con lo que entró al banco?" color="#0891b2" />
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bae6fd', background: '#f0f9ff' }}>
+          <p className="text-[10px] uppercase font-bold text-cyan-700 tracking-wide">Ventas Presenciales (POS)</p>
+          <p className="text-2xl font-bold text-cyan-700 mt-1">{ventasPresenciales.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          <p className="text-[10px] text-cyan-600 mt-1">Bizum + Efectivo registrados en POS</p>
+        </div>
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+          <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Shopify online</p>
+          <p className="text-2xl font-bold text-emerald-700 mt-1">{shopify.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          <p className="text-[10px] text-emerald-600 mt-1">Pedidos web (llegan vía Stripe payouts)</p>
+        </div>
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#ddd6fe', background: '#f5f3ff' }}>
+          <p className="text-[10px] uppercase font-bold text-violet-700 tracking-wide">Banco Brand</p>
+          <p className="text-2xl font-bold text-violet-700 mt-1">{bankBrand.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          <p className="text-[10px] text-violet-600 mt-1">Transferencias/bizums tag Brand</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: Math.abs(dif) < 50 ? '#a7f3d0' : '#fde68a', background: Math.abs(dif) < 50 ? '#f0fdf4' : '#fffbeb' }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: Math.abs(dif) < 50 ? '#10b981' : '#f59e0b' }}>
+            <Scale size={20} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold" style={{ color: Math.abs(dif) < 50 ? '#065f46' : '#92400e' }}>
+              {Math.abs(dif) < 50 ? '✓ POS y banco cuadran' : '⚠ Hay diferencia entre POS y banco'}
+            </p>
+            <p className="text-[11px]" style={{ color: Math.abs(dif) < 50 ? '#047857' : '#b45309' }}>
+              Banco recibió {dif >= 0 ? `+${dif.toFixed(2)}€ MÁS` : `${Math.abs(dif).toFixed(2)}€ MENOS`} de lo que sumaron las ventas POS + Shopify
+            </p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-3 border border-gray-100">
+          <p className="text-[10px] font-mono text-gray-500 mb-2">Cálculo</p>
+          <div className="space-y-0.5 text-[11px] font-mono text-gray-700">
+            <div className="flex justify-between"><span>POS (ventas presenciales)</span><span>{ventasPresenciales.toFixed(2)} €</span></div>
+            <div className="flex justify-between"><span>+ Shopify online</span><span>{shopify.toFixed(2)} €</span></div>
+            <div className="flex justify-between border-t border-gray-100 pt-1 font-bold"><span>Total esperado</span><span>{teorico.toFixed(2)} €</span></div>
+            <div className="flex justify-between"><span>Banco (real)</span><span>{bankBrand.toFixed(2)} €</span></div>
+            <div className="flex justify-between border-t border-gray-100 pt-1 font-bold" style={{ color: Math.abs(dif) < 50 ? '#065f46' : '#92400e' }}>
+              <span>Diferencia (banco − esperado)</span><span>{dif >= 0 ? '+' : ''}{dif.toFixed(2)} €</span>
+            </div>
+          </div>
+        </div>
+        <p className="text-[10px] text-gray-500 mt-3 italic">
+          💡 Si la diferencia es positiva: hay ingresos al banco que no se registraron en POS (donativos directos, transferencias Brand, etc.).
+          Si es negativa: hay ventas POS que no llegaron al banco (caja sin depositar, bizums no registrados...).
+          El efectivo de POS NO se cuenta porque queda en caja, no en banco.
+        </p>
+      </div>
+    </div>
+  );
+}

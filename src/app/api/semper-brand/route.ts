@@ -391,7 +391,7 @@ export async function GET(request: NextRequest) {
     let stockCostValue = 0;        // inmovilizado real (€ invertidos)
     let stockProductsWithCost = 0;
     let stockProductsWithoutCost = 0;
-    const stockTopByValue: Array<{ title: string; units: number; retail: number; cost: number; potentialProfit: number }> = [];
+    const stockTopByValue: Array<{ title: string; units: number; retail: number; cost: number; potentialProfit: number; image: string | null }> = [];
 
     try {
       const [shopifyProducts, costsResult] = await Promise.all([
@@ -420,7 +420,7 @@ export async function GET(request: NextRequest) {
           const productKey = `${p.id}`;
           const cost = costMap[variantKey] || costMap[productKey];
           const cat = cost?.category || 'inventario';
-          if (cat === 'inmovilizado' || cat === 'preproduccion') continue; // excluir inmovilizado y preventa
+          if (cat === 'inmovilizado' || cat === 'preproduccion' || cat === 'archivado') continue; // excluir inmovilizado, preventa y archivados
 
           prodUnits += qty;
           prodRetail += price * qty;
@@ -436,12 +436,15 @@ export async function GET(request: NextRequest) {
         else if (prodUnits > 0) stockProductsWithoutCost++;
 
         if (prodUnits > 0) {
+          // Imagen del producto: image.src o images[0].src
+          const image = (p.image && p.image.src) || (p.images && p.images[0] && p.images[0].src) || null;
           stockTopByValue.push({
             title: p.title,
             units: prodUnits,
             retail: prodRetail,
             cost: prodCost,
             potentialProfit: prodRetail - prodCost,
+            image,
           });
         }
       }

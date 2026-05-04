@@ -115,6 +115,7 @@ export default function OrdersPage() {
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pedido</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Cliente</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Fecha</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Productos</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Pago</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Envío</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 sm:px-6 py-3">Tags</th>
@@ -136,6 +137,20 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3 text-sm text-gray-500">{formatDate(order.created_at)}</td>
+                      <td className="px-4 sm:px-6 py-3">
+                        <div className="flex flex-col gap-0.5 max-w-xs">
+                          {(order.line_items || []).map((it: any, i: number) => (
+                            <div key={i} className="flex items-baseline gap-1.5 text-xs">
+                              <span className="font-bold text-violet-600 flex-shrink-0">{it.quantity}×</span>
+                              <span className="text-gray-700 truncate" title={it.title + (it.variant_title ? ' · ' + it.variant_title : '')}>
+                                {it.title}
+                                {it.variant_title && it.variant_title !== 'Default Title' && <span className="text-gray-400"> [{it.variant_title}]</span>}
+                              </span>
+                            </div>
+                          ))}
+                          {(!order.line_items || order.line_items.length === 0) && <span className="text-xs text-gray-300 italic">—</span>}
+                        </div>
+                      </td>
                       <td className="px-4 sm:px-6 py-3">
                         <Badge variant={order.financial_status === 'paid' ? 'success' : order.financial_status === 'refunded' ? 'danger' : 'warning'}>
                           {order.financial_status}
@@ -162,7 +177,7 @@ export default function OrdersPage() {
                   ))}
                   {filteredOrders.length === 0 && !loading && (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-sm text-gray-400">
+                      <td colSpan={8} className="text-center py-8 text-sm text-gray-400">
                         Sin pedidos para este período
                       </td>
                     </tr>
