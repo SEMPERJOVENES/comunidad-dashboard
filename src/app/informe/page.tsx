@@ -196,8 +196,21 @@ export default function InformePage() {
               </div>
               <div className="rounded-2xl p-4 border" style={{ borderColor: '#fed7aa', background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)' }}>
                 <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wide flex items-center gap-1.5">💵 Caja Brand (efectivo)</p>
-                <p className="text-2xl font-bold mt-1" style={{ color: '#9a3412' }}>{(dashboardData.financials.cajaBrandEfectivo || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                <p className="text-[10px] text-orange-600">Ventas presenciales · pendiente depositar</p>
+                <p className="text-2xl font-bold mt-1" style={{ color: '#9a3412' }}>{((brandData?.income?.posByMethod?.efectivo?.total) || dashboardData.financials.cajaBrandEfectivo || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                {brandData?.income?.cajaEfectivoByProduct && Object.keys(brandData.income.cajaEfectivoByProduct).length > 0 ? (
+                  <div className="mt-2 space-y-0.5">
+                    {Object.entries(brandData.income.cajaEfectivoByProduct)
+                      .sort((a: any, b: any) => b[1].total - a[1].total)
+                      .map(([title, data]: any) => (
+                        <div key={title} className="flex justify-between items-baseline text-[10px]">
+                          <span className="text-orange-800 truncate">{title} <span className="text-orange-500">×{data.count}</span></span>
+                          <span className="font-mono font-semibold text-orange-900">{(data.total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-orange-600">Ventas presenciales · pendiente depositar</p>
+                )}
               </div>
             </div>
 
@@ -570,11 +583,11 @@ function DesgloseSection({ title, color, macroGroup }: { title: string; color: s
           </div>
         )}
 
-        {/* GASTOS */}
+        {/* GASTOS / INVERSIÓN */}
         {expenseTags.length > 0 && (
           <div className="page-break-inside-avoid">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-100">
-              <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ Gastos</p>
+              <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ {title.toLowerCase().includes('brand') ? 'Inversión' : 'Gastos'}</p>
               <p className="text-sm font-bold text-rose-700">-{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
             <div className="space-y-1">
@@ -1188,64 +1201,167 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
 function currentYearVar() { return new Date().getFullYear(); }
 
 function ConciliacionPOSBanco({ brand }: { brand: any }) {
-  const ventasPresenciales = brand?.income?.ventasPresenciales || 0;
-  const shopify = brand?.income?.shopify || 0;
-  const bankBrand = brand?.income?.totalBankIncome || 0;
-  const teorico = brand?.income?.teorico || (ventasPresenciales + shopify);
-  const dif = brand?.income?.conciliacionDif ?? (bankBrand - teorico);
+  const real = brand?.income?.realBrandByChannel || {};
+  const teorico = brand?.income?.teoricoBrandByChannel || {};
+  const realTotal = brand?.income?.realBrandTotal || 0;
+  const teoricoTotal = brand?.income?.teoricoBrandTotal || 0;
+  const gap = brand?.income?.realVsTeoricoGap ?? (realTotal - teoricoTotal);
+  const stripeBreakdown = brand?.income?.stripePayoutBreakdownDetail || [];
+
+  const fmt = (v: number) => (v || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+  const cuadra = Math.abs(gap) < 50;
+
   return (
     <div className="mt-10 mb-8 section-break">
-      <SectionHeader number={10} title="Conciliación POS ↔ Banco" subtitle="¿Cuadran las ventas registradas con lo que entró al banco?" color="#0891b2" />
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bae6fd', background: '#f0f9ff' }}>
-          <p className="text-[10px] uppercase font-bold text-cyan-700 tracking-wide">Ventas Presenciales (POS)</p>
-          <p className="text-2xl font-bold text-cyan-700 mt-1">{ventasPresenciales.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          <p className="text-[10px] text-cyan-600 mt-1">Bizum + Efectivo registrados en POS</p>
-        </div>
-        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
-          <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Shopify online</p>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">{shopify.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          <p className="text-[10px] text-emerald-600 mt-1">Pedidos web (llegan vía Stripe payouts)</p>
-        </div>
-        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#ddd6fe', background: '#f5f3ff' }}>
-          <p className="text-[10px] uppercase font-bold text-violet-700 tracking-wide">Banco Brand</p>
-          <p className="text-2xl font-bold text-violet-700 mt-1">{bankBrand.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-          <p className="text-[10px] text-violet-600 mt-1">Transferencias/bizums tag Brand</p>
-        </div>
-      </div>
+      <SectionHeader number={10} title="Brand · Real vs Teórico" subtitle="Desglose completo por canal de cobro" color="#0891b2" />
 
-      <div className="rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: Math.abs(dif) < 50 ? '#a7f3d0' : '#fde68a', background: Math.abs(dif) < 50 ? '#f0fdf4' : '#fffbeb' }}>
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: Math.abs(dif) < 50 ? '#10b981' : '#f59e0b' }}>
-            <Scale size={20} className="text-white" />
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* REAL BRAND — Lo que ha llegado por canal */}
+        <div className="rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: '#bae6fd', background: '#f0f9ff' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-xs uppercase font-bold text-cyan-700 tracking-wide">REAL BRAND</p>
+            <p className="text-2xl font-bold text-cyan-700">{fmt(realTotal)}</p>
           </div>
-          <div className="flex-1">
-            <p className="text-base font-bold" style={{ color: Math.abs(dif) < 50 ? '#065f46' : '#92400e' }}>
-              {Math.abs(dif) < 50 ? '✓ POS y banco cuadran' : '⚠ Hay diferencia entre POS y banco'}
-            </p>
-            <p className="text-[11px]" style={{ color: Math.abs(dif) < 50 ? '#047857' : '#b45309' }}>
-              Banco recibió {dif >= 0 ? `+${dif.toFixed(2)}€ MÁS` : `${Math.abs(dif).toFixed(2)}€ MENOS`} de lo que sumaron las ventas POS + Shopify
-            </p>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 border border-gray-100">
-          <p className="text-[10px] font-mono text-gray-500 mb-2">Cálculo</p>
-          <div className="space-y-0.5 text-[11px] font-mono text-gray-700">
-            <div className="flex justify-between"><span>POS (ventas presenciales)</span><span>{ventasPresenciales.toFixed(2)} €</span></div>
-            <div className="flex justify-between"><span>+ Shopify online</span><span>{shopify.toFixed(2)} €</span></div>
-            <div className="flex justify-between border-t border-gray-100 pt-1 font-bold"><span>Total esperado</span><span>{teorico.toFixed(2)} €</span></div>
-            <div className="flex justify-between"><span>Banco (real)</span><span>{bankBrand.toFixed(2)} €</span></div>
-            <div className="flex justify-between border-t border-gray-100 pt-1 font-bold" style={{ color: Math.abs(dif) < 50 ? '#065f46' : '#92400e' }}>
-              <span>Diferencia (banco − esperado)</span><span>{dif >= 0 ? '+' : ''}{dif.toFixed(2)} €</span>
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Banco · Bizums tag Brand</span>
+              <span className="font-semibold text-gray-900">{fmt(real.bankBizum)}</span>
+            </div>
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Banco · Transferencias tag Brand</span>
+              <span className="font-semibold text-gray-900">{fmt(real.bankTransferencia)}</span>
+            </div>
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Banco · Stripe payout Shopify</span>
+              <span className="font-semibold text-gray-900">{fmt(real.bankStripePayoutShopify)}</span>
+            </div>
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Stripe payouts mixed (one-time auto)</span>
+              <span className="font-semibold text-gray-900">{fmt(real.stripePayoutsOneTimeMixed)}</span>
+            </div>
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Stripe pendiente (no liquidado)</span>
+              <span className="font-semibold text-amber-700">{fmt(real.stripePending)}</span>
+            </div>
+            <div className="flex justify-between border-b border-cyan-100 pb-1">
+              <span className="text-gray-700">Caja · Efectivo POS</span>
+              <span className="font-semibold text-gray-900">{fmt(real.cajaEfectivo)}</span>
+            </div>
+            <div className="flex justify-between pt-1.5 font-bold">
+              <span className="text-cyan-800">TOTAL REAL</span>
+              <span className="text-cyan-800">{fmt(realTotal)}</span>
             </div>
           </div>
         </div>
-        <p className="text-[10px] text-gray-500 mt-3 italic">
-          💡 Si la diferencia es positiva: hay ingresos al banco que no se registraron en POS (donativos directos, transferencias Brand, etc.).
-          Si es negativa: hay ventas POS que no llegaron al banco (caja sin depositar, bizums no registrados...).
-          El efectivo de POS NO se cuenta porque queda en caja, no en banco.
-        </p>
+
+        {/* TEÓRICO BRAND — Lo que dicen las ventas */}
+        <div className="rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-xs uppercase font-bold text-emerald-700 tracking-wide">TEÓRICO BRAND</p>
+            <p className="text-2xl font-bold text-emerald-700">{fmt(teoricoTotal)}</p>
+          </div>
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex justify-between border-b border-emerald-100 pb-1">
+              <span className="text-gray-700">POS · Bizum</span>
+              <span className="font-semibold text-gray-900">{fmt(teorico.posBizum)}</span>
+            </div>
+            <div className="flex justify-between border-b border-emerald-100 pb-1">
+              <span className="text-gray-700">POS · Efectivo</span>
+              <span className="font-semibold text-gray-900">{fmt(teorico.posEfectivo)}</span>
+            </div>
+            <div className="flex justify-between border-b border-emerald-100 pb-1">
+              <span className="text-gray-700">Shopify online</span>
+              <span className="font-semibold text-gray-900">{fmt(teorico.shopifyOnline)}</span>
+            </div>
+            <div className="flex justify-between border-b border-emerald-100 pb-1">
+              <span className="text-gray-700">Stripe one-time charges</span>
+              <span className="font-semibold text-gray-900">{fmt(teorico.stripeOneTime)}</span>
+            </div>
+            <div className="flex justify-between pt-1.5 font-bold">
+              <span className="text-emerald-800">TOTAL TEÓRICO</span>
+              <span className="text-emerald-800">{fmt(teoricoTotal)}</span>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* GAP REAL vs TEÓRICO */}
+      <div className="rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: cuadra ? '#a7f3d0' : '#fde68a', background: cuadra ? '#f0fdf4' : '#fffbeb' }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: cuadra ? '#10b981' : '#f59e0b' }}>
+            <Scale size={20} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base font-bold" style={{ color: cuadra ? '#065f46' : '#92400e' }}>
+              {cuadra ? '✓ Real y teórico cuadran' : '⚠ Hay un gap entre real y teórico'}
+            </p>
+            <p className="text-[11px]" style={{ color: cuadra ? '#047857' : '#b45309' }}>
+              {gap >= 0
+                ? `Real es ${fmt(gap)} MAYOR que el teórico (probable: ingresos no clasificados)`
+                : `Real es ${fmt(Math.abs(gap))} MENOR que el teórico (probable: bizums POS taggeados a otro lado, o fees Stripe)`}
+            </p>
+          </div>
+          <p className="text-2xl font-bold" style={{ color: cuadra ? '#065f46' : '#92400e' }}>{gap >= 0 ? '+' : ''}{fmt(gap)}</p>
+        </div>
+      </div>
+
+      {/* PENDIENTE DE PAGO (vendido en POS pero no cobrado) */}
+      {(brand?.income?.pendientePagoTotal || 0) > 0 && (
+        <div className="mt-4 rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: '#fed7aa', background: '#fff7ed' }}>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-xs uppercase font-bold text-orange-700 tracking-wide">⚠ Pendiente de pago (POS)</p>
+            <p className="text-xl font-bold text-orange-700">{fmt(brand.income.pendientePagoTotal)}</p>
+          </div>
+          <p className="text-[10px] text-orange-600 mb-2">Productos entregados sin haber cobrado todavía. NO se cuentan en el teórico hasta que paguen.</p>
+          <div className="space-y-1">
+            {(brand?.income?.pendientePagoDetail || []).map((p: any) => (
+              <div key={p.id} className="flex justify-between items-baseline text-[11px] border-b border-orange-100 pb-1">
+                <div className="flex-1">
+                  <p className="text-orange-900 font-semibold">{p.customer}</p>
+                  <p className="text-orange-700 text-[10px]">{(p.items || []).map((it: any) => `${it.quantity}× ${it.productTitle}${it.variantTitle ? ` (${it.variantTitle})` : ''}`).join(', ')}</p>
+                </div>
+                <span className="font-mono font-bold text-orange-700">{fmt(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* DETALLE Stripe payouts auto-split */}
+      {stripeBreakdown.length > 0 && (
+        <div className="mt-4 rounded-2xl border-2 p-4 page-break-inside-avoid" style={{ borderColor: '#ddd6fe', background: '#f5f3ff' }}>
+          <p className="text-xs uppercase font-bold text-violet-700 tracking-wide mb-2">Stripe payouts · auto-split (categorización bloqueada)</p>
+          <p className="text-[10px] text-violet-600 mb-3">Cada payout se divide automáticamente en su parte Brand (one-time) y Diezmo (suscripciones) usando Stripe API. Tag manual ignorado.</p>
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="border-b border-violet-200 text-left text-violet-700">
+                <th className="py-1 font-semibold">Fecha</th>
+                <th className="py-1 font-semibold text-right">Total</th>
+                <th className="py-1 font-semibold text-right">Brand</th>
+                <th className="py-1 font-semibold text-right">Diezmo</th>
+                <th className="py-1 font-semibold text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stripeBreakdown.map((p: any) => (
+                <tr key={p.payoutId} className="border-b border-violet-100">
+                  <td className="py-1">{new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</td>
+                  <td className="py-1 text-right font-mono">{fmt(p.amount)}</td>
+                  <td className="py-1 text-right font-mono text-blue-700">{fmt(p.brand)}</td>
+                  <td className="py-1 text-right font-mono text-violet-700">{fmt(p.diezmo)}</td>
+                  <td className="py-1 text-center">
+                    {p.arrived ? (
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px]">✓ banco</span>
+                    ) : (
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px]">pendiente</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

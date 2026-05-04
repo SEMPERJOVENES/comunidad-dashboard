@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, getProducts } from '@/lib/shopify';
 import { supabase } from '@/lib/supabase';
-import { getAllBalanceTransactions } from '@/lib/stripe';
+import { getAllBalanceTransactions, getPayouts, getPayoutBreakdownLite, getBalance } from '@/lib/stripe';
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,7 +52,53 @@ export async function GET(request: NextRequest) {
       .gte('date', start)
       .lte('date', end);
 
-    const ventasTotal = (ventas || []).reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+    // Ventas: separar pagadas vs pendientes de pago
+    const ventasPagadas = (ventas || []).filter((v: any) => v.sale_type !== 'pendiente_pago');
+    const ventasPendientes = (ventas || []).filter((v: any) => v.sale_type === 'pendiente_pago');
+
+    const ventasTotal = ventasPagadas.reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+    const pendientePagoTotal = ventasPendientes.reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+    const pendientePagoDetail = ventasPendientes.map((v: any) => ({
+      id: v.id,
+      date: v.date,
+      customer: v.customer_name || '',
+      amount: parseFloat(v.total_amount || '0'),
+      items: v.items || [],
+      notes: v.notes || '',
+    }));
+
+    // POS desglose por método de pago (excluye regalos y pendientes)
+    const posByMethod: Record<string, { total: number; count: number }> = {};
+    // Caja efectivo desglose por producto
+    const cajaEfectivoByProduct: Record<string, { total: number; count: number; items: Array<{ date: string; customer: string; variant: string; amount: number; notes: string }> }> = {};
+    for (const v of ventasPagadas) {
+      if (v.sale_type === 'regalo' || v.payment_method === 'regalo') continue;
+      const method = v.payment_method || 'sin método';
+      if (!posByMethod[method]) posByMethod[method] = { total: 0, count: 0 };
+      posByMethod[method].total += parseFloat(v.total_amount || '0');
+      posByMethod[method].count += 1;
+
+      // Si es efectivo, desglosar por producto
+      if (method === 'efectivo') {
+        const items = v.items || [];
+        for (const it of items) {
+          const title = it.productTitle || it.title || 'Sin título';
+          const qty = it.quantity || 1;
+          const unitPrice = parseFloat(it.unitPrice || 0);
+          const amount = unitPrice * qty;
+          if (!cajaEfectivoByProduct[title]) cajaEfectivoByProduct[title] = { total: 0, count: 0, items: [] };
+          cajaEfectivoByProduct[title].total += amount;
+          cajaEfectivoByProduct[title].count += qty;
+          cajaEfectivoByProduct[title].items.push({
+            date: v.date,
+            customer: v.customer_name || '',
+            variant: it.variantTitle || '',
+            amount,
+            notes: v.notes || '',
+          });
+        }
+      }
+    }
 
     // 3. Bank transactions — SOLO las categorizadas como "brand" en tag_categories
     const startDate = start.split('T')[0];
@@ -102,9 +148,18 @@ export async function GET(request: NextRequest) {
     const bankIncomeDetail: Record<string, Array<{ date: string; concept: string; amount: number }>> = {};
     const bankExpenseDetail: Record<string, Array<{ date: string; concept: string; amount: number }>> = {};
 
+    // Desglose Brand por canal (sin Stripe payouts — esos los splitemos via API)
+    let brandBizum = 0;          // Bizums tag Brand al banco
+    let brandTransferencia = 0;  // Transferencias tag Brand al banco (sin Stripe)
+    let brandStripePayoutShopify = 0; // Stripe payouts "Concepto Shopify" tag Brand
+    const brandBizumDetail: Array<{ date: string; concept: string; amount: number }> = [];
+    const brandTransferDetail: Array<{ date: string; concept: string; amount: number }> = [];
+    const brandShopifyPayoutDetail: Array<{ date: string; concept: string; amount: number }> = [];
+
     for (const tx of bankTxs) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
+      const concept = (tx.concept || '').toLowerCase();
 
       // Solo incluir transacciones cuyo tag pertenezca al grupo "brand"
       if (!brandTags.has(tag)) continue;
@@ -116,6 +171,22 @@ export async function GET(request: NextRequest) {
         totalBankIncome += amount;
         if (!bankIncomeDetail[tag]) bankIncomeDetail[tag] = [];
         bankIncomeDetail[tag].push(detail);
+
+        // Desglosar por canal
+        if (concept.includes('bizum')) {
+          brandBizum += amount;
+          brandBizumDetail.push(detail);
+        } else if (concept.includes('transferencia de stripe') && concept.includes('shopify')) {
+          brandStripePayoutShopify += amount;
+          brandShopifyPayoutDetail.push(detail);
+        } else if (concept.includes('transferencia')) {
+          brandTransferencia += amount;
+          brandTransferDetail.push(detail);
+        } else {
+          // Fallback: considerar como transferencia
+          brandTransferencia += amount;
+          brandTransferDetail.push(detail);
+        }
       } else {
         expensesByTag[tag] = (expensesByTag[tag] || 0) + Math.abs(amount);
         totalBankExpenses += Math.abs(amount);
@@ -456,6 +527,91 @@ export async function GET(request: NextRequest) {
     const stockPotentialProfit = stockRetailValue - stockCostValue;
     const stockPotentialMargin = stockRetailValue > 0 ? (stockPotentialProfit / stockRetailValue) * 100 : 0;
 
+    // Stripe one-time charges (pagos únicos Brand, no suscripciones)
+    const stripeOneTimeAmount = stripeChargeDetails.reduce((s, c) => s + (c.amount > 0 ? c.amount : 0), 0);
+    const stripeOneTimeCount = stripeChargeDetails.length;
+
+    // ========================================================
+    // DESGLOSE Brand: Stripe payouts auto-split (mixed payouts)
+    // Para cada Stripe payout, llamar a getPayoutBreakdown y separar Brand vs Diezmo
+    // ========================================================
+    let stripePayoutsBrandFromMixed = 0;  // one-time embebidos en payouts (incluso si tag Diezmo)
+    let stripePayoutsDiezmoFromMixed = 0; // subs reales (referencia)
+    let stripePendingBrand = 0;           // one-time aún no liquidados al banco
+    const stripePayoutBreakdownDetail: Array<{ payoutId: string; date: string; amount: number; brand: number; diezmo: number; arrived: boolean }> = [];
+
+    try {
+      const allPayoutsRange = await getPayouts({ limit: 50, created: { gte: startTimestamp, lte: endTimestamp } });
+      const bankPayoutAmounts = bankTxs
+        .filter((tx: any) => (tx.concept || '').toLowerCase().includes('transferencia de stripe'))
+        .map((tx: any) => ({ amount: parseFloat(tx.amount || '0'), date: tx.date }));
+
+      // Paralelizar las llamadas a getPayoutBreakdown
+      const breakdowns = await Promise.all(
+        allPayoutsRange.map(async (p) => {
+          try {
+            const bd = await getPayoutBreakdownLite(p.id);
+            return { payout: p, breakdown: bd };
+          } catch { return null; }
+        })
+      );
+
+      for (const item of breakdowns) {
+        if (!item) continue;
+        const { payout: p, breakdown: bd } = item;
+        const arrived = bankPayoutAmounts.some((b: any) => Math.abs(b.amount - p.amount) < 0.5);
+        stripePayoutBreakdownDetail.push({
+          payoutId: p.id,
+          date: p.arrival_date,
+          amount: p.amount,
+          brand: bd.oneTimeAmount,
+          diezmo: bd.subsAmount,
+          arrived,
+        });
+        if (arrived) {
+          stripePayoutsBrandFromMixed += bd.oneTimeAmount;
+          stripePayoutsDiezmoFromMixed += bd.subsAmount;
+        } else {
+          stripePendingBrand += bd.oneTimeAmount;
+        }
+      }
+    } catch (e) {
+      console.error('Stripe payouts breakdown error:', e);
+    }
+
+    // Caja efectivo POS
+    const cajaBrandEfectivo = posByMethod.efectivo?.total || 0;
+
+    // Stripe pending balance (saldo no liquidado)
+    let stripePendingBalance = 0;
+    try {
+      const balance = await getBalance();
+      stripePendingBalance = balance.pending || 0;
+    } catch (e) { /* skip */ }
+
+    // ============================================================
+    // SUMA BRAND POR CANAL (todo desglosado para el informe)
+    // ============================================================
+    const realBrandByChannel = {
+      bankBizum: brandBizum,                              // Bizums tag Brand al banco
+      bankTransferencia: brandTransferencia,              // Transferencias tag Brand (sin Stripe)
+      bankStripePayoutShopify: brandStripePayoutShopify,  // Stripe payouts "Concepto Shopify" tag Brand
+      stripePayoutsOneTimeMixed: stripePayoutsBrandFromMixed, // one-time dentro payouts mixed (tag Diezmo)
+      stripePending: stripePendingBrand,                   // Brand pendiente en Stripe (no liquidado)
+      cajaEfectivo: cajaBrandEfectivo,                     // Efectivo POS en caja
+    };
+    const realBrandTotal = Object.values(realBrandByChannel).reduce((s: number, v: number) => s + v, 0);
+
+    const teoricoBrandByChannel = {
+      posBizum: posByMethod.bizum?.total || 0,
+      posEfectivo: posByMethod.efectivo?.total || 0,
+      shopifyOnline: shopifyGross,
+      stripeOneTime: stripeOneTimeAmount,
+    };
+    const teoricoBrandTotal = Object.values(teoricoBrandByChannel).reduce((s: number, v: number) => s + v, 0);
+
+    const realVsTeoricoGap = realBrandTotal - teoricoBrandTotal;
+
     // total ingresos = banco brand. shopify y presencial son drill-down informativo.
     return NextResponse.json({
       income: {
@@ -464,11 +620,27 @@ export async function GET(request: NextRequest) {
         shopifyPaidOrders: paidOrders.length,
         ventasPresenciales: ventasTotal,
         ventasCount: (ventas || []).length,
+        posByMethod,                       // { bizum: {total, count}, efectivo: {total, count} }
         bankIncome: incomeByTag,
         totalBankIncome,
+        stripeOneTime: stripeOneTimeAmount,
+        stripeOneTimeCount,
         teorico: totalIncomeTeorico,       // Shopify + Presencial (vista comercial)
         conciliacionDif,                   // banco - teórico (debe ser cercano a 0)
         total: totalIncome,                // = totalBankIncome (banco brand = verdad)
+        // DESGLOSE COMPLETO Brand (real vs teórico por canal)
+        realBrandByChannel,
+        realBrandTotal,
+        teoricoBrandByChannel,
+        teoricoBrandTotal,
+        realVsTeoricoGap,
+        stripePayoutBreakdownDetail,
+        stripePendingBalance,
+        // Pendientes de pago (vendido pero no cobrado)
+        pendientePagoTotal,
+        pendientePagoDetail,
+        // Caja efectivo desglosada por producto
+        cajaEfectivoByProduct,
       },
       expenses: {
         byTag: expensesByTag,

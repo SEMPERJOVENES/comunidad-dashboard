@@ -8,7 +8,7 @@ import { formatCurrency, formatNumber, getDefaultRange } from '@/lib/utils';
 import { DateRange } from '@/lib/types';
 import {
   TrendingUp, TrendingDown, DollarSign, Percent, ShoppingCart,
-  Store, Landmark, Package, Loader2,
+  Store, Landmark, Package, Loader2, Wallet,
   BarChart3, Plus, Trash2, Truck, User, CreditCard, X, Check,
   ChevronDown, ChevronUp, RotateCcw, Warehouse, Gift, Sparkles, Archive,
 } from 'lucide-react';
@@ -297,7 +297,7 @@ export default function SemperBrandPage() {
               <Card className="!p-4 border-l-4 border-l-red-500">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingDown size={14} className="text-red-500" />
-                  <p className="text-xs font-medium text-gray-500 uppercase">Gastos Totales</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Inversión Total</p>
                 </div>
                 <p className="text-xl sm:text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
                 <div className="text-[10px] text-gray-400 mt-1 space-y-0.5">
@@ -318,6 +318,43 @@ export default function SemperBrandPage() {
                 </p>
               </Card>
             </div>
+
+            {/* Caja Brand (efectivo) — desplegable */}
+            {(data.income as any).posByMethod?.efectivo?.total > 0 && (
+              <details className="bg-white rounded-2xl border-2 border-emerald-200 overflow-hidden">
+                <summary className="px-5 py-4 cursor-pointer hover:bg-emerald-50 transition-colors flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wallet size={14} className="text-emerald-600" />
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Caja Brand (efectivo)</p>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-700">{formatCurrency((data.income as any).posByMethod.efectivo.total)}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{(data.income as any).posByMethod.efectivo.count} ventas · pendiente depositar · click para desglose</p>
+                  </div>
+                  <ChevronDown size={16} className="text-emerald-600 transition-transform" />
+                </summary>
+                {(data.income as any).cajaEfectivoByProduct && (
+                  <div className="px-5 py-3 bg-emerald-50/50 border-t border-emerald-100 space-y-2">
+                    {Object.entries((data.income as any).cajaEfectivoByProduct)
+                      .sort((a: any, b: any) => b[1].total - a[1].total)
+                      .map(([title, info]: any) => (
+                        <div key={title}>
+                          <div className="flex justify-between items-baseline text-[12px] font-medium">
+                            <span className="text-gray-800">{title} <span className="text-gray-400 font-normal">×{info.count}</span></span>
+                            <span className="font-mono text-emerald-700">{formatCurrency(info.total)}</span>
+                          </div>
+                          {(info.items || []).map((it: any, i: number) => (
+                            <div key={i} className="flex justify-between items-baseline text-[10px] text-gray-500 pl-3">
+                              <span className="truncate">{it.variant ? `${it.variant} · ` : ''}{it.customer || it.notes || ''}</span>
+                              <span className="font-mono">{formatCurrency(it.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </details>
+            )}
 
             {/* P&L Formula visual */}
             <div className="flex items-center justify-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg py-2 px-4 overflow-x-auto">
@@ -472,7 +509,7 @@ export default function SemperBrandPage() {
                 </div>
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-rose-700 uppercase">Gastos del banco (Brand)</p>
+                    <p className="text-xs font-bold text-rose-700 uppercase">Inversión del banco (Brand)</p>
                     <p className="text-lg font-bold text-rose-700">-{formatCurrency(data.expenses.total)}</p>
                   </div>
                   {Object.entries(data.expenses.byTag).length > 0 ? (
@@ -609,7 +646,7 @@ export default function SemperBrandPage() {
                   <CardTitle>
                     <div className="flex items-center gap-2">
                       <TrendingDown size={16} className="text-red-500" />
-                      Desglose de Gastos
+                      Desglose de Inversión
                     </div>
                   </CardTitle>
                   <Badge variant="danger">{formatCurrency(totalExpenses)}</Badge>

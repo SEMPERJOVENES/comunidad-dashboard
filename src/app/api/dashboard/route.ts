@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, getStockValuation } from '@/lib/shopify';
-import { getPaymentVolume, getBalance } from '@/lib/stripe';
+import { getPaymentVolume, getBalance, getAllCharges } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -68,11 +68,32 @@ export async function GET(request: NextRequest) {
     // Caja Brand (efectivo de ventas presenciales — desde inicio, no por rango)
     const { data: efectivoVentas } = await supabase
       .from('ventas_presenciales')
-      .select('total_amount, sale_type, payment_method')
+      .select('date, total_amount, sale_type, payment_method, customer_name, items, notes')
       .eq('payment_method', 'efectivo');
-    const cajaBrandEfectivo = (efectivoVentas || [])
-      .filter((v: any) => v.sale_type !== 'regalo')
-      .reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+    const efectivoNoRegalo = (efectivoVentas || []).filter((v: any) => v.sale_type !== 'regalo' && v.sale_type !== 'pendiente_pago');
+    const cajaBrandEfectivo = efectivoNoRegalo.reduce((s: number, v: any) => s + parseFloat(v.total_amount || '0'), 0);
+
+    // Desglose por producto
+    const cajaBrandEfectivoByProduct: Record<string, { total: number; count: number; items: Array<{ date: string; customer: string; variant: string; amount: number; notes: string }> }> = {};
+    for (const v of efectivoNoRegalo) {
+      const items = v.items || [];
+      for (const it of items) {
+        const title = it.productTitle || it.title || 'Sin título';
+        const qty = it.quantity || 1;
+        const unitPrice = parseFloat(it.unitPrice || 0);
+        const amount = unitPrice * qty;
+        if (!cajaBrandEfectivoByProduct[title]) cajaBrandEfectivoByProduct[title] = { total: 0, count: 0, items: [] };
+        cajaBrandEfectivoByProduct[title].total += amount;
+        cajaBrandEfectivoByProduct[title].count += qty;
+        cajaBrandEfectivoByProduct[title].items.push({
+          date: v.date,
+          customer: v.customer_name || '',
+          variant: it.variantTitle || '',
+          amount,
+          notes: v.notes || '',
+        });
+      }
+    }
 
     // === GROUP BY MACRO CATEGORIES (dynamic from tag_categories table) ===
     const tagMacroMap: Record<string, string> = {};
@@ -96,16 +117,33 @@ export async function GET(request: NextRequest) {
       otros: { income: 0, expenses: 0, tags: {} },
     };
 
+    // Brand desglose por CANAL (Bizum / Transferencia / Stripe Shopify / etc.)
+    const brandByChannel = {
+      bizum: 0,
+      transferencia: 0,
+      stripeShopify: 0,    // payouts "Concepto Shopify" tag Brand
+      otro: 0,
+    };
+
     for (const tx of bankTxs) {
       const macro = getMacroCategory(tx);
       if (macro === 'excluido') continue; // Skip "No contabilizar"
       const amt = parseFloat(tx.amount || '0');
       const tag = tx.manual_tag || tx.auto_tag || 'Sin categoría';
+      const concept = (tx.concept || '').toLowerCase();
 
       if (amt > 0) {
         macroGroups[macro].income += amt;
       } else {
         macroGroups[macro].expenses += Math.abs(amt);
+      }
+
+      // Si es Brand y es ingreso, desglosar por canal
+      if (macro === 'brand' && amt > 0) {
+        if (concept.includes('bizum')) brandByChannel.bizum += amt;
+        else if (concept.includes('transferencia de stripe') && concept.includes('shopify')) brandByChannel.stripeShopify += amt;
+        else if (concept.includes('transferencia')) brandByChannel.transferencia += amt;
+        else brandByChannel.otro += amt;
       }
 
       if (!macroGroups[macro].tags[tag]) {
@@ -122,6 +160,23 @@ export async function GET(request: NextRequest) {
         amount: amt,
       });
     }
+
+    // === STRIPE one-time charges del periodo (Brand) ===
+    // Charges sin invoice = Brand. Los con invoice = Diezmo (suscripciones).
+    let stripeOneTimeBrand = 0;
+    try {
+      const stripeCharges = await getAllCharges({ created: { gte: startTs, lte: endTs } });
+      for (const c of stripeCharges) {
+        if (!c.paid) continue;
+        if (c.isSubscription) continue; // saltar diezmos
+        if (c.refunded) continue;
+        stripeOneTimeBrand += c.amount;
+      }
+    } catch { /* skip */ }
+
+    // Reasignar Brand: sumar Stripe one-time + efectivo, restar Stripe one-time de Diezmos
+    macroGroups.brand.income += stripeOneTimeBrand + cajaBrandEfectivo;
+    macroGroups.diezmos.income = Math.max(0, macroGroups.diezmos.income - stripeOneTimeBrand);
 
     // === CAJA: Balance breakdown by category from ALL bank transactions ===
     // Get ALL transactions for "caja" (not date-filtered) — con paginación
@@ -203,6 +258,8 @@ export async function GET(request: NextRequest) {
         profit: totalBankIncome - totalBankExpenses,
         bankBalance,
         cajaBrandEfectivo,
+        cajaBrandEfectivoByProduct,
+        brandByChannel,
       },
       // Macro groups
       macroGroups: {

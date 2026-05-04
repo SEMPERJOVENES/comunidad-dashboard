@@ -128,6 +128,38 @@ export async function getPayoutBreakdown(payoutId: string) {
   };
 }
 
+/**
+ * Versión LIGERA de getPayoutBreakdown — solo separa subs vs one-time
+ * sin expandir customer. Mucho más rápido para análisis agregados.
+ */
+export async function getPayoutBreakdownLite(payoutId: string) {
+  const allTxs: Stripe.BalanceTransaction[] = [];
+  let hasMore = true;
+  let startingAfter: string | undefined;
+  while (hasMore) {
+    const txs = await stripe.balanceTransactions.list({
+      payout: payoutId,
+      limit: 100,
+      expand: ['data.source'],
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+    allTxs.push(...txs.data);
+    hasMore = txs.has_more;
+    if (txs.data.length > 0) startingAfter = txs.data[txs.data.length - 1].id;
+  }
+
+  let subsAmount = 0, oneTimeAmount = 0;
+  for (const tx of allTxs) {
+    if (tx.type === 'charge' || tx.type === 'payment') {
+      const source = tx.source as any;
+      const isSubscription = source && source.object === 'charge' && !!source.invoice;
+      if (isSubscription) subsAmount += tx.net / 100;
+      else oneTimeAmount += tx.net / 100;
+    }
+  }
+  return { payoutId, subsAmount, oneTimeAmount };
+}
+
 export async function getCharges(params: { limit?: number; created?: { gte?: number; lte?: number } } = {}) {
   const charges = await stripe.charges.list({
     limit: params.limit || 100,

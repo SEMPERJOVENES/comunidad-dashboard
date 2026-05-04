@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [expandedCajaTag, setExpandedCajaTag] = useState<string | null>(null);
   const [showAllCaja, setShowAllCaja] = useState(false);
+  const [cajaExpanded, setCajaExpanded] = useState(false);
   const birthdayMembers = useMemo(() => getBirthdaysThisMonth(), []);
 
   const periodLabel = useMemo(() => {
@@ -182,14 +183,40 @@ export default function DashboardPage() {
                 <p className="text-2xl sm:text-3xl font-bold text-blue-700">{formatCurrency(data.financials.bankBalance)}</p>
                 <p className="text-[10px] text-gray-400 mt-1">Última transacción registrada</p>
               </div>
-              <div className="bg-white rounded-2xl border-2 border-emerald-200 px-5 py-4 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <Wallet size={14} className="text-emerald-600" />
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Caja Brand (efectivo)</p>
+              <button
+                onClick={() => setCajaExpanded(!cajaExpanded)}
+                className="bg-white rounded-2xl border-2 border-emerald-200 px-5 py-4 shadow-sm text-left hover:border-emerald-400 hover:shadow-md transition-all w-full"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <Wallet size={14} className="text-emerald-600" />
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Caja Brand (efectivo)</p>
+                  </div>
+                  {cajaExpanded ? <ChevronDown size={14} className="text-emerald-600" /> : <ChevronRight size={14} className="text-emerald-600" />}
                 </div>
                 <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{formatCurrency((data.financials as any).cajaBrandEfectivo || 0)}</p>
                 <p className="text-[10px] text-gray-400 mt-1">Ventas presenciales en efectivo · pendiente depositar</p>
-              </div>
+                {cajaExpanded && (data.financials as any).cajaBrandEfectivoByProduct && (
+                  <div className="mt-3 pt-3 border-t border-emerald-100 space-y-1.5">
+                    {Object.entries((data.financials as any).cajaBrandEfectivoByProduct)
+                      .sort((a: any, b: any) => b[1].total - a[1].total)
+                      .map(([title, info]: any) => (
+                        <div key={title}>
+                          <div className="flex justify-between items-baseline text-[11px]">
+                            <span className="text-gray-700 truncate">{title} <span className="text-gray-400">×{info.count}</span></span>
+                            <span className="font-mono font-semibold text-emerald-700">{formatCurrency(info.total)}</span>
+                          </div>
+                          {(info.items || []).map((it: any, i: number) => (
+                            <div key={i} className="flex justify-between items-baseline text-[10px] text-gray-500 pl-2">
+                              <span className="truncate">{it.variant ? `${it.variant} · ` : ''}{it.customer || it.notes || ''}</span>
+                              <span className="font-mono">{formatCurrency(it.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </button>
               <div className="bg-white rounded-2xl border-2 border-indigo-200 px-5 py-4 shadow-sm">
                 <div className="flex items-center gap-2 mb-1">
                   <Package size={14} className="text-indigo-600" />
@@ -199,6 +226,46 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-gray-400 mt-1">Valor potencial · Coste {formatCurrency(data.shopify.stockCost)}</p>
               </div>
             </div>
+
+            {/* ══════ INGRESOS BRAND POR CANAL ══════ */}
+            {(data.financials as any).brandByChannel && (
+              <div className="bg-white rounded-2xl border-2 border-indigo-200 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Store size={14} className="text-indigo-600" />
+                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Ingresos Brand · desglose por canal</h3>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="bg-cyan-50 rounded-xl p-3 border border-cyan-100">
+                    <p className="text-[10px] uppercase font-bold text-cyan-700 tracking-wide">Bizum</p>
+                    <p className="text-base font-bold text-cyan-700">{formatCurrency((data.financials as any).brandByChannel.bizum)}</p>
+                    <p className="text-[9px] text-cyan-600">Banco · tag Brand</p>
+                  </div>
+                  <div className="bg-violet-50 rounded-xl p-3 border border-violet-100">
+                    <p className="text-[10px] uppercase font-bold text-violet-700 tracking-wide">Transferencia</p>
+                    <p className="text-base font-bold text-violet-700">{formatCurrency((data.financials as any).brandByChannel.transferencia)}</p>
+                    <p className="text-[9px] text-violet-600">Banco · tag Brand</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                    <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Stripe / Shopify</p>
+                    <p className="text-base font-bold text-blue-700">{formatCurrency((data.financials as any).brandByChannel.stripeShopify)}</p>
+                    <p className="text-[9px] text-blue-600">Payouts Stripe Shopify</p>
+                  </div>
+                  <div className="bg-orange-50 rounded-xl p-3 border border-orange-100">
+                    <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wide">Efectivo (caja)</p>
+                    <p className="text-base font-bold text-orange-700">{formatCurrency((data.financials as any).cajaBrandEfectivo || 0)}</p>
+                    <p className="text-[9px] text-orange-600">POS · pendiente depositar</p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">TOTAL Brand</p>
+                    <p className="text-base font-bold text-emerald-700">{formatCurrency(((data.financials as any).brandByChannel.bizum || 0) + ((data.financials as any).brandByChannel.transferencia || 0) + ((data.financials as any).brandByChannel.stripeShopify || 0) + ((data.financials as any).brandByChannel.otro || 0) + ((data.financials as any).cajaBrandEfectivo || 0))}</p>
+                    <p className="text-[9px] text-emerald-600">Suma todos canales</p>
+                  </div>
+                </div>
+                {(data.financials as any).brandByChannel.otro > 0 && (
+                  <p className="text-[10px] text-gray-500 mt-2">+ {formatCurrency((data.financials as any).brandByChannel.otro)} en otros conceptos tag Brand</p>
+                )}
+              </div>
+            )}
 
             {/* ══════ P&L POR ÁREA ══════ */}
             <div className="space-y-4">
@@ -331,7 +398,7 @@ export default function DashboardPage() {
                             return (
                               <div>
                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-100">
-                                  <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ Gastos</p>
+                                  <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ {key === 'brand' ? 'Inversión' : 'Gastos'}</p>
                                   <p className="text-sm font-bold text-rose-700">-{formatCurrency(group.expenses)}</p>
                                 </div>
                                 <div className="space-y-0.5">
