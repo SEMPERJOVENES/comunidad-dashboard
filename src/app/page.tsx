@@ -129,12 +129,20 @@ export default function DashboardPage() {
         {/* Botones acciones globales */}
         <div className="flex items-center gap-2 flex-wrap">
           <a
-            href={`/informe?start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
+            href={`/informe?type=diezmos&start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 shadow-sm"
           >
-            <FileText size={14} /> Descargar PDF
+            <FileText size={14} /> PDF Diezmos
+          </a>
+          <a
+            href={`/informe?type=completo&start=${selectedRange.startDate.toISOString()}&end=${selectedRange.endDate.toISOString()}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-violet-700 text-white text-sm font-bold rounded-xl hover:bg-violet-800 shadow-sm"
+          >
+            📊 PDF Completo
           </a>
         </div>
 
