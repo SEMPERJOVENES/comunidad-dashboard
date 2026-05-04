@@ -397,6 +397,15 @@ export default function InformePage() {
           <PnLAreaSummary macroGroups={dashboardData.macroGroups} />
         )}
 
+        {/* === COMUNIDAD: BREAK-EVEN === */}
+        {reportType === 'completo' && dashboardData?.macroGroups?.diezmos && rangeStart && rangeEnd && (
+          <ComunidadBreakeven
+            macroGroup={dashboardData.macroGroups.diezmos}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+          />
+        )}
+
         {/* === DESGLOSE INGRESOS / GASTOS BRAND === */}
         {reportType === 'completo' && brandData && (
           <BrandBreakdown brand={brandData} />
@@ -703,6 +712,152 @@ function BrandBreakdown({ brand }: { brand: any }) {
             <p className="text-lg font-bold text-rose-700">{gastoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
           <div>{renderBar(gastoItems, gastoTotal, '#ef4444')}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComunidadBreakeven({ macroGroup, rangeStart, rangeEnd }: { macroGroup: any; rangeStart: Date; rangeEnd: Date }) {
+  const ingresos = macroGroup.income || 0;
+  const gastos = macroGroup.expenses || 0;
+  const neto = ingresos - gastos;
+  const tags = (macroGroup.tags || []);
+
+  // Calcular meses del rango
+  const ms = (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  const meses = Math.max(1, Math.round(ms));
+  const netoMensual = neto / meses;
+  const gastoMensual = gastos / meses;
+  const ingresoMensual = ingresos / meses;
+  const DIEZMO_BASE = 5;
+
+  const diezmosFaltantesMensuales = neto < 0 ? Math.ceil(Math.abs(netoMensual) / DIEZMO_BASE) : 0;
+  const diezmosCubrirDeficit = neto < 0 ? Math.ceil(Math.abs(neto) / DIEZMO_BASE) : 0;
+
+  // Top categorías ingresos
+  const incomeTags = tags.filter((t: any) => t.income > 0).sort((a: any, b: any) => b.income - a.income);
+  const expenseTags = tags.filter((t: any) => t.expenses > 0).sort((a: any, b: any) => b.expenses - a.expenses);
+
+  return (
+    <div className="mt-8 mb-8">
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Comunidad · Análisis</h2>
+      <p className="text-xs text-gray-500 mb-4">Diezmos vs gastos comunitarios · cálculo break-even</p>
+
+      {/* KPI principal con neto + meses */}
+      <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: neto < 0 ? '#fecaca' : '#bbf7d0' }}>
+        <div className="px-5 py-4" style={{ background: neto < 0 ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' }}>
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-widest" style={{ color: neto < 0 ? '#991b1b' : '#065f46' }}>Resultado neto · {meses} {meses === 1 ? 'mes' : 'meses'}</p>
+              <p className="text-3xl font-bold" style={{ color: neto < 0 ? '#991b1b' : '#065f46' }}>
+                {neto >= 0 ? '+' : ''}{neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase font-bold tracking-widest text-gray-500">Promedio mensual</p>
+              <p className="text-lg font-bold" style={{ color: neto < 0 ? '#991b1b' : '#065f46' }}>
+                {netoMensual >= 0 ? '+' : ''}{netoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}/mes
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-3">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-lg">
+              ↑ Ingreso {ingresoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}/mes
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg">
+              ↓ Gasto {gastoMensual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}/mes
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* CÁLCULO BREAK-EVEN */}
+      {neto < 0 && (
+        <div className="rounded-2xl border-2 mb-4 overflow-hidden" style={{ borderColor: '#fde68a', background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' }}>
+          <div className="px-5 py-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#f59e0b' }}>
+                <span className="text-white text-base">⚖️</span>
+              </div>
+              <div>
+                <p className="text-base font-bold text-amber-900">Cálculo Break-even</p>
+                <p className="text-[11px] text-amber-700">¿Cuántos diezmos faltan para cubrir el déficit?</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
+                <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Para break-even mensual</p>
+                <p className="text-3xl font-bold text-amber-900">+{diezmosFaltantesMensuales} diezmos</p>
+                <p className="text-[10px] text-gray-600 mt-1">de {DIEZMO_BASE}€/mes para cubrir el déficit mensual de {Math.abs(netoMensual).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+              </div>
+              <div className="bg-white rounded-xl p-3 border" style={{ borderColor: '#fde68a' }}>
+                <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">Para cubrir déficit acumulado</p>
+                <p className="text-3xl font-bold text-amber-900">+{diezmosCubrirDeficit} diezmos</p>
+                <p className="text-[10px] text-gray-600 mt-1">pagos puntuales de {DIEZMO_BASE}€ para recuperar los {Math.abs(neto).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} del agujero acumulado</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-amber-700 mt-3 italic">
+              💡 Cálculo: déficit ÷ {DIEZMO_BASE}€ (diezmo base mensual). Si el diezmo medio fuese mayor (ej. 10€), harían falta la mitad.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Desglose Ingresos / Gastos con barras de % (estilo Brand) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Desglose Ingresos</p>
+            <p className="text-lg font-bold text-emerald-700">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          {incomeTags.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Sin ingresos</p>
+          ) : incomeTags.map((t: any) => {
+            const pct = ingresos > 0 ? (t.income / ingresos) * 100 : 0;
+            return (
+              <div key={t.tag} className="mb-2">
+                <div className="flex items-baseline justify-between mb-0.5">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: tagColor(t.tag) }} />
+                    {t.tag}
+                    <span className="text-[9px] text-gray-500 font-normal">({(t.transactions || []).filter((tx: any) => tx.amount > 0).length})</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-700">{t.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} <span className="text-[9px] text-gray-500 font-normal">({pct.toFixed(1)}%)</span></span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#dcfce7' }}>
+                  <div className="h-full rounded-full" style={{ background: '#10b981', width: `${Math.max(pct, 2)}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#fecaca', backgroundColor: '#fef2f2' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-sm font-bold text-rose-700 uppercase tracking-wide">Desglose Gastos</p>
+            <p className="text-lg font-bold text-rose-700">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          {expenseTags.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Sin gastos</p>
+          ) : expenseTags.map((t: any) => {
+            const pct = gastos > 0 ? (t.expenses / gastos) * 100 : 0;
+            return (
+              <div key={t.tag} className="mb-2">
+                <div className="flex items-baseline justify-between mb-0.5">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: tagColor(t.tag) }} />
+                    {t.tag}
+                    <span className="text-[9px] text-gray-500 font-normal">({(t.transactions || []).filter((tx: any) => tx.amount < 0).length})</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-rose-700">{t.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} <span className="text-[9px] text-gray-500 font-normal">({pct.toFixed(1)}%)</span></span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#fee2e2' }}>
+                  <div className="h-full rounded-full" style={{ background: '#ef4444', width: `${Math.max(pct, 2)}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
