@@ -16,6 +16,74 @@ export async function GET(request: NextRequest) {
       status: 'any',
     });
 
+    // 1b. Shopify orders HISTÓRICAS sin filtro de rango — para trazabilidad de stock (BAC 26)
+    // Cachear sería ideal; por ahora se pide una sola vez por petición.
+    let allTimeOrders: any[] = orders;
+    try {
+      allTimeOrders = await getAllOrders({
+        created_at_min: '2024-01-01T00:00:00Z',
+        status: 'any',
+      });
+    } catch {
+      // Fallback al rango actual si falla
+      allTimeOrders = orders;
+    }
+
+    // Calcular ventas históricas Shopify por colección trazable (Pingüino, GOD Luck)
+    function matchTraceable(title: string): string | null {
+      const t = (title || '').toLowerCase();
+      if (/ping[üu]ino/.test(t)) return 'pinguino';
+      if (/god\s*luck|good\s*luck/.test(t)) return 'godluck';
+      return null;
+    }
+    const historicalSalesByCollection: Record<string, { revenue: number; units: number; refundedUnits: number; shopifyRevenue: number; shopifyUnits: number; presencialRevenue: number; presencialUnits: number }> = {
+      pinguino: { revenue: 0, units: 0, refundedUnits: 0, shopifyRevenue: 0, shopifyUnits: 0, presencialRevenue: 0, presencialUnits: 0 },
+      godluck: { revenue: 0, units: 0, refundedUnits: 0, shopifyRevenue: 0, shopifyUnits: 0, presencialRevenue: 0, presencialUnits: 0 },
+    };
+    // 1. Ventas Shopify históricas
+    for (const o of allTimeOrders) {
+      const refundedByLineItem = new Map<number, number>();
+      for (const r of (o.refunds || [])) {
+        for (const rli of (r.refund_line_items || [])) {
+          refundedByLineItem.set(rli.line_item_id, (refundedByLineItem.get(rli.line_item_id) || 0) + (rli.quantity || 0));
+        }
+      }
+      for (const item of (o.line_items || [])) {
+        const collection = matchTraceable(item.title || '');
+        if (!collection) continue;
+        const refundedQty = refundedByLineItem.get(item.id) || 0;
+        const netQty = (item.quantity || 1) - refundedQty;
+        if (netQty <= 0) {
+          historicalSalesByCollection[collection].refundedUnits += (item.quantity || 1);
+          continue;
+        }
+        const r = parseFloat(item.price || '0') * netQty;
+        historicalSalesByCollection[collection].shopifyRevenue += r;
+        historicalSalesByCollection[collection].shopifyUnits += netQty;
+        historicalSalesByCollection[collection].revenue += r;
+        historicalSalesByCollection[collection].units += netQty;
+      }
+    }
+    // 2. Ventas presenciales históricas — sin filtro de rango
+    const { data: ventasAllTime } = await supabase
+      .from('ventas_presenciales')
+      .select('items, sale_type, payment_method');
+    for (const v of (ventasAllTime || [])) {
+      if (v.sale_type === 'regalo' || v.payment_method === 'regalo') continue;
+      const items = v.items || [];
+      for (const it of items) {
+        const title = it.productTitle || it.title || '';
+        const collection = matchTraceable(title);
+        if (!collection) continue;
+        const qty = it.quantity || 1;
+        const r = (it.unitPrice || 0) * qty;
+        historicalSalesByCollection[collection].presencialRevenue += r;
+        historicalSalesByCollection[collection].presencialUnits += qty;
+        historicalSalesByCollection[collection].revenue += r;
+        historicalSalesByCollection[collection].units += qty;
+      }
+    }
+
     // MÉTODO BRUTO: todos los pedidos cuentan como ingreso, devoluciones REALES como gasto
     const shopifyGross = orders.reduce((sum: number, o: any) => sum + parseFloat(o.total_price || '0'), 0);
     const paidOrders = orders.filter((o: any) => o.financial_status !== 'refunded');
@@ -641,6 +709,8 @@ export async function GET(request: NextRequest) {
         pendientePagoDetail,
         // Caja efectivo desglosada por producto
         cajaEfectivoByProduct,
+        // Ventas históricas Shopify por colección trazable (sin filtro de rango)
+        historicalSalesByCollection,
       },
       expenses: {
         byTag: expensesByTag,

@@ -947,16 +947,17 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
   const matchPinguino = (t: string) => /ping[üu]ino/i.test(t || '');
   const matchGodLuck = (t: string) => /god\s*luck|good\s*luck/i.test(t || '');
 
-  // brand.topProducts ya combina Shopify + ventas presenciales (es lo correcto)
+  // Para trazabilidad: usar TODAS las ventas históricas (Shopify + presencial sin filtro de rango)
+  // Esto evita que las ventas Shopify de dic 2025 (anteriores al rango "Este año") se pierdan
+  const histByCol = brand?.income?.historicalSalesByCollection || { pinguino: { revenue: 0, units: 0 }, godluck: { revenue: 0, units: 0 } };
   const findRevenueAndUnits = (matchFn: (t: string) => boolean) => {
-    let revenue = 0, units = 0;
-    for (const p of (brand?.topProducts || [])) {
-      if (matchFn(p.title || '')) {
-        revenue += p.revenue || 0;
-        units += p.units || 0;
-      }
+    if (matchFn('camiseta pingüino místico')) {
+      return { revenue: histByCol.pinguino?.revenue || 0, units: histByCol.pinguino?.units || 0 };
     }
-    return { revenue, units };
+    if (matchFn('camiseta god luck')) {
+      return { revenue: histByCol.godluck?.revenue || 0, units: histByCol.godluck?.units || 0 };
+    }
+    return { revenue: 0, units: 0 };
   };
 
   // Regalos por colección
