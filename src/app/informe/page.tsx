@@ -151,20 +151,6 @@ export default function InformePage() {
               {' → '}
               {rangeEnd ? rangeEnd.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) : '?'}
             </p>
-            <div className="grid grid-cols-3 gap-6 mt-6 pt-5 border-t border-white/20">
-              <div>
-                <p className="text-3xl font-black leading-none">{totalMembers}</p>
-                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Miembros</p>
-              </div>
-              <div>
-                <p className="text-3xl font-black leading-none">{totalMembers > 0 ? Math.round((totalPaying / totalMembers) * 100) : 0}%</p>
-                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Participación</p>
-              </div>
-              <div>
-                <p className="text-3xl font-black leading-none">{formatCurrency(totalRecaudado)}</p>
-                <p className="text-[10px] uppercase tracking-widest text-white/70 mt-1">Recaudado</p>
-              </div>
-            </div>
             <p className="text-[10px] text-white/60 mt-4">Generado el {fechaImpresion}</p>
           </div>
         </div>
