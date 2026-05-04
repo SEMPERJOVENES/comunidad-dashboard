@@ -485,6 +485,21 @@ export default function InformePage() {
           .page-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
           .section-break { page-break-before: always; break-before: page; }
           .section-header-h2 { page-break-after: avoid; break-after: avoid; }
+          /* Asegurar que NO haya scroll oculto al imprimir — mostrar TODO el contenido */
+          *, *::before, *::after {
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          /* Truncate desactivado en print: mostrar texto entero */
+          .truncate, [class*="truncate"] {
+            text-overflow: clip !important;
+            overflow: visible !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          /* Tablas: forzar layout fijo para que respeten widths */
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
         }
       `}</style>
     </div>
@@ -1007,10 +1022,10 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
                         <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">🎁 Regalados</p>
                         <p className="text-[11px] font-bold text-amber-900">{gifts.totalUnits} uds · {gifts.totalCost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })} de coste</p>
                       </div>
-                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto print:max-h-none print:overflow-visible">
                         {gifts.list.map((g: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between text-[10px] text-amber-900">
-                            <span className="truncate">{g.description} · {new Date(g.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                          <div key={i} className="flex items-start justify-between text-[10px] text-amber-900 gap-2">
+                            <span className="break-words leading-snug print:whitespace-normal">{g.description} · {new Date(g.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
                             <span className="font-semibold flex-shrink-0">−{g.costLoss.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                           </div>
                         ))}
