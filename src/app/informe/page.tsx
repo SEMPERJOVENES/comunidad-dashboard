@@ -719,10 +719,15 @@ function BrandBreakdown({ brand }: { brand: any }) {
   if (brand?.income?.ventasPresenciales > 0) ingresoItems.push({ label: 'Ventas Presenciales', value: brand.income.ventasPresenciales, meta: `${brand.income.ventasCount || 0} ventas` });
   if (brand?.income?.shopify > 0) ingresoItems.push({ label: 'Shopify', value: brand.income.shopify, meta: `${brand.income.shopifyOrders || 0} pedidos` });
 
-  // Desglose gastos
+  // Desglose Inversión (proveedores, lotes producción)
+  const inversionItems: { label: string; value: number }[] = [];
+  const inversionTotal = brand?.expenses?.inversionTotal || 0;
+  if (inversionTotal > 0) inversionItems.push({ label: 'Compras a proveedores (Rockwear, lotes)', value: inversionTotal });
+
+  // Desglose Gastos operativos (no inversión)
   const gastoItems: { label: string; value: number }[] = [];
-  const brandExp = brand?.expenses?.byTag?.Brand || 0;
-  if (brandExp > 0) gastoItems.push({ label: 'Brand (gastos producción)', value: brandExp });
+  const gastoOpBank = brand?.expenses?.gastoOperativoTotal || 0;
+  if (gastoOpBank > 0) gastoItems.push({ label: 'Gasto operativo banco (Shopify, apps)', value: gastoOpBank });
   if (brand?.giftLoss > 0) gastoItems.push({ label: 'Regalos (coste prod.)', value: brand.giftLoss });
   if (brand?.expenses?.shopifyRefunds > 0) gastoItems.push({ label: `Devoluciones Shopify (${brand.expenses.shopifyRefundCount || 0})`, value: brand.expenses.shopifyRefunds });
   if (brand?.expenses?.stripeFees > 0) gastoItems.push({ label: 'Comisión Stripe', value: brand.expenses.stripeFees });
@@ -748,26 +753,43 @@ function BrandBreakdown({ brand }: { brand: any }) {
       });
   };
 
+  const totalGastosOp = gastoItems.reduce((s, i) => s + i.value, 0);
+
   return (
     <div className="mt-10 mb-8 section-break">
-      <SectionHeader number={8} title="Desglose Brand" subtitle="Ingresos y gastos detallados con porcentajes" color="#3b82f6" />
-      <div className="grid grid-cols-2 gap-4">
+      <SectionHeader number={8} title="Desglose Brand" subtitle="Ingresos · Inversión · Gastos operativos" color="#3b82f6" />
+      <div className="grid grid-cols-3 gap-4">
         {/* Ingresos */}
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
           <div className="flex items-baseline justify-between mb-3">
-            <p className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Desglose Ingresos</p>
-            <p className="text-lg font-bold text-emerald-700">{ingresoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Ingresos</p>
+            <p className="text-base font-bold text-emerald-700">{ingresoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
           <div>{renderBar(ingresoItems, ingresoTotal, '#10b981')}</div>
         </div>
 
-        {/* Gastos */}
+        {/* Inversión */}
+        <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Inversión</p>
+            <p className="text-base font-bold text-blue-700">{inversionTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+          </div>
+          {inversionItems.length > 0 ? (
+            <div>{renderBar(inversionItems, inversionTotal, '#3b82f6')}</div>
+          ) : (
+            <p className="text-[10px] text-gray-400 italic">Sin inversiones identificadas en el periodo</p>
+          )}
+          <p className="text-[9px] text-blue-600 mt-2 italic">Compras a proveedores y lotes de producción (capitalizable como stock)</p>
+        </div>
+
+        {/* Gastos operativos */}
         <div className="rounded-2xl border-2 p-4" style={{ borderColor: '#fecaca', backgroundColor: '#fef2f2' }}>
           <div className="flex items-baseline justify-between mb-3">
-            <p className="text-sm font-bold text-rose-700 uppercase tracking-wide">Desglose Gastos</p>
-            <p className="text-lg font-bold text-rose-700">{gastoTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            <p className="text-xs font-bold text-rose-700 uppercase tracking-wide">Gastos operativos</p>
+            <p className="text-base font-bold text-rose-700">{totalGastosOp.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
           </div>
-          <div>{renderBar(gastoItems, gastoTotal, '#ef4444')}</div>
+          <div>{renderBar(gastoItems, totalGastosOp, '#ef4444')}</div>
+          <p className="text-[9px] text-rose-600 mt-2 italic">Comisiones, refunds, suscripciones (no se recuperan)</p>
         </div>
       </div>
     </div>

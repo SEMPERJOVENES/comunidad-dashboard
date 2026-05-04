@@ -224,6 +224,12 @@ export async function GET(request: NextRequest) {
     const brandTransferDetail: Array<{ date: string; concept: string; amount: number }> = [];
     const brandShopifyPayoutDetail: Array<{ date: string; concept: string; amount: number }> = [];
 
+    // Gastos Brand desglosados: Inversión vs Operativo
+    let brandInversionTotal = 0;
+    let brandGastoOperativoTotal = 0;
+    const brandInversionDetail: Array<{ date: string; concept: string; amount: number }> = [];
+    const brandGastoOperativoDetail: Array<{ date: string; concept: string; amount: number }> = [];
+
     for (const tx of bankTxs) {
       const tag = tx.manual_tag || tx.auto_tag || '';
       const amount = parseFloat(tx.amount || '0');
@@ -260,6 +266,16 @@ export async function GET(request: NextRequest) {
         totalBankExpenses += Math.abs(amount);
         if (!bankExpenseDetail[tag]) bankExpenseDetail[tag] = [];
         bankExpenseDetail[tag].push(detail);
+
+        // Clasificar gasto Brand: Inversión (proveedores) vs Gasto operativo
+        const isInvestment = /rockwear|lote|produc|imprenta|tela|fabric|proveedor/.test(concept);
+        if (isInvestment) {
+          brandInversionDetail.push(detail);
+          brandInversionTotal += Math.abs(amount);
+        } else {
+          brandGastoOperativoDetail.push(detail);
+          brandGastoOperativoTotal += Math.abs(amount);
+        }
       }
     }
 
@@ -715,6 +731,11 @@ export async function GET(request: NextRequest) {
       expenses: {
         byTag: expensesByTag,
         total: totalBankExpenses,
+        // Desglose Inversión vs Gasto operativo
+        inversionTotal: brandInversionTotal,
+        inversionDetail: brandInversionDetail,
+        gastoOperativoTotal: brandGastoOperativoTotal,
+        gastoOperativoDetail: brandGastoOperativoDetail,
         stripeFees: netStripeFees,
         stripeGross,
         stripeNet,
