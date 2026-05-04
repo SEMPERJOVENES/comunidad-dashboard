@@ -83,6 +83,10 @@ export async function getOrders(params: {
 
 // Orders con paginación completa — trae TODAS las órdenes
 // Filtra automáticamente las órdenes en la tabla `excluded_orders` de Supabase (fakes/tests)
+// Cache en memoria de getAllOrders (TTL 5 min)
+const _ordersCache = new Map<string, { data: any[]; ts: number }>();
+const _ORDERS_CACHE_TTL = 5 * 60 * 1000;
+
 export async function getAllOrders(params: {
   status?: string;
   created_at_min?: string;
@@ -90,6 +94,10 @@ export async function getAllOrders(params: {
   fields?: string;
   includeExcluded?: boolean;
 } = {}) {
+  const cacheKey = JSON.stringify(params);
+  const cached = _ordersCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < _ORDERS_CACHE_TTL) return cached.data;
+
   const allOrders: any[] = [];
   const queryParams: Record<string, string> = {
     status: params.status || 'any',
@@ -133,20 +141,32 @@ export async function getAllOrders(params: {
     nextUrl = nextMatch ? nextMatch[1] : null;
   }
 
-  if (params.includeExcluded) return allOrders;
+  if (params.includeExcluded) {
+    _ordersCache.set(cacheKey, { data: allOrders, ts: Date.now() });
+    return allOrders;
+  }
 
   // Filtrar excluded_orders desde Supabase
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return allOrders;
+    if (!url || !key) {
+      _ordersCache.set(cacheKey, { data: allOrders, ts: Date.now() });
+      return allOrders;
+    }
     const sb = createClient(url, key);
     const { data: excluded } = await sb.from('excluded_orders').select('order_id');
-    if (!excluded?.length) return allOrders;
+    if (!excluded?.length) {
+      _ordersCache.set(cacheKey, { data: allOrders, ts: Date.now() });
+      return allOrders;
+    }
     const excludedSet = new Set(excluded.map((e: any) => Number(e.order_id)));
-    return allOrders.filter((o: any) => !excludedSet.has(Number(o.id)));
+    const filtered = allOrders.filter((o: any) => !excludedSet.has(Number(o.id)));
+    _ordersCache.set(cacheKey, { data: filtered, ts: Date.now() });
+    return filtered;
   } catch {
+    _ordersCache.set(cacheKey, { data: allOrders, ts: Date.now() });
     return allOrders;
   }
 }
