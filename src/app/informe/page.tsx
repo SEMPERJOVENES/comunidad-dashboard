@@ -187,7 +187,7 @@ export default function InformePage() {
             <div className="mb-3">
               <h2 className="text-xs uppercase font-bold text-gray-400 tracking-widest">Saldos actuales</h2>
             </div>
-            <div className="grid grid-cols-3 gap-3 mb-8">
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="rounded-2xl p-4 border" style={{ borderColor: '#bbf7d0', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' }}>
                 <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide flex items-center gap-1.5">🏦 Saldo Banco</p>
                 <p className="text-2xl font-bold mt-1" style={{ color: '#065f46' }}>{(dashboardData.financials.bankBalance || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
@@ -198,12 +198,41 @@ export default function InformePage() {
                 <p className="text-2xl font-bold mt-1" style={{ color: '#9a3412' }}>{(dashboardData.financials.cajaBrandEfectivo || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
                 <p className="text-[10px] text-orange-600">Ventas presenciales · pendiente depositar</p>
               </div>
-              <div className="rounded-2xl p-4 border" style={{ borderColor: '#bfdbfe', background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)' }}>
-                <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide flex items-center gap-1.5">📦 Stock Brand (PVP)</p>
-                <p className="text-2xl font-bold mt-1" style={{ color: '#1e40af' }}>{(dashboardData.shopify?.stockValue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                <p className="text-[10px] text-blue-600">Coste {(dashboardData.shopify?.stockCost || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-              </div>
             </div>
+
+            {/* Stock Brand Potencial — usa /api/semper-brand (excluye preventa/sin coste) */}
+            {(() => {
+              const sv = brandData?.stockValuation;
+              const stockValue = sv?.retailValue ?? dashboardData.shopify?.stockValue ?? 0;
+              const stockCost = sv?.costValue ?? dashboardData.shopify?.stockCost ?? 0;
+              const margen = sv?.potentialProfit ?? (stockValue - stockCost);
+              const pctMargen = sv?.potentialMargin ?? (stockValue > 0 ? (margen / stockValue) * 100 : 0);
+              return (
+                <div className="rounded-2xl border-2 mb-8 overflow-hidden" style={{ borderColor: '#bfdbfe' }}>
+                  <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }}>
+                    <p className="text-sm font-bold text-white flex items-center gap-1.5">📦 Stock Brand · Potencial</p>
+                    <p className="text-[11px] text-blue-100">Valoración del inventario actual de productos Brand</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-0 divide-x divide-gray-100" style={{ background: '#f8fafc' }}>
+                    <div className="p-4">
+                      <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Valor teórico stock (PVP)</p>
+                      <p className="text-2xl font-bold mt-1" style={{ color: '#1e40af' }}>{stockValue.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[10px] text-blue-600 mt-1">Si vendiéramos todo a precio venta</p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wide">Coste stock</p>
+                      <p className="text-2xl font-bold mt-1" style={{ color: '#9f1239' }}>{stockCost.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[10px] text-rose-600 mt-1">€ invertidos · capital atrapado</p>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Margen potencial</p>
+                      <p className="text-2xl font-bold mt-1" style={{ color: '#065f46' }}>{margen.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[10px] text-emerald-600 mt-1">{pctMargen.toFixed(1)}% margen</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -430,150 +459,179 @@ export default function InformePage() {
   );
 }
 
-function DesgloseSection({ title, color, macroGroup, extra }: { title: string; color: string; macroGroup: any; extra?: any }) {
+function DesgloseSection({ title, color, macroGroup }: { title: string; color: string; macroGroup: any; extra?: any }) {
   if (!macroGroup) return null;
   const ingresos = macroGroup.income || 0;
   const gastos = macroGroup.expenses || 0;
-  const neto = ingresos - gastos;
   const tags = macroGroup.tags || [];
-  // Sort tags por neto absoluto (más significativos primero)
-  tags.sort((a: any, b: any) => Math.abs(b.net) - Math.abs(a.net));
+
+  // Separar por ingresos / gastos como en el dashboard expandido
+  const incomeTags = tags.filter((t: any) => t.income > 0).sort((a: any, b: any) => b.income - a.income);
+  const expenseTags = tags.filter((t: any) => t.expenses > 0).sort((a: any, b: any) => b.expenses - a.expenses);
 
   return (
-    <div className="mt-8 pt-6 border-t-2" style={{ borderColor: color + '40' }}>
+    <div className="mt-6 mb-2">
       {/* Header sección */}
-      <div className="flex items-center gap-3 mb-4 page-break-inside-avoid">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: color }}>
-          <span className="text-white text-xs font-bold">{title.charAt(0)}</span>
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-          <p className="text-xs text-gray-500">Detalle de ingresos y gastos · agrupado por etiqueta</p>
-        </div>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-1.5 h-6 rounded-full" style={{ background: color }} />
+        <h3 className="text-base font-bold text-gray-900">{title}</h3>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="rounded-xl border-2 p-3 bg-emerald-50/40" style={{ borderColor: '#a7f3d0' }}>
-          <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">Ingresos</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-        </div>
-        <div className="rounded-xl border-2 p-3 bg-rose-50/40" style={{ borderColor: '#fecaca' }}>
-          <p className="text-[10px] uppercase font-bold text-rose-700 tracking-wide">Gastos</p>
-          <p className="text-xl font-bold text-rose-700 mt-1">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-        </div>
-        <div className="rounded-xl border-2 p-3" style={{ borderColor: neto >= 0 ? '#a7f3d0' : '#fecaca', backgroundColor: neto >= 0 ? '#ecfdf5' : '#fef2f2' }}>
-          <p className="text-[10px] uppercase font-bold tracking-wide" style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>Neto</p>
-          <p className="text-xl font-bold mt-1" style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
-            {neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-          </p>
-        </div>
-      </div>
-
-      {/* Tags / categorías */}
-      {tags.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Por categoría</h3>
-          {tags.map((tag: any) => (
-            <div key={tag.tag} className="rounded-xl border border-gray-200 p-3 page-break-inside-avoid">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-bold text-gray-900">{tag.tag}</p>
-                <div className="flex gap-3 text-[11px]">
-                  {tag.income > 0 && <span className="text-emerald-700 font-semibold">+{tag.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
-                  {tag.expenses > 0 && <span className="text-rose-700 font-semibold">-{tag.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
-                  <span className="font-bold" style={{ color: tag.net >= 0 ? '#065f46' : '#991b1b' }}>
-                    Neto: {tag.net.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                  </span>
-                </div>
-              </div>
-              {/* Movimientos detalle (concepto entero) */}
-              {tag.transactions && tag.transactions.length > 0 && (
-                <div className="space-y-0.5 mt-2 pt-2 border-t border-gray-100">
-                  {tag.transactions.sort((a: any, b: any) => b.date.localeCompare(a.date)).map((tx: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2 text-[10px] py-0.5">
-                      <span className="text-gray-400 w-16 flex-shrink-0">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
-                      <span className="flex-1 text-gray-700 break-words leading-snug">{tx.description}</span>
-                      <span className={`font-semibold flex-shrink-0 ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                      </span>
+      <div className="border border-gray-200 rounded-2xl p-4 space-y-4 bg-white">
+        {/* INGRESOS */}
+        {incomeTags.length > 0 && (
+          <div className="page-break-inside-avoid">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-emerald-100">
+              <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">↑ Ingresos</p>
+              <p className="text-sm font-bold text-emerald-700">+{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+            </div>
+            <div className="space-y-1">
+              {incomeTags.map((t: any) => {
+                const incomeTxs = (t.transactions || []).filter((tx: any) => tx.amount > 0).sort((a: any, b: any) => b.date.localeCompare(a.date));
+                return (
+                  <div key={t.tag}>
+                    <div className="flex items-center justify-between text-xs py-1.5 px-2 -mx-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: tagColor(t.tag) }} />
+                        <span className="text-gray-700 font-medium">{t.tag}</span>
+                        <span className="text-gray-400 text-[10px]">({incomeTxs.length})</span>
+                      </div>
+                      <span className="font-semibold text-emerald-600">+{t.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {incomeTxs.length > 0 && (
+                      <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-emerald-100 pl-3">
+                        {incomeTxs.map((tx: any, i: number) => (
+                          <div key={i} className="flex items-start justify-between text-[11px] text-gray-500 gap-2">
+                            <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                              <span className="text-gray-400 flex-shrink-0 font-medium">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                              <span className="break-words leading-snug">{tx.description || '—'}</span>
+                            </div>
+                            <span className="font-medium flex-shrink-0 text-emerald-600">+{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Extra para Brand: stock + top productos */}
-      {extra && extra.stockValuation && (
-        <div className="mt-5 grid grid-cols-2 gap-3 page-break-inside-avoid">
-          <div className="rounded-xl border border-gray-200 p-3 bg-blue-50/30">
-            <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide mb-1">Stock valoración</p>
-            <p className="text-sm">PVP: <span className="font-bold">{(extra.stockValuation.stockValue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
-            <p className="text-sm">Coste: <span className="font-bold">{(extra.stockValuation.stockCost || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span></p>
-            <p className="text-[10px] text-gray-500">{extra.stockValuation.totalUnits || 0} unidades · {extra.stockValuation.productCount || 0} productos</p>
           </div>
-          {extra.topProducts && extra.topProducts.length > 0 && (
-            <div className="rounded-xl border border-gray-200 p-3">
-              <p className="text-[10px] uppercase font-bold text-gray-700 tracking-wide mb-1">Top productos</p>
-              {extra.topProducts.slice(0, 5).map((p: any, i: number) => (
-                <p key={i} className="text-[10px] truncate"><span className="font-semibold">{p.title}</span> · {(p.revenue || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-              ))}
+        )}
+
+        {/* GASTOS */}
+        {expenseTags.length > 0 && (
+          <div className="page-break-inside-avoid">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-100">
+              <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">↓ Gastos</p>
+              <p className="text-sm font-bold text-rose-700">-{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
             </div>
-          )}
-        </div>
-      )}
+            <div className="space-y-1">
+              {expenseTags.map((t: any) => {
+                const expenseTxs = (t.transactions || []).filter((tx: any) => tx.amount < 0).sort((a: any, b: any) => b.date.localeCompare(a.date));
+                return (
+                  <div key={t.tag}>
+                    <div className="flex items-center justify-between text-xs py-1.5 px-2 -mx-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: tagColor(t.tag) }} />
+                        <span className="text-gray-700 font-medium">{t.tag}</span>
+                        <span className="text-gray-400 text-[10px]">({expenseTxs.length})</span>
+                      </div>
+                      <span className="font-semibold text-rose-600">-{t.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                    </div>
+                    {expenseTxs.length > 0 && (
+                      <div className="ml-4 mt-1 mb-2 space-y-0.5 border-l-2 border-rose-100 pl-3">
+                        {expenseTxs.map((tx: any, i: number) => (
+                          <div key={i} className="flex items-start justify-between text-[11px] text-gray-500 gap-2">
+                            <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                              <span className="text-gray-400 flex-shrink-0 font-medium">{new Date(tx.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                              <span className="break-words leading-snug">{tx.description || '—'}</span>
+                            </div>
+                            <span className="font-medium flex-shrink-0 text-rose-600">{tx.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function PnLAreaSummary({ macroGroups }: { macroGroups: any; financials?: any }) {
-  const areas = [
-    { key: 'diezmos', label: 'Comunidad', color: '#8b5cf6', soft: '#ede9fe', borderColor: '#ddd6fe' },
-    { key: 'brand', label: 'Semper Brand', color: '#3b82f6', soft: '#eff6ff', borderColor: '#bfdbfe' },
-    { key: 'otros', label: 'Otros', color: '#64748b', soft: '#f1f5f9', borderColor: '#cbd5e1' },
-  ];
+const TAG_COLORS_INFORME: Record<string, string> = {
+  'Diezmo': '#8b5cf6', 'Donativo': '#ec4899', 'Brand': '#6366f1',
+  'Shopify': '#22c55e', 'Stripe': '#3b82f6', 'Bizum': '#06b6d4',
+  'Transferencia': '#14b8a6', 'Misa/Tabor': '#f59e0b', 'Misa/Tabor/Comida': '#f59e0b',
+  'Retiros': '#f97316', 'Viajes': '#f43f5e', 'Música': '#d946ef',
+  'Nómina': '#ef4444', 'Material': '#eab308', 'Comisión bancaria': '#9ca3af',
+  'BAC': '#10b981', 'Gasto operativo': '#64748b', 'Venta presencial': '#84cc16',
+  'Semper CD': '#a855f7', 'Proveedor': '#71717a', 'Alquiler': '#78716c', 'Otro': '#94a3b8',
+};
+const tagColor = (tag: string) => TAG_COLORS_INFORME[tag] || '#9ca3af';
+
+const AREA_CONFIG: Record<string, { label: string; bg: string; iconBg: string; iconColor: string; border: string; barBg: string; barFill: string }> = {
+  diezmos: { label: 'Comunidad', bg: '#f5f3ff', iconBg: '#ddd6fe', iconColor: '#7c3aed', border: '#ddd6fe', barBg: '#ddd6fe', barFill: '#8b5cf6' },
+  brand:   { label: 'Semper Brand', bg: '#eef2ff', iconBg: '#c7d2fe', iconColor: '#4338ca', border: '#c7d2fe', barBg: '#c7d2fe', barFill: '#6366f1' },
+  otros:   { label: 'Otros', bg: '#fffbeb', iconBg: '#fde68a', iconColor: '#b45309', border: '#fde68a', barBg: '#fde68a', barFill: '#f59e0b' },
+};
+
+function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
+  const order = ['diezmos', 'brand', 'otros'];
   return (
-    <div className="mt-8 mb-8 page-break-inside-avoid">
-      <h2 className="text-xl font-bold text-gray-900 mb-3">P&L por Área</h2>
+    <div className="mt-8 mb-8">
+      <h2 className="text-xl font-bold text-gray-900 mb-1">P&L por Área</h2>
+      <p className="text-xs text-gray-500 mb-4">Resumen de ingresos y gastos por categoría macro</p>
       <div className="grid grid-cols-3 gap-3">
-        {areas.map(a => {
-          const g = macroGroups[a.key];
-          if (!g) return null;
+        {order.map(key => {
+          const g = macroGroups[key];
+          const cfg = AREA_CONFIG[key];
+          if (!g || !cfg) return null;
           const ingresos = g.income || 0;
           const gastos = g.expenses || 0;
           const neto = ingresos - gastos;
-          const tags = (g.tags || []).slice().sort((x: any, y: any) => Math.abs(y.net || 0) - Math.abs(x.net || 0)).slice(0, 4);
+          const tags = (g.tags || []).slice()
+            .sort((a: any, b: any) => Math.max(b.income, b.expenses) - Math.max(a.income, a.expenses))
+            .slice(0, 5);
           return (
-            <div key={a.key} className="rounded-2xl border-2 p-4" style={{ borderColor: a.borderColor, backgroundColor: a.soft }}>
-              <p className="text-base font-bold mb-2" style={{ color: a.color }}>{a.label}</p>
-              <p className={`text-xl font-bold mb-3`} style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
-                {neto >= 0 ? '+' : ''}{neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })}
-              </p>
-              <div className="space-y-1 mb-3">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-gray-600">Ingreso</span>
+            <div key={key} className="rounded-2xl overflow-hidden border bg-white page-break-inside-avoid" style={{ borderColor: cfg.border }}>
+              {/* Header */}
+              <div className="px-4 py-3" style={{ background: cfg.bg }}>
+                <p className="text-[11px] uppercase font-bold tracking-widest" style={{ color: cfg.iconColor }}>{cfg.label}</p>
+                <p className={`text-2xl font-bold mt-1`} style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
+                  {neto >= 0 ? '+' : ''}{neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })}
+                </p>
+                <div className="flex items-center gap-2 mt-2 text-[11px]">
+                  <span className="text-gray-500">Ingreso</span>
                   <span className="font-semibold text-emerald-700">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-gray-600">Gasto</span>
+                  <span className="text-gray-300">·</span>
+                  <span className="text-gray-500">Gasto</span>
                   <span className="font-semibold text-rose-700">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                 </div>
               </div>
+              {/* Top categorías */}
               {tags.length > 0 && (
-                <div className="border-t pt-2" style={{ borderColor: a.borderColor }}>
-                  <p className="text-[9px] uppercase font-bold mb-1.5 tracking-wide" style={{ color: a.color }}>Top categorías</p>
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-2">Top categorías</p>
                   <div className="space-y-1">
                     {tags.map((t: any) => (
-                      <div key={t.tag} className="flex items-start justify-between gap-2 text-[10px]">
-                        <span className="text-gray-800 font-medium leading-tight flex-1">{t.tag}</span>
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          {t.income > 0 && <span className="text-emerald-700 font-semibold">+{t.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
-                          {t.expenses > 0 && <span className="text-rose-700 font-semibold">-{t.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                      <div key={t.tag} className="flex items-center justify-between text-[11px] py-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: tagColor(t.tag) }} />
+                          <span className="text-gray-700 truncate">{t.tag}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {t.income > 0 && <span className="text-emerald-600 font-semibold">+{t.income.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
+                          {t.expenses > 0 && <span className="text-rose-500 font-semibold">-{t.expenses.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>}
                         </div>
                       </div>
                     ))}
+                    {(g.tags || []).length > 5 && (
+                      <p className="text-[10px] text-gray-400 italic pt-1">+ {(g.tags || []).length - 5} categorías más en detalle</p>
+                    )}
                   </div>
                 </div>
               )}

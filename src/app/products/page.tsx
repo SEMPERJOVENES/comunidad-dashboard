@@ -273,13 +273,26 @@ export default function InventarioPage() {
     return null;
   }
 
-  // ============ FILTROS ============
+  // ============ FILTROS + ORDEN POR BENEFICIO POTENCIAL ============
   const filtered = products.filter((p) => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
     if (categoryFilter === 'all') return true;
     const cost = getCost(p.id);
     return (cost?.category || 'inventario') === categoryFilter;
+  }).sort((a, b) => {
+    // Calcular beneficio potencial = stock × (PVP - coste)
+    const stockA = a.variants?.reduce((s: number, v: any) => s + (v.inventory_quantity || 0), 0) || 0;
+    const stockB = b.variants?.reduce((s: number, v: any) => s + (v.inventory_quantity || 0), 0) || 0;
+    const pvpA = parseFloat(a.variants?.[0]?.price || '0');
+    const pvpB = parseFloat(b.variants?.[0]?.price || '0');
+    const costA = getCost(a.id);
+    const costB = getCost(b.id);
+    const costPriceA = costA ? parseFloat(String(costA.cost_price || 0)) : 0;
+    const costPriceB = costB ? parseFloat(String(costB.cost_price || 0)) : 0;
+    const profitA = stockA * (pvpA - costPriceA);
+    const profitB = stockB * (pvpB - costPriceB);
+    return profitB - profitA; // Mayor beneficio primero
   });
 
   // ============ MÉTRICAS ============
@@ -332,15 +345,6 @@ export default function InventarioPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleApplyBulkCosts}
-              disabled={applyingBulkCosts || products.length === 0}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium disabled:opacity-50"
-              title="Aplica los costes BAC 26 (Pingüino, GOD LUCK, etc.) a todos los productos coincidentes"
-            >
-              {applyingBulkCosts ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              Aplicar costes BAC 26
-            </button>
             <button
               onClick={() => setShowMetrics(!showMetrics)}
               className="flex items-center gap-1 text-sm text-violet-600 hover:text-violet-800 font-medium"
