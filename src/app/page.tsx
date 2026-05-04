@@ -114,6 +114,11 @@ export default function DashboardPage() {
           dash.macroGroups.brand.income = realTotal;
           // Restar Stripe one-time de Diezmos (estaba mezclado en payouts tag Diezmo)
           dash.macroGroups.diezmos.income = Math.max(0, dash.macroGroups.diezmos.income - stripeOneTime);
+          // Enriquecer brandByChannel con los canales Stripe (one-time mixed y pending)
+          if (dash.financials?.brandByChannel) {
+            dash.financials.brandByChannel.stripeOneTimeMixed = brand.income.realBrandByChannel?.stripePayoutsOneTimeMixed || 0;
+            dash.financials.brandByChannel.stripePending = brand.income.realBrandByChannel?.stripePending || 0;
+          }
         }
         setData(dash);
       } catch (err: any) {
@@ -242,7 +247,7 @@ export default function DashboardPage() {
                   <Store size={14} className="text-indigo-600" />
                   <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Ingresos Brand · desglose por canal</h3>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                   <div className="bg-cyan-50 rounded-xl p-3 border border-cyan-100">
                     <p className="text-[10px] uppercase font-bold text-cyan-700 tracking-wide">Bizum</p>
                     <p className="text-base font-bold text-cyan-700">{formatCurrency((data.financials as any).brandByChannel.bizum)}</p>
@@ -254,18 +259,28 @@ export default function DashboardPage() {
                     <p className="text-[9px] text-violet-600">Banco · tag Brand</p>
                   </div>
                   <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                    <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Stripe / Shopify</p>
+                    <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Shopify</p>
                     <p className="text-base font-bold text-blue-700">{formatCurrency((data.financials as any).brandByChannel.stripeShopify)}</p>
                     <p className="text-[9px] text-blue-600">Payouts Stripe Shopify</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                    <p className="text-[10px] uppercase font-bold text-amber-700 tracking-wide">Stripe one-time</p>
+                    <p className="text-base font-bold text-amber-700">{formatCurrency((data.financials as any).brandByChannel.stripeOneTimeMixed || 0)}</p>
+                    <p className="text-[9px] text-amber-600">Auto-split de payouts mixed</p>
+                  </div>
+                  <div className="bg-sky-50 rounded-xl p-3 border border-sky-100">
+                    <p className="text-[10px] uppercase font-bold text-sky-700 tracking-wide">Stripe pendiente</p>
+                    <p className="text-base font-bold text-sky-700">{formatCurrency((data.financials as any).brandByChannel.stripePending || 0)}</p>
+                    <p className="text-[9px] text-sky-600">No liquidado al banco</p>
                   </div>
                   <div className="bg-orange-50 rounded-xl p-3 border border-orange-100">
                     <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wide">Efectivo (caja)</p>
                     <p className="text-base font-bold text-orange-700">{formatCurrency((data.financials as any).cajaBrandEfectivo || 0)}</p>
                     <p className="text-[9px] text-orange-600">POS · pendiente depositar</p>
                   </div>
-                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                  <div className="bg-emerald-50 rounded-xl p-3 border-2 border-emerald-300">
                     <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wide">TOTAL Brand</p>
-                    <p className="text-base font-bold text-emerald-700">{formatCurrency(((data.financials as any).brandByChannel.bizum || 0) + ((data.financials as any).brandByChannel.transferencia || 0) + ((data.financials as any).brandByChannel.stripeShopify || 0) + ((data.financials as any).brandByChannel.otro || 0) + ((data.financials as any).cajaBrandEfectivo || 0))}</p>
+                    <p className="text-base font-bold text-emerald-700">{formatCurrency(data.macroGroups.brand.income)}</p>
                     <p className="text-[9px] text-emerald-600">Suma todos canales</p>
                   </div>
                 </div>
