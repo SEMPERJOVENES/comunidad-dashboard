@@ -977,84 +977,80 @@ function BrandTrazabilidad({ brand }: { brand: any; dashboard?: any }) {
             {trazables.map((p: any) => {
               const stockActual = p.units;
               const costUnit = stockActual > 0 ? p.cost / stockActual : 0;
-              const pvpShopify = stockActual > 0 ? p.retail / stockActual : 0; // PVP teórico Shopify
-              const inversionStockActual = p.cost;
+              const pvpShopify = stockActual > 0 ? p.retail / stockActual : 0;
               const isPinguino = matchPinguino(p.title);
               const matchFn = isPinguino ? matchPinguino : matchGodLuck;
-              // Ventas TOTAL: shopify + presencial (ya combinado en brand.topProducts)
+              // Ventas TOTAL: shopify + presencial
               const { revenue: ingresoYaGenerado, units: vendidasUnits } = findRevenueAndUnits(matchFn);
-              // Precio REAL promedio de venta (efectivo)
-              const pvpReal = vendidasUnits > 0 ? ingresoYaGenerado / vendidasUnits : pvpShopify;
-              const margenRealUnit = pvpReal - costUnit;
-              const margenRealPct = pvpReal > 0 ? (margenRealUnit / pvpReal) * 100 : 0;
-              // Regalos
+              // Regalos (uds regaladas)
               const gifts = findGifts(matchFn);
 
-              // Break-even basado en precio REAL de venta
-              const yaCubierto = ingresoYaGenerado;
-              const faltaCubrir = Math.max(0, inversionStockActual - yaCubierto);
-              const unidadesBE = margenRealUnit > 0 ? Math.ceil(faltaCubrir / margenRealUnit) : 0;
-              // Proyección si vendemos todo el stock al precio REAL
-              const ingresoSiVendemosTodo = stockActual * pvpReal;
-              // El coste de regalos lo asume el proveedor (no es pérdida nuestra)
-              const beneficioFinal = ingresoYaGenerado + ingresoSiVendemosTodo - inversionStockActual;
+              // INVERSIÓN TOTAL: todo lo producido (stock actual + vendidas + regaladas) × coste unitario
+              const unidadesProducidas = stockActual + vendidasUnits + gifts.totalUnits;
+              const inversionTotal = unidadesProducidas * costUnit;
+
+              // Si vendemos todo el stock restante a PVP Shopify
+              const ingresoPotencialResto = stockActual * pvpShopify;
+
+              // Para break-even: inversión total − ingreso ya generado, dividido por margen al PVP Shopify
+              const faltaCubrir = Math.max(0, inversionTotal - ingresoYaGenerado);
+              const margenShopifyUnit = pvpShopify - costUnit;
+              const unidadesBE = margenShopifyUnit > 0 ? Math.ceil(faltaCubrir / margenShopifyUnit) : 0;
+              const yaBreakEven = faltaCubrir <= 0;
+
+              // PVP real promedio (informativo)
+              const pvpReal = vendidasUnits > 0 ? ingresoYaGenerado / vendidasUnits : 0;
 
               return (
                 <div key={p.title} className="rounded-2xl overflow-hidden border-2 page-break-inside-avoid" style={{ borderColor: isPinguino ? '#fbcfe8' : '#fde68a' }}>
                   <div className="px-4 py-3" style={{ background: isPinguino ? 'linear-gradient(135deg, #f9a8d4 0%, #ec4899 100%)' : 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%)' }}>
                     <p className="text-sm font-bold text-white">{p.title}</p>
-                    <p className="text-[10px] text-white/80">{stockActual} uds en stock · coste {costUnit.toFixed(2)}€/u</p>
+                    <p className="text-[10px] text-white/80">{unidadesProducidas} uds producidas · {stockActual} en stock · coste {costUnit.toFixed(2)}€/u · PVP {pvpShopify.toFixed(2)}€/u</p>
                   </div>
 
-                  {/* COMPARATIVA PVP Shopify vs PVP Real */}
-                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-100">
-                    <div className="flex justify-between items-baseline text-[11px]">
-                      <span className="text-gray-500">PVP Shopify (teórico)</span>
-                      <span className="font-semibold text-gray-700">{pvpShopify.toFixed(2)}€/u</span>
-                    </div>
-                    <div className="flex justify-between items-baseline text-[11px] mt-1">
-                      <span className="text-gray-500">PVP real promedio venta</span>
-                      <span className="font-bold text-blue-700">{pvpReal.toFixed(2)}€/u {vendidasUnits > 0 && pvpReal < pvpShopify && <span className="text-rose-500 text-[9px]">(↓ {((1 - pvpReal/pvpShopify) * 100).toFixed(0)}%)</span>}</span>
-                    </div>
-                    <div className="flex justify-between items-baseline text-[11px] mt-1">
-                      <span className="text-gray-500">Margen real (PVPreal - coste)</span>
-                      <span className={`font-bold ${margenRealUnit < 3 ? 'text-rose-700' : 'text-emerald-700'}`}>{margenRealUnit.toFixed(2)}€/u <span className="text-[9px] text-gray-500">({margenRealPct.toFixed(0)}%)</span></span>
-                    </div>
-                  </div>
-
+                  {/* 4 KPIs claros */}
                   <div className="bg-white p-3 grid grid-cols-2 gap-2 text-[11px]">
                     <div className="bg-rose-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">Capital atrapado</p>
-                      <p className="text-base font-bold text-rose-700">{inversionStockActual.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">{stockActual} × {costUnit.toFixed(2)}€</p>
+                      <p className="text-[9px] uppercase font-bold text-rose-700 tracking-wider">1. Cuánto se ha invertido</p>
+                      <p className="text-base font-bold text-rose-700">{inversionTotal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">{unidadesProducidas} × {costUnit.toFixed(2)}€</p>
                     </div>
                     <div className="bg-emerald-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">Ya vendido</p>
+                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider">2. Cuánto se ha ingresado</p>
                       <p className="text-base font-bold text-emerald-700">{ingresoYaGenerado.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">{vendidasUnits} uds · {pvpReal.toFixed(2)}€/u</p>
+                      <p className="text-[9px] text-gray-500">{vendidasUnits} uds vendidas · {pvpReal.toFixed(2)}€/u real</p>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">Si vendemos resto a PVP real</p>
-                      <p className="text-base font-bold text-blue-700">+{ingresoSiVendemosTodo.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
-                      <p className="text-[9px] text-gray-500">{stockActual} uds × {pvpReal.toFixed(2)}€</p>
+                      <p className="text-[9px] uppercase font-bold text-blue-700 tracking-wider">3. Si vendemos stock a {pvpShopify.toFixed(0)}€</p>
+                      <p className="text-base font-bold text-blue-700">+{ingresoPotencialResto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</p>
+                      <p className="text-[9px] text-gray-500">{stockActual} uds × {pvpShopify.toFixed(2)}€</p>
                     </div>
-                    <div className="bg-violet-50 rounded-lg p-2">
-                      <p className="text-[9px] uppercase font-bold text-violet-700 tracking-wider">Para break-even</p>
-                      <p className="text-base font-bold text-violet-700">+{unidadesBE} uds</p>
-                      <p className="text-[9px] text-gray-500">a {margenRealUnit.toFixed(2)}€ margen real/u</p>
+                    <div className={`rounded-lg p-2 ${yaBreakEven ? 'bg-emerald-50' : 'bg-violet-50'}`}>
+                      <p className={`text-[9px] uppercase font-bold tracking-wider ${yaBreakEven ? 'text-emerald-700' : 'text-violet-700'}`}>4. Para break-even</p>
+                      <p className={`text-base font-bold ${yaBreakEven ? 'text-emerald-700' : 'text-violet-700'}`}>
+                        {yaBreakEven ? '✓ Cubierto' : `+${unidadesBE} uds`}
+                      </p>
+                      <p className="text-[9px] text-gray-500">
+                        {yaBreakEven ? `Ingreso ya supera inversión` : `falta ${faltaCubrir.toFixed(0)}€ a ${margenShopifyUnit.toFixed(2)}€ margen/u`}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Resultado proyectado */}
-                  <div className="px-3 py-2 border-t" style={{ background: beneficioFinal >= 0 ? '#f0fdf4' : '#fef2f2', borderColor: beneficioFinal >= 0 ? '#bbf7d0' : '#fecaca' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: beneficioFinal >= 0 ? '#065f46' : '#991b1b' }}>
-                      Si vendemos todo al precio real → Beneficio final
-                    </p>
-                    <p className="text-base font-bold" style={{ color: beneficioFinal >= 0 ? '#065f46' : '#991b1b' }}>
-                      {beneficioFinal >= 0 ? '+' : ''}{beneficioFinal.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                    </p>
-                    <p className="text-[9px] text-gray-500">= ya vendido {ingresoYaGenerado.toFixed(0)}€ + restante {ingresoSiVendemosTodo.toFixed(0)}€ − inversión {inversionStockActual.toFixed(0)}€</p>
-                  </div>
+                  {/* Resultado proyectado: si vendemos todo al PVP Shopify */}
+                  {(() => {
+                    const beneficioFinalShopify = ingresoYaGenerado + ingresoPotencialResto - inversionTotal;
+                    return (
+                      <div className="px-3 py-2 border-t" style={{ background: beneficioFinalShopify >= 0 ? '#f0fdf4' : '#fef2f2', borderColor: beneficioFinalShopify >= 0 ? '#bbf7d0' : '#fecaca' }}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: beneficioFinalShopify >= 0 ? '#065f46' : '#991b1b' }}>
+                          Si vendemos el resto a PVP Shopify → Beneficio final
+                        </p>
+                        <p className="text-base font-bold" style={{ color: beneficioFinalShopify >= 0 ? '#065f46' : '#991b1b' }}>
+                          {beneficioFinalShopify >= 0 ? '+' : ''}{beneficioFinalShopify.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                        </p>
+                        <p className="text-[9px] text-gray-500">= {ingresoYaGenerado.toFixed(0)}€ ya vendido + {ingresoPotencialResto.toFixed(0)}€ pot. resto − {inversionTotal.toFixed(0)}€ inversión</p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Regalos por colección */}
                   {gifts.totalUnits > 0 && (
