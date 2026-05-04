@@ -423,7 +423,7 @@ export default function InformePage() {
 
         {/* === P&L POR ÁREA (consolidado) === */}
         {reportType === 'completo' && dashboardData?.macroGroups && (
-          <PnLAreaSummary macroGroups={dashboardData.macroGroups} />
+          <PnLAreaSummary macroGroups={dashboardData.macroGroups} brand={brandData} />
         )}
 
         {/* === COMUNIDAD: BREAK-EVEN === */}
@@ -644,7 +644,7 @@ const AREA_CONFIG: Record<string, { label: string; bg: string; iconBg: string; i
   otros:   { label: 'Otros', bg: '#fffbeb', iconBg: '#fde68a', iconColor: '#b45309', border: '#fde68a', barBg: '#fde68a', barFill: '#f59e0b' },
 };
 
-function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
+function PnLAreaSummary({ macroGroups, brand }: { macroGroups: any; brand?: any }) {
   const order = ['diezmos', 'brand', 'otros'];
   return (
     <div className="mt-10 mb-8 section-break">
@@ -654,7 +654,11 @@ function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
           const g = macroGroups[key];
           const cfg = AREA_CONFIG[key];
           if (!g || !cfg) return null;
-          const ingresos = g.income || 0;
+          // Para Brand: usar realBrandTotal (incluye banco + Stripe one-time + caja efectivo)
+          const ingresos = (key === 'brand' && brand?.income?.realBrandTotal != null) ? brand.income.realBrandTotal : (g.income || 0);
+          // Para Brand: separar Inversión vs Gasto operativo
+          const inversion = (key === 'brand' ? (brand?.expenses?.inversionTotal || 0) : 0);
+          const gastoOp = (key === 'brand' ? (brand?.expenses?.gastoOperativoTotal || 0) : 0);
           const gastos = g.expenses || 0;
           const neto = ingresos - gastos;
           const tags = (g.tags || []).slice()
@@ -668,12 +672,26 @@ function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
                 <p className={`text-2xl font-bold mt-1`} style={{ color: neto >= 0 ? '#065f46' : '#991b1b' }}>
                   {neto >= 0 ? '+' : ''}{neto.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })}
                 </p>
-                <div className="flex items-center gap-2 mt-2 text-[11px]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-[11px]">
                   <span className="text-gray-500">Ingreso</span>
                   <span className="font-semibold text-emerald-700">{ingresos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                  <span className="text-gray-300">·</span>
-                  <span className="text-gray-500">Gasto</span>
-                  <span className="font-semibold text-rose-700">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                  {key === 'brand' && inversion > 0 && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <span className="text-gray-500">Inv.</span>
+                      <span className="font-semibold text-orange-700">{inversion.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                      <span className="text-gray-300">·</span>
+                      <span className="text-gray-500">Gasto op.</span>
+                      <span className="font-semibold text-rose-700">{gastoOp.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                    </>
+                  )}
+                  {!(key === 'brand' && inversion > 0) && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <span className="text-gray-500">Gasto</span>
+                      <span className="font-semibold text-rose-700">{gastos.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                    </>
+                  )}
                 </div>
               </div>
               {/* Top categorías */}
@@ -708,16 +726,20 @@ function PnLAreaSummary({ macroGroups }: { macroGroups: any }) {
 }
 
 function BrandBreakdown({ brand }: { brand: any }) {
-  const ingresoTotal = brand?.income?.total || 0;
+  // Usar realBrandTotal (incluye banco + Stripe one-time + Stripe pendiente + caja efectivo)
+  const ingresoTotal = brand?.income?.realBrandTotal || brand?.income?.total || 0;
   const gastoTotal = brand?.expenses?.total || 0;
   if (ingresoTotal === 0 && gastoTotal === 0) return null;
 
-  // Desglose ingresos: Brand (banco), Ventas Presenciales, Shopify
+  // Desglose ingresos: por CANAL (Bizum / Transferencia / Shopify / Stripe one-time / Stripe pendiente / Efectivo)
   const ingresoItems: { label: string; value: number; meta?: string }[] = [];
-  const brandBank = brand?.income?.bankIncome?.Brand || brand?.income?.totalBankIncome || 0;
-  if (brandBank > 0) ingresoItems.push({ label: 'Brand (banco)', value: brandBank, meta: 'transferencias/bizums Brand' });
-  if (brand?.income?.ventasPresenciales > 0) ingresoItems.push({ label: 'Ventas Presenciales', value: brand.income.ventasPresenciales, meta: `${brand.income.ventasCount || 0} ventas` });
-  if (brand?.income?.shopify > 0) ingresoItems.push({ label: 'Shopify', value: brand.income.shopify, meta: `${brand.income.shopifyOrders || 0} pedidos` });
+  const ch = brand?.income?.realBrandByChannel || {};
+  if ((ch.bankBizum || 0) > 0) ingresoItems.push({ label: 'Bizum (banco)', value: ch.bankBizum, meta: 'tag Brand' });
+  if ((ch.bankTransferencia || 0) > 0) ingresoItems.push({ label: 'Transferencia (banco)', value: ch.bankTransferencia, meta: 'tag Brand' });
+  if ((ch.bankStripePayoutShopify || 0) > 0) ingresoItems.push({ label: 'Shopify online', value: ch.bankStripePayoutShopify, meta: `${brand.income.shopifyOrders || 0} pedidos web` });
+  if ((ch.stripePayoutsOneTimeMixed || 0) > 0) ingresoItems.push({ label: 'Stripe one-time (auto-split)', value: ch.stripePayoutsOneTimeMixed, meta: 'mezclado en payouts' });
+  if ((ch.stripePending || 0) > 0) ingresoItems.push({ label: 'Stripe pendiente', value: ch.stripePending, meta: 'no liquidado al banco' });
+  if ((ch.cajaEfectivo || 0) > 0) ingresoItems.push({ label: 'Efectivo (caja POS)', value: ch.cajaEfectivo, meta: 'pendiente depositar' });
 
   // Desglose Inversión (proveedores, lotes producción)
   const inversionItems: { label: string; value: number }[] = [];
