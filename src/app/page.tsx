@@ -112,8 +112,10 @@ export default function DashboardPage() {
           const realTotal = brand.income.realBrandTotal;
           const stripeOneTime = brand.income.stripeOneTime || 0;
           dash.macroGroups.brand.income = realTotal;
+          dash.macroGroups.brand.net = realTotal - dash.macroGroups.brand.expenses;
           // Restar Stripe one-time de Diezmos (estaba mezclado en payouts tag Diezmo)
           dash.macroGroups.diezmos.income = Math.max(0, dash.macroGroups.diezmos.income - stripeOneTime);
+          dash.macroGroups.diezmos.net = dash.macroGroups.diezmos.income - dash.macroGroups.diezmos.expenses;
           // Enriquecer brandByChannel con los canales Stripe (one-time mixed y pending)
           if (dash.financials?.brandByChannel) {
             dash.financials.brandByChannel.stripeOneTimeMixed = brand.income.realBrandByChannel?.stripePayoutsOneTimeMixed || 0;
