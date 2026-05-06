@@ -678,25 +678,25 @@ export async function GET(request: NextRequest) {
     // ============================================================
     // SUMA BRAND POR CANAL (todo desglosado para el informe)
     // ============================================================
-    // NOTA: Stripe one-time y Stripe pendiente se cuentan como DIEZMOS (decisión user).
-    // Brand SOLO = bizums Brand + transferencias Brand + Shopify online + efectivo POS
+    // Stripe one-time y Stripe pendiente son ventas Brand (charges sin invoice).
+    // Llegan al banco mezclados en payouts tag Diezmo, pero realmente son Brand.
     const realBrandByChannel = {
       bankBizum: brandBizum,                              // Bizums tag Brand al banco
       bankTransferencia: brandTransferencia,              // Transferencias tag Brand (sin Stripe)
       bankStripePayoutShopify: brandStripePayoutShopify,  // Stripe payouts "Concepto Shopify" tag Brand
-      stripePayoutsOneTimeMixed: 0,                       // [DEPRECATED] Stripe one-time → Diezmos
-      stripePending: 0,                                   // [DEPRECATED] Stripe pending → Diezmos
-      cajaEfectivo: cajaBrandEfectivo,                    // Efectivo POS en caja
+      stripePayoutsOneTimeMixed: stripePayoutsBrandFromMixed, // one-time dentro payouts mixed (mal etiquetados Diezmo)
+      stripePending: stripePendingBrand,                   // Brand pendiente en Stripe (no liquidado)
+      cajaEfectivo: cajaBrandEfectivo,                     // Efectivo POS en caja
     };
-    const realBrandTotal = (realBrandByChannel.bankBizum || 0) + (realBrandByChannel.bankTransferencia || 0) + (realBrandByChannel.bankStripePayoutShopify || 0) + (realBrandByChannel.cajaEfectivo || 0);
+    const realBrandTotal = Object.values(realBrandByChannel).reduce((s: number, v: number) => s + v, 0);
 
     const teoricoBrandByChannel = {
       posBizum: posByMethod.bizum?.total || 0,
       posEfectivo: posByMethod.efectivo?.total || 0,
       shopifyOnline: shopifyGross,
-      stripeOneTime: 0,                                   // Stripe one-time es Diezmos, no Brand
+      stripeOneTime: stripeOneTimeAmount,
     };
-    const teoricoBrandTotal = (teoricoBrandByChannel.posBizum || 0) + (teoricoBrandByChannel.posEfectivo || 0) + (teoricoBrandByChannel.shopifyOnline || 0);
+    const teoricoBrandTotal = Object.values(teoricoBrandByChannel).reduce((s: number, v: number) => s + v, 0);
 
     const realVsTeoricoGap = realBrandTotal - teoricoBrandTotal;
 

@@ -59,6 +59,15 @@ export default function InformePage() {
         }
         const [d, dash, brand] = await Promise.all(promises);
         setData(d);
+        // Aplicar mismo override que dashboard: Stripe one-time es Brand, no Diezmo
+        if (dash && brand?.income?.realBrandTotal != null) {
+          const realTotal = brand.income.realBrandTotal;
+          const stripeOneTime = brand.income.stripeOneTime || 0;
+          dash.macroGroups.brand.income = realTotal;
+          dash.macroGroups.brand.net = realTotal - dash.macroGroups.brand.expenses;
+          dash.macroGroups.diezmos.income = Math.max(0, dash.macroGroups.diezmos.income - stripeOneTime);
+          dash.macroGroups.diezmos.net = dash.macroGroups.diezmos.income - dash.macroGroups.diezmos.expenses;
+        }
         setDashboardData(dash || null);
         setBrandData(brand || null);
       } finally { setLoading(false); }

@@ -107,15 +107,19 @@ export default function DashboardPage() {
             totalUnits: brand.stockValuation.units ?? dash.shopify.totalUnits,
           };
         }
-        // Sobrescribir Brand income con el TOTAL REAL (banco tag Brand + Shopify Stripe + efectivo, SIN one-time/pending Stripe que son Diezmos)
+        // Sobrescribir Brand income con el TOTAL REAL (banco + Stripe one-time + efectivo)
+        // Y restar Stripe one-time de Diezmos (estaban mal etiquetados allí)
         if (brand?.income?.realBrandTotal != null) {
-          const ch = brand.income.realBrandByChannel || {};
-          const realBrandSinStripeOneTime = (ch.bankBizum || 0) + (ch.bankTransferencia || 0) + (ch.bankStripePayoutShopify || 0) + (ch.cajaEfectivo || 0);
-          dash.macroGroups.brand.income = realBrandSinStripeOneTime;
-          dash.macroGroups.brand.net = realBrandSinStripeOneTime - dash.macroGroups.brand.expenses;
-          // Diezmos NO se modifica: el banco ya incluye Stripe payouts como Diezmo (correcto)
-          // Solo recalcular .net por si acaso
+          const realTotal = brand.income.realBrandTotal;
+          const stripeOneTime = brand.income.stripeOneTime || 0;
+          dash.macroGroups.brand.income = realTotal;
+          dash.macroGroups.brand.net = realTotal - dash.macroGroups.brand.expenses;
+          dash.macroGroups.diezmos.income = Math.max(0, dash.macroGroups.diezmos.income - stripeOneTime);
           dash.macroGroups.diezmos.net = dash.macroGroups.diezmos.income - dash.macroGroups.diezmos.expenses;
+          if (dash.financials?.brandByChannel) {
+            dash.financials.brandByChannel.stripeOneTimeMixed = brand.income.realBrandByChannel?.stripePayoutsOneTimeMixed || 0;
+            dash.financials.brandByChannel.stripePending = brand.income.realBrandByChannel?.stripePending || 0;
+          }
         }
         setData(dash);
       } catch (err: any) {
