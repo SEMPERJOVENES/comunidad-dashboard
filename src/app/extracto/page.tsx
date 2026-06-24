@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatDate, getDefaultRange } from '@/lib/utils';
+import { formatCurrency, formatDate, getDefaultRange, parseAmount } from '@/lib/utils';
 import { DateRange, BankTransaction } from '@/lib/types';
 import {
   Landmark, Upload, Search, Loader2, BookOpen, AlertCircle, List,
@@ -182,7 +182,7 @@ export default function ExtractoPage() {
         const txns = rawData.map(row => {
           let dateVal = row[dateKey];
           if (dateVal instanceof Date) dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
-          return { date: String(dateVal || ''), concept: String(row[conceptKey] || ''), amount: String(row[amountKey] || '0'), balance: String(row[balanceKey] || '0') };
+          return { date: String(dateVal || ''), concept: String(row[conceptKey] || ''), amount: String(parseAmount(row[amountKey])), balance: String(parseAmount(row[balanceKey])) };
         }).filter(tx => tx.concept.trim() !== '');
         await sendImport(txns);
         return;
@@ -202,8 +202,8 @@ export default function ExtractoPage() {
           if (dateVal instanceof Date) dateVal = `${dateVal.getFullYear()}-${String(dateVal.getMonth()+1).padStart(2,'0')}-${String(dateVal.getDate()).padStart(2,'0')}`;
           const rawAmount = row[amountCol >= 0 ? amountCol : 3];
           const rawBalance = row[balanceCol >= 0 ? balanceCol : 5];
-          const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/\./g, '').replace(',', '.')) || 0;
-          const balance = typeof rawBalance === 'number' ? rawBalance : parseFloat(String(rawBalance).replace(/\./g, '').replace(',', '.')) || 0;
+          const amount = parseAmount(rawAmount);
+          const balance = parseAmount(rawBalance);
           return { date: String(dateVal || ''), concept: String(row[conceptCol >= 0 ? conceptCol : 2] || ''), amount: String(amount), balance: String(balance) };
         });
       await sendImport(txns);
@@ -259,17 +259,8 @@ export default function ExtractoPage() {
       const rawAmount = (cols[amountIdx] || '').trim();
       const rawBalance = (cols[balanceIdx] || '').trim();
 
-      function parseSpanishNumber(str: string): number {
-        if (!str) return 0;
-        // Quitar espacios y símbolo de moneda
-        const clean = str.replace(/[€\s]/g, '').trim();
-        if (!clean) return 0;
-        // Formato español: 1.234,56 → quitar puntos, coma→punto
-        return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
-      }
-
-      const amount = parseSpanishNumber(rawAmount);
-      const balance = parseSpanishNumber(rawBalance);
+      const amount = parseAmount(rawAmount);
+      const balance = parseAmount(rawBalance);
 
       // Solo añadir si hay importe válido (no 0 excepto si es literalmente 0)
       if (amount === 0 && !rawAmount.includes('0')) continue;

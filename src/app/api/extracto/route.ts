@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseAmount } from '@/lib/utils';
 
 // Load tagging rules from Supabase
 async function loadTaggingRules(): Promise<{ keyword: string; category: string }[]> {
@@ -197,10 +198,10 @@ export async function POST(request: NextRequest) {
       // Preparar las transacciones parseadas
       const parsed = transactions.map((tx: any) => {
         const concept = tx.concept || tx.Concepto || tx.CONCEPTO || '';
-        const rawAmount = tx.amount || tx.Importe || tx.IMPORTE || '0';
-        const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount).replace(/\./g, '').replace(',', '.')) || 0;
-        const rawBalance = tx.balance || tx.Saldo || tx.SALDO || '0';
-        const balance = typeof rawBalance === 'number' ? rawBalance : parseFloat(String(rawBalance).replace(/\./g, '').replace(',', '.')) || 0;
+        const rawAmount = tx.amount ?? tx.Importe ?? tx.IMPORTE ?? '0';
+        const amount = parseAmount(rawAmount);
+        const rawBalance = tx.balance ?? tx.Saldo ?? tx.SALDO ?? '0';
+        const balance = parseAmount(rawBalance);
         const dateStr = tx.date || tx.Fecha || tx['F. Valor'] || tx.FECHA || '';
 
         let parsedDate = dateStr;
